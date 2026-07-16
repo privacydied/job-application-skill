@@ -50,3 +50,31 @@ atsform.py submit "Submit Application"           # success: page shows "Thank yo
 - **reCAPTCHA:** Greenhouse commonly gates submit behind an (often invisible)
   reCAPTCHA. Per the CAPTCHA directive in `SKILL.md`: if a challenge appears, STOP,
   hold the filled form, and hand it to the user — do not abandon it.
+
+## ✅ Newer `job-boards.greenhouse.io` (Remix) — react-select combos: use `atsform combo`
+The modern Greenhouse board (`job-boards.greenhouse.io/...`) renders every dropdown as a
+**react-select `input[role=combobox]`** that **ignores synthetic events** and on which
+camofox's **`/click` hangs** (Hermes got stuck here). The verified driver (2026-07-16, OLIVER
+Integrated Designer — submitted, "Thank you for applying"):
+```
+python3 sites/_common/scripts/atsform.py combo "#question_67935604" "No"     # picklist combos
+python3 sites/_common/scripts/atsform.py combo-type "#candidate-location" "London"  # type-to-search
+```
+Mechanics (in `atsform.react_select` / `react_select_type`): **JS-focus the input** (focus is
+the load-bearing step — `click_selector` times out and won't move focus between combos), then a
+**REAL `ArrowDown`** (`cfx.press`, not a dispatched key) opens the listbox; read options via
+`aria-controls`; **keyboard-navigate** (menu opens with index 0 highlighted → `ArrowDown` i
+times → `Enter`). For a type-to-search combo (Location), type the text **char-by-char with real
+keypresses** then **`Enter`** — the first suggestion is auto-highlighted (do NOT press ArrowDown
+first, or you select the 2nd, e.g. "East London, South Africa").
+
+⚠️ **The demographic EEO combos are OPTIONAL (`aria-required=false`) UNTIL you tick the
+"I consent to … demographic data" checkbox — which is itself required (`*`) and, once checked,
+flips those combos to REQUIRED.** So after ticking consent you must set every demographic combo
+(age, gender, religion, ethnicity, orientation, disability, socio-economic). Each offers
+**"I don't wish to answer"** — the honest default for decline-to-disclose (set age to the real
+band per the profile). The genuinely-required non-demographic combos are Country (phone dial
+code), Location (City), sponsorship, reasonable-accommodations, and "Point of data transfer"
+(single option "I acknowledge this"), plus a required **right-to-work TEXTAREA** (plain — use
+`fill`, not `combo`). A stale "This field is required" can persist after a valid pick; the real
+signal is the redirect to `/confirmation`.

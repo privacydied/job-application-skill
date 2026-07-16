@@ -13,7 +13,10 @@ text is stable across postings while `name`/`id` are random per posting. Built o
 `cfx.py`, so it inherits the pacing + referer anti-detection.
 
 Importable (adapters do `from atsform import fill, select, ...`) or CLI:
-    CFX_KEY=... CFX_TAB=... python3 atsform.py <apply|fill|select|radio|checkbox|upload|review|submit|click> ...
+    CFX_KEY=... CFX_TAB=... python3 atsform.py <apply|fill|select|combo|combo-type|radio|checkbox|upload|review|submit|click> ...
+    # combo "<css/#id>" "<option>"   pick a react-select combobox where synthetic events are
+    #                                ignored + /click hangs (Greenhouse EEO, SmartRecruiters)
+    # combo-type "<css/#id>" "<text>"  type-to-search react-select (e.g. a Location autocomplete)
 
 Primitives (all return 0 on success, non-zero on failure, and print a status line):
   fill      "<label>" "<value|@file|->"   text/textarea by label ("@path" reads a file, "-" stdin)
@@ -568,6 +571,61 @@ def rclick(text, scope=None):
         return True
     except cfx.CfxError:
         return False
+
+
+def _rs_focus(selector):
+    """JS-focus a react-select's <input> and confirm focus landed. Reliable focus is the
+    load-bearing step — click_selector times out / focus doesn't move between comboboxes."""
+    return cfx.evaluate(f"(()=>{{const i=document.querySelector({_js(selector)});"
+                        f"if(!i)return 'NF';i.scrollIntoView({{block:'center'}});i.focus();"
+                        f"return document.activeElement===i?'ok':'no-focus';}})()")
+
+
+def react_select(selector, option, timeout=6):
+    """Pick `option` in a react-select combobox (`input[role=combobox]`) where synthetic
+    events are IGNORED and /click HANGS — Greenhouse (Remix EEO combos), SmartRecruiters, etc.
+    Recipe: JS-focus the input, a REAL ArrowDown (cfx.press) opens the listbox, read its
+    options via `aria-controls`, keyboard-navigate to the match (menu opens with index 0
+    highlighted, so ArrowDown i times), Enter. `selector` resolves to the input (id or CSS).
+    Returns 'ok', or 'OPT_NF:<opts>' / 'FOCUS_FAIL' / 'NF'. Verify with the caller if needed."""
+    cfx.press("Escape"); time.sleep(0.3)
+    if _rs_focus(selector) != "ok":
+        return "FOCUS_FAIL"
+    time.sleep(0.35); cfx.press("ArrowDown"); time.sleep(0.7)
+    raw = cfx.evaluate(f"(()=>{{const i=document.querySelector({_js(selector)});"
+                       f"const b=document.getElementById(i.getAttribute('aria-controls'));"
+                       f"return b?JSON.stringify([...b.querySelectorAll('[role=option],[id*=option]')]"
+                       f".map(e=>(e.textContent||'').trim())):'[]';}})()")
+    try:
+        opts = json.loads(raw) if isinstance(raw, str) else []
+    except ValueError:
+        opts = []
+    o = option.lower()
+    idx = next((k for k, t in enumerate(opts) if o in t.lower()), None)
+    if idx is None:
+        cfx.press("Escape")
+        return f"OPT_NF:{opts[:8]}"
+    for _ in range(idx):
+        cfx.press("ArrowDown"); time.sleep(0.12)
+    cfx.press("Enter"); time.sleep(0.5)
+    return "ok"
+
+
+def react_select_type(selector, text, pick_first=True):
+    """Type-to-search react-select (e.g. a Location autocomplete): JS-focus, type `text` with
+    REAL per-char keystrokes (dispatched input events are ignored by these widgets AND /type
+    500s), then — the first suggestion is auto-highlighted after typing — Enter selects it.
+    `pick_first=False` just types (leaves the menu open). Returns 'ok' / 'FOCUS_FAIL' / 'NF'."""
+    cfx.press("Escape"); time.sleep(0.3)
+    if _rs_focus(selector) != "ok":
+        return "FOCUS_FAIL"
+    time.sleep(0.3)
+    for ch in text:
+        cfx.press(ch); time.sleep(0.1)
+    time.sleep(1.0)
+    if pick_first:
+        cfx.press("Enter"); time.sleep(0.5)   # first suggestion is already highlighted — no ArrowDown
+    return "ok"
 
 
 def pick_dropdown(label, option, settle=0.9):
@@ -1182,6 +1240,10 @@ def main():
     try:
         if cmd == "fill" and len(a) == 3:      return fill(a[1], a[2])
         if cmd == "select" and len(a) == 3:    return select(a[1], a[2])
+        if cmd == "combo" and len(a) == 3:
+            r = react_select(a[1], a[2]); print(f"combo {a[1]!r} -> {a[2]!r}: {r}"); return 0 if r == "ok" else 1
+        if cmd == "combo-type" and len(a) == 3:
+            r = react_select_type(a[1], a[2]); print(f"combo-type {a[1]!r} -> {a[2]!r}: {r}"); return 0 if r == "ok" else 1
         if cmd == "radio" and len(a) == 3:     return set_radio(a[1], a[2])
         if cmd == "checkbox" and len(a) in (2, 3): return set_checkbox(a[1], a[2] if len(a) == 3 else "on")
         if cmd == "upload" and len(a) == 3:    return upload(a[1], a[2])
