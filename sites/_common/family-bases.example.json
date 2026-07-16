@@ -1,0 +1,50 @@
+{
+  "_anchor": "[Your master resume summary sentence — one line describing who you are.]",
+  "_note": "TEMPLATE — copy to family-bases.json (gitignored) and fill in YOUR positioning. tailor.py swaps the master resume `summary` for a family's `summary`, then applies per-posting company subs. Keep {role} and {company} placeholders in cover_fit — they're filled per application. One entry per role family you target; delete families you don't want. Truthful, drawn from your references/applicant-profile.md openers; regenerate bases with `tailor.py build-bases`.",
+  "families": {
+    "design": {
+      "summary": "[Positioning summary for design roles — ~1-2 sentences, your years + strengths.]",
+      "cover_fit": "[Why you fit — end with a line tying to {role} at {company}.]"
+    },
+    "research": {
+      "summary": "[Positioning summary for UX research roles.]",
+      "cover_fit": "[Why you fit {role} at {company}.]"
+    },
+    "content": {
+      "summary": "[Positioning summary for content/service design roles.]",
+      "cover_fit": "[Why you fit {role} at {company}.]"
+    },
+    "engineering": {
+      "summary": "[Positioning summary for front-end / UX-engineering roles.]",
+      "cover_fit": "[Why you fit {role} at {company}.]"
+    },
+    "devops": {
+      "summary": "[Positioning summary for DevOps / infrastructure roles.]",
+      "cover_fit": "[Why you fit {role} at {company}.]"
+    },
+    "support": {
+      "summary": "[Positioning summary for IT / support / technician roles.]",
+      "cover_fit": "[Why you fit {role} at {company}.]"
+    },
+    "growth": {
+      "summary": "[Positioning summary for growth / marketing roles.]",
+      "cover_fit": "[Why you fit {role} at {company}.]"
+    },
+    "product": {
+      "summary": "[Positioning summary for product owner / analyst roles.]",
+      "cover_fit": "[Why you fit {role} at {company}.]"
+    },
+    "ai": {
+      "summary": "[Positioning summary for AI / GenAI roles.]",
+      "cover_fit": "[Why you fit {role} at {company}.]"
+    },
+    "qa": {
+      "summary": "[Positioning summary for QA / accessibility-testing roles.]",
+      "cover_fit": "[Why you fit {role} at {company}.]"
+    },
+    "digital": {
+      "summary": "[Positioning summary for digital / web-officer roles.]",
+      "cover_fit": "[Why you fit {role} at {company}.]"
+    }
+  }
+}

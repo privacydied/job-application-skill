@@ -1,0 +1,137 @@
+# compose.example.yaml — reference stack for the browser automation backend this skill drives.
+#
+# Copy to compose.yaml and fill in your own paths/secrets. This is a TEMPLATE: no real
+# credentials or machine paths. It brings up:
+#   - playwright        : a Playwright run-server on :3006 (used for verification/PDF render)
+#   - camofox-browser   : the anti-detect (Camoufox) browser + REST API on :9377 that the
+#                         skill's drivers (cfx.py / cfx.sh) talk to via CFX_URL/CFX_KEY/CFX_TAB
+#   - (optional) an egress VPN sidecar (gluetun) + a VPN-routed Playwright on :3007
+#   - (optional) chrome-cdp : a headless Chromium CDP endpoint on :9222
+#
+# The camofox-browser IMAGE is built from a separate `camofox-browser/` project (Dockerfile,
+# server.js, Makefile) that is NOT included in this repo — point the build context at your own
+# copy, or delete that service and run only the plain Playwright server if you don't need the
+# anti-detect browser. Set real secrets in an env file (see camofox-browser.env.example) —
+# never inline them here.
+
+services:
+  playwright:
+    image: mcr.microsoft.com/playwright:v1.58.0-noble
+    container_name: playwright
+    restart: unless-stopped
+    init: true
+    ipc: host
+    command:
+      - /bin/sh
+      - -lc
+      - exec npx -y playwright@1.58.0 run-server --port 3006 --host 0.0.0.0
+    ports:
+      - "3006:3006"
+
+  # OPTIONAL egress VPN sidecar. Delete this + playwright-vpn if you don't route through a VPN.
+  vpn-sidecar:
+    image: qmcgaw/gluetun:latest
+    container_name: vpn-sidecar
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      - VPN_SERVICE_PROVIDER=custom
+      - VPN_TYPE=openvpn
+      # Point at YOUR mounted OpenVPN config, and set YOUR provider credentials:
+      - OPENVPN_CUSTOM_CONFIG=/gluetun/vpn-config/your-server.ovpn
+      - OPENVPN_USER=your-vpn-username
+      - OPENVPN_PASSWORD=your-vpn-password
+      - FIREWALL_INPUT_PORTS=3007
+    volumes:
+      - /path/to/your/vpn-config:/gluetun/vpn-config:ro
+    ports:
+      - "3007:3007"
+    healthcheck:
+      test: ["CMD-SHELL", "test -d /sys/class/net/tun0"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  playwright-vpn:
+    image: mcr.microsoft.com/playwright:v1.58.0-noble
+    container_name: playwright-vpn
+    restart: unless-stopped
+    init: true
+    ipc: host
+    network_mode: "container:vpn-sidecar"
+    depends_on:
+      vpn-sidecar:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -lc
+      - exec npx -y playwright@1.58.0 run-server --port 3007 --host 0.0.0.0
+
+  # OPTIONAL headless Chromium CDP endpoint on :9222.
+  chrome-cdp:
+    image: mcr.microsoft.com/playwright:v1.59.1-noble
+    container_name: chrome-cdp
+    restart: unless-stopped
+    init: true
+    ipc: host
+    entrypoint:
+      - /ms-playwright/chromium-1217/chrome-linux64/chrome
+    command:
+      - --headless
+      - --remote-debugging-address=0.0.0.0
+      - --remote-debugging-port=9222
+      - --user-data-dir=/tmp/chrome-cdp-profile
+      - --disable-dev-shm-usage
+      - --no-first-run
+      - --no-default-browser-check
+      - --no-sandbox
+      - about:blank
+    ports:
+      - "9222:9222"
+
+  # The anti-detect (Camoufox) browser + REST API the skill drives. Built from a separate
+  # camofox-browser/ project (not in this repo) — set the build context to your copy.
+  # Security: this drives a real browser (arbitrary navigation, JS exec, cookie import) over
+  # the network. Put CAMOFOX_ACCESS_KEY / VNC_PASSWORD in an env file, never inline.
+  camofox-browser:
+    build:
+      context: ./camofox-browser
+      dockerfile: Dockerfile
+      args:
+        ARCH: x86_64
+        CAMOUFOX_VERSION: "135.0.1"
+        CAMOUFOX_RELEASE: "beta.24"
+    image: camofox-browser:135.0.1-x86_64
+    container_name: camofox-browser
+    restart: unless-stopped
+    shm_size: "2gb"   # Firefox can crash under Docker's default 64MB /dev/shm
+    ports:
+      - "9377:9377"   # REST API (OpenAPI at /openapi.json) — this is CFX_URL for the skill
+      - "6080:6080"   # noVNC web UI (only reachable with VNC_BIND=0.0.0.0 + VNC_PASSWORD set)
+    env_file:
+      - camofox-browser.env        # copy from camofox-browser.env.example, set real secrets
+    volumes:
+      - camofox-profiles:/root/.camofox/profiles
+      - camofox-cookies:/root/.camofox/cookies
+      - camofox-traces:/root/.camofox/traces
+      # Read-only upload staging dir: files here appear in the container at /uploads/<name>
+      # so the browser process can attach them to <input type=file> forms. Point this at
+      # THIS skill's uploads/ directory (absolute path on your host):
+      - /absolute/path/to/job-application/uploads:/uploads:ro
+      # Optional: bind-mount your server.js over the image copy for live edits without rebuild.
+      - ./camofox-browser/server.js:/app/server.js:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9377/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  camofox-profiles:
+  camofox-cookies:
+  camofox-traces:

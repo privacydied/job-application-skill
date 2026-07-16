@@ -1,0 +1,119 @@
+# =============================================================================
+# PERSONAL DATA — never commit. These stay on YOUR disk; git just ignores them.
+# A first-time user creates their own from the *.example templates (see README).
+# =============================================================================
+
+# --- Your identity / applicant profile / personal strategy -----------------
+references/applicant-profile.md
+references/target-roles.md
+references/resume-assets.md
+profile.local.json
+profile.local.md
+.profile.local
+# Your real answer/contact config (copy from the *.example, then fill in)
+sites/_common/apply-defaults.json
+sites/_common/family-bases.json
+
+# --- Application artifacts (cover letters, statements, resumes, proofs) -----
+applications/
+!applications/.gitkeep
+
+# --- Resumes / any document with your name ---------------------------------
+# (patterns only — never hard-code your real filename here; this file is public)
+uploads/
+!uploads/.gitkeep
+*resume*.pdf
+*resume*.html
+*resume*.docx
+*-resume-*
+*cv*.pdf
+*CV*.pdf
+
+# --- Run-state / tracker / analytics (regenerated every run) ---------------
+application-tracker.csv
+apply-stats.csv
+search-yields.csv
+searches.csv
+screener-answers.csv
+salary-cache.csv
+board-cooldown.csv
+queue.jsonl
+deferred-applications.jsonl
+volume-loop.log
+GOAL.md
+goal-condition.txt
+cover-letter-template.md
+
+# --- Credentials / sessions / cookies (NEVER commit) -----------------------
+ats-credentials.csv
+indeed_cookies.txt
+*cookies*.txt
+*.cookies
+.reed_tab
+# Real browser-backend compose + secrets (commit only the *.example versions)
+compose.yaml
+compose.yml
+docker-compose.yaml
+docker-compose.yml
+camofox-browser.env
+*.ovpn
+
+# --- Local machine config (machine-specific absolute paths) ----------------
+.claude/settings.json
+
+# --- Git history backups (old PII-bearing history) -------------------------
+*.bundle
+.git.bak*
+
+# =============================================================================
+# SECRETS / ENV — never commit
+# =============================================================================
+.jobenv
+.jobenv.run
+.jobenv.persist
+.runenv
+.myenv
+.runtab
+.runtab_append
+
+# =============================================================================
+# TRANSIENT / SCRATCH / GENERATED — not source
+# =============================================================================
+.claude/scheduled_tasks.lock
+*.csv.lock
+*.jsonl.lock
+*.csv.bak-*
+__pycache__/
+*.pyc
+
+# stagetimer.py profiling output
+run-timings.csv
+.timings/
+
+# jd.py per-run JD cache
+.jd-cache/
+# warm.py speculative page-warm map (transient tab ids)
+warm-map.json
+
+# Per-run sourcing/screening dumps at repo root (regenerated every run)
+/feed_*.json
+/feed_*.err
+/ind_*.json
+/ind_*.err
+/li_*.json
+/li_*.err
+/jd_*.json
+/jd_*.err
+/precheck_*.json
+/precheck_*.err
+/seek_*.json
+/seek_*.err
+/wttj_*.json
+/wttj_*.err
+/survivors_*.txt
+*.err
+
+# Per-run apply specs generated at repo root (canonical ones live in applications/)
+/run_spec_*.json
+/spec_*.json
+/apply_hackney_hdo.json

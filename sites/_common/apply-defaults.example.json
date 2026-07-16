@@ -1,0 +1,26 @@
+{
+  "_note": "TEMPLATE — copy to apply-defaults.json (gitignored) and fill in YOUR details. These constant applicant facts are auto-merged into any atsform.py `apply` config that sets \"defaults\": true. OPTIONAL semantics: a default whose label matches no field on the form is SKIPped silently (never a FAIL); an explicit config key that overlaps a default key (case-insensitive substring either way) suppresses that default, so the config always wins. Keys are label substrings — keep them SPECIFIC: a bare \"Name\" would substring-match a 'First name' field and fill the wrong value. Source of truth for your own copy: references/applicant-profile.md (also gitignored — create it from applicant-profile.example.md).",
+  "fill": {
+    "First name": "Jane",
+    "Last name": "Doe",
+    "Full name": "Jane Doe",
+    "Preferred name": "Jane",
+    "Email": "you@example.com",
+    "Phone": "+44 7700 900000",
+    "LinkedIn": "https://linkedin.com/in/your-handle",
+    "Portfolio": "https://example.com",
+    "Website": "https://example.com",
+    "GitHub": "https://github.com/your-handle",
+    "City": "London",
+    "Notice period": "Available immediately"
+  },
+  "select": {
+    "Pronouns": "She/her"
+  },
+  "radios": {
+    "right to work in the UK": "Yes",
+    "receive relevant jobs": "No",
+    "similar jobs": "No"
+  },
+  "checkboxes": {}
+}
