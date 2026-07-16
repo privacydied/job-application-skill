@@ -26,11 +26,16 @@ from urllib.parse import urlsplit
 cfg, prof = sys.argv[1], sys.argv[2]
 toks = set()
 
-# Generic, non-identifying tokens to NEVER flag (common domains, URL parts, stock answers).
+# Generic, non-identifying tokens to NEVER flag: common domains, URL parts, stock answers,
+# and the shipped PLACEHOLDER values (from the *.example configs) — those legitimately appear
+# in the committed docs, so an un-personalised config must not trip the guard.
 STOP = {"github.com", "linkedin.com", "x.com", "twitter.com", "example.com", "example.org",
         "www", "http", "https", "http:", "https:", "in", "the", "your-handle",
         "available", "immediately", "london", "united", "kingdom", "prefer", "none",
-        "jane", "doe", "she", "her", "him", "his", "yes", "no"}
+        "jane", "doe", "she", "her", "him", "his", "yes", "no",
+        # placeholder phone (Ofcom fictional range) + example address/postcode from *.example
+        "447700900000", "07700900000", "7700900000", "900000", "7700 900000",
+        "example", "street", "your-vpn-username"}
 
 def add(t):
     t = (t or "").strip().strip("/:.")
