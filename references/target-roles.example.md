@@ -51,3 +51,4 @@
 - Frontend / Web Developer (C)
 - DevOps / Platform Engineer (C)
 - IT Support / Service Desk / Technician (C)
+- Field Service Engineer / Field Engineer (C)

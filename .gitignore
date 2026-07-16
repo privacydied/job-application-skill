@@ -15,12 +15,14 @@ sites/_common/apply-defaults.json
 sites/_common/family-bases.json
 
 # --- Application artifacts (cover letters, statements, resumes, proofs) -----
-applications/
+# ignore CONTENTS (…/*) not the dir itself, so the kept .gitkeep can re-include and the
+# empty folder survives a fresh clone (a bare `applications/` would block the re-include).
+applications/*
 !applications/.gitkeep
 
 # --- Resumes / any document with your name ---------------------------------
 # (patterns only — never hard-code your real filename here; this file is public)
-uploads/
+uploads/*
 !uploads/.gitkeep
 *resume*.pdf
 *resume*.html
