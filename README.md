@@ -1,6 +1,6 @@
 # job-application — an agent skill for automated job applications
 
-> _I will update this skill until I get a job, lol._
+> _I will maintain this skill until I get a job, lol._
 
 A toolkit an AI agent (Claude Code, or any agent that can run shell + read `SKILL.md`)
 uses to **source jobs from job boards, screen them against your profile, fill and submit
