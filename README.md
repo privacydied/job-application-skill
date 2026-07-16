@@ -48,9 +48,12 @@ atsform.py`) drives many other standard ATS forms via label-based field matching
 | Civil Service Jobs | sourcing + apply (`civilservicejobs.service.gov.uk`) |
 | Adzuna | sourcing via API (`adzuna.co.uk`) — needs a **free** `app_id`/`app_key` from [developer.adzuna.com](https://developer.adzuna.com) |
 | The Dots | sourcing (`the-dots.com`) |
+| Totaljobs | sourcing (`totaljobs.com`) — StepStone family; **apply is account-gated** (login wall) |
+| CWJobs | sourcing (`cwjobs.co.uk`) — Totaljobs/StepStone sibling, same adapter; tech/IT roles |
+| Guardian Jobs | sourcing + **direct apply** (`jobs.theguardian.com`) — Madgex; on-page form (name/email/CV), reCAPTCHA-gated |
 | Hackney Council | sourcing + apply (`recruitment.hackney.gov.uk`) |
 | MoJ / HMCTS | apply wizard (`jobs.justice.gov.uk`) |
-| SEEK | Australia (`seek.com.au`) |
+| SEEK | **Australia/NZ only** (`seek.com.au` / `seek.co.nz`) — no UK site; vestigial for a London search |
 
 **ATS platforms** (application forms the drivers can fill + submit):
 

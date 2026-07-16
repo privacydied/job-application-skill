@@ -1165,6 +1165,105 @@ class TestReedFeed(unittest.TestCase):
         self.assertEqual(pipeline.FEEDS["reed"][0], "reed.co.uk")
 
 
+class TestTotaljobsFeed(unittest.TestCase):
+    """Totaljobs / StepStone-family scraper pure logic (data-at hooks + path-based search URL,
+    verified live 2026-07-17). Cooldown key is parsed from the /jobs/<what>/ path."""
+    def _load(self):
+        import importlib.util
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        spec = importlib.util.spec_from_file_location(
+            "totaljobs_feed", os.path.join(root, "sites", "totaljobs.com", "scripts", "feed.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_helpers(self):
+        m = self._load()
+        self.assertEqual(m._job_id("/job/ux-designer/triad-group-plc-job107681590"), "107681590")
+        self.assertEqual(m._job_id("/job/foo/bar"), "")            # no -job<id> → empty
+        self.assertEqual(m._slug("UX Designer"), "ux-designer")
+        self.assertEqual(m._search_url("UX Designer", "London"),
+                         "https://www.totaljobs.com/jobs/ux-designer/in-london")
+        # cooldown key parsed from the path, and it must match searches.csv 'query' after norm()
+        import board_cooldown as bc
+        self.assertEqual(m._query_from_nav("https://www.totaljobs.com/jobs/ux-designer/in-london"),
+                         "ux designer")
+        self.assertEqual(bc.norm(m._query_from_nav("https://www.totaljobs.com/jobs/ux-designer/in-london")),
+                         bc.norm("ux designer"))
+        self.assertEqual(m._query_from_nav("https://www.totaljobs.com/job/x/y-job1"), "")
+        # relative href resolves against a sibling base (cwjobs), not the default host
+        self.assertEqual(m._canonical_url("/job/x/y-job107663974?src=q", "https://www.cwjobs.co.uk"),
+                         "https://www.cwjobs.co.uk/job/x/y-job107663974")
+
+    def test_normalize_real_card(self):
+        m = self._load()
+        raw = {"href": "/job/ux-designer/triad-group-plc-job107681590?src=searchResults",
+               "title": "UX Designer", "company": "Triad Group Plc",
+               "salary": "£45,000 - £55,000 per annum", "location": "London", "posted": "2 days ago"}
+        n = m._normalize(raw)
+        self.assertEqual(n["id"], "107681590")
+        self.assertEqual(n["url"], "https://www.totaljobs.com/job/ux-designer/triad-group-plc-job107681590")
+        self.assertEqual(n["company"], "Triad Group Plc")
+        self.assertEqual(n["location"], "London")
+        self.assertEqual(n["source"], "totaljobs")
+        self.assertIsNone(m._normalize({"href": "/job/no/id-here"}))   # no id → dropped
+
+    def test_wired_into_pipeline_feeds(self):
+        import pipeline
+        self.assertIn("totaljobs", pipeline.FEEDS)
+        self.assertEqual(pipeline.FEEDS["totaljobs"][0], "totaljobs.com")
+        self.assertIn("cwjobs", pipeline.FEEDS)   # StepStone sibling shares the adapter dir
+        self.assertEqual(pipeline.FEEDS["cwjobs"][0], "totaljobs.com")
+
+
+class TestGuardianFeed(unittest.TestCase):
+    """Guardian Jobs (Madgex) scraper pure logic — .lister__item cards + `?Keywords=` search
+    (the /jobs/<what>/ PATH is a category browse, NOT keyword-filtered; verified live 2026-07-17)."""
+    def _load(self):
+        import importlib.util
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        spec = importlib.util.spec_from_file_location(
+            "guardian_feed", os.path.join(root, "sites", "jobs.theguardian.com", "scripts", "feed.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_helpers(self):
+        m = self._load()
+        self.assertEqual(m._job_id("/job/10146125/digital-director/?LinkSource=x"), "10146125")
+        self.assertEqual(m._job_id("/jobs/design/"), "")           # browse path, not a job
+        self.assertEqual(m._canonical_url(" \n\t/job/10126456/product-designer/?q=1"),
+                         "https://jobs.theguardian.com/job/10126456/product-designer/")
+        # free-text search is the Keywords param, not a path segment
+        from urllib.parse import urlparse, parse_qs
+        u = m._search_url("user experience")
+        self.assertIn("Keywords=user+experience", u)
+        # cooldown key: Keywords param (case-insensitive) matches searches.csv 'query' after norm()
+        import board_cooldown as bc
+        self.assertEqual(m._query_from_nav("https://jobs.theguardian.com/jobs/?Keywords=user+experience"),
+                         "user experience")
+        self.assertEqual(bc.norm(m._query_from_nav(u)), bc.norm("user experience"))
+        self.assertEqual(m._query_from_nav("https://jobs.theguardian.com/jobs/design/"), "design")
+
+    def test_normalize_real_card(self):
+        m = self._load()
+        raw = {"href": " \n\t/job/10126456/product-designer/?LinkSource=searchResults",
+               "title": "Product Designer", "company": "REVIVA SOFTWORKS",
+               "salary": "Competitive salary", "location": "Shoreditch, London"}
+        n = m._normalize(raw)
+        self.assertEqual(n["id"], "10126456")
+        self.assertEqual(n["url"], "https://jobs.theguardian.com/job/10126456/product-designer/")
+        self.assertEqual(n["company"], "REVIVA SOFTWORKS")
+        self.assertEqual(n["ats_hint"], "guardian-direct")   # on-page apply form
+        self.assertEqual(n["source"], "guardian")
+        self.assertIsNone(m._normalize({"href": "/jobs/design/"}))   # no job id → dropped
+
+    def test_wired_into_pipeline_feeds(self):
+        import pipeline
+        self.assertIn("guardian", pipeline.FEEDS)
+        self.assertEqual(pipeline.FEEDS["guardian"][0], "jobs.theguardian.com")
+
+
 class TestTheDotsFeed(unittest.TestCase):
     """The Dots JSON:API feed — pure _parse resolves sideloaded org/location (verified live
     2026-07-15: org is included type 'pages' with the name under 'title', not 'name')."""

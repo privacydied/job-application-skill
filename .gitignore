@@ -119,3 +119,9 @@ warm-map.json
 /run_spec_*.json
 /spec_*.json
 /apply_hackney_hdo.json
+
+# reCAPTCHA helper runtime state (per-run; may hold challenge specifics — never commit)
+captcha-audit.csv
+captcha-type-memory.csv
+captcha-solve-pending.json
+/tmp/recaptcha-challenge-*.png

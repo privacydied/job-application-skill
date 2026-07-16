@@ -59,6 +59,9 @@ FEEDS = {
     "adzuna":   ("adzuna.co.uk",       lambda nav: ["--nav", nav] if nav else []),
     "reed":     ("reed.co.uk",         lambda nav: ["--nav", nav] if nav else []),
     "thedots":  ("the-dots.com",       lambda nav: ["--nav", nav] if nav else []),
+    "totaljobs":("totaljobs.com",      lambda nav: ["--nav", nav] if nav else []),
+    "cwjobs":   ("totaljobs.com",      lambda nav: ["--nav", nav] if nav else []),  # StepStone sibling, same adapter (nav carries cwjobs.co.uk host)
+    "guardian": ("jobs.theguardian.com", lambda nav: ["--nav", nav] if nav else []),
 }
 
 # ── family classifier (for per-family resume bases, Tier 2) ──────────────────
