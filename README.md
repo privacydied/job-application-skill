@@ -222,9 +222,21 @@ Your personal data is gitignored and stays only on your disk (see `.gitignore`):
 - **Application artifacts** — the entire `applications/` folder (cover letters, statements,
   resumes, confirmation screenshots) and `uploads/` (your resume PDFs)
 - **Run state** — `application-tracker.csv`, `apply-stats.csv`, and the other run CSVs/JSONLs
-- **Credentials & sessions** — `ats-credentials.csv`, `*cookies*.txt`, all `.jobenv*`/env files
+- **Credentials & sessions** — `ats-credentials.csv`, `*cookies*.txt`, all `.jobenv*`/env files,
+  your real `compose.yaml` / `camofox-browser.env` / `*.ovpn`
 
 A first-time user regenerates their own from the committed `*.example` templates.
+
+> **📌 Note on `.gitignore`** — this file is what keeps your personal data private, so a few
+> rules matter:
+> - **Don't remove the personal-data entries.** They're grouped and commented at the top of
+>   `.gitignore`; deleting one would start tracking that file on the next `git add`.
+> - **Keep personal values in the gitignored configs, never hard-coded in tracked code/docs.**
+>   The tooling reads your details from the ignored files (`apply-defaults.json`, etc.) by design.
+> - **Directories use the `dir/*` + `!dir/.gitkeep` form** (e.g. `applications/*`) so the empty
+>   folder survives a clone while its contents stay ignored — don't change it back to a bare `dir/`.
+> - **The pre-commit guard is a `.git/hooks/` symlink and does NOT travel with a clone.** After
+>   cloning, re-install it: `ln -sf ../../scripts/check-no-pii.sh .git/hooks/pre-commit`.
 
 ### How it stays private over time
 

@@ -35,7 +35,10 @@ STOP = {"github.com", "linkedin.com", "x.com", "twitter.com", "example.com", "ex
         "jane", "doe", "she", "her", "him", "his", "yes", "no",
         # placeholder phone (Ofcom fictional range) + example address/postcode from *.example
         "447700900000", "07700900000", "7700900000", "900000", "7700 900000",
-        "example", "street", "your-vpn-username"}
+        "example", "street", "your-vpn-username",
+        # your PUBLIC GitHub handle / repo owner — appears legitimately in LICENSE + the repo
+        # URL, so it's allowed here (the guard still catches your real name/email/phone/address)
+        "privacydied"}
 
 def add(t):
     t = (t or "").strip().strip("/:.")
