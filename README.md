@@ -65,7 +65,7 @@ atsform.py`) drives many other standard ATS forms via label-based field matching
 | Recruitee | `*.recruitee.com` |
 | HiBob (Bob Hiring) | `*.careers.hibob.com` |
 | Lumesse TalentLink | hosted recruitment platform |
-| Application Track (VacancyFiller) | `recruitmentservices.applicationtrack.com` — UK public sector, incl. MI5 (see the ⛔ integrity note in `sites/applicationtrack.com/NOTES.md`) |
+| Application Track (MI5) | `recruitmentservices.applicationtrack.com` — VacancyFiller ATS, UK public sector incl. MI5 (see the ⛔ integrity note in `sites/applicationtrack.com/NOTES.md`) |
 
 ---
 
