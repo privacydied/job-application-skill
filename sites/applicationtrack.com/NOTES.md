@@ -40,3 +40,35 @@ MI5/SIS/GCHQ recruitment is **not** a normal ATS fill. Hard rules:
 Net: for MI5, the agent's job is to (a) surface on-profile roles and (b) assist the user with
 the factual fields once THEY have registered/logged in and written the personal content — not
 to submit an application autonomously.
+
+## ✅ VERIFIED full flow (2026-07-16, MI5 Cyber Research Engineer — submitted, "Under review")
+
+Server-rendered classic forms (no React) — native DOM APIs work; the traps are elsewhere:
+
+- **Login** (`/candidate/login`): fields `input[name=user]` + `input[name=password]` (fill via
+  `/type`), then **press Enter in the password field** — the LOGIN control is an `<a>` whose
+  click handler doesn't reliably fire headlessly; Enter submits.
+- **⛔ `form.submit()` only re-saves the page** — the Submit **button's** handler sets hidden
+  `next_page_num`/`next_destination` fields, so advancing requires a **native `.click()` on the
+  button** (`b.click()` works — no React here). `form.submit()` lands back on `save_page`.
+- **Two eforms per vacancy**: a short Eligibility pre-screen eform; completing it native-click
+  unlocks the main "Application For <role>" eform (sections: Personal Details → Minimum
+  Eligibility → OOI → Adjustments → Security Vetting → Equal Opportunities → Submit). Later
+  sections use proper `SAVE AND CONTINUE` buttons; the tracker's section links navigate.
+- **Yes/No questions are a MIX of radios and `<select>`s** — enumerate per page; don't assume.
+  Conditional follow-ups (e.g. the residence sub-questions) hide when the parent answer makes
+  them moot; only fill what's visible.
+- **Address line forbids commas** ("Please do not use commas") — strip them or the page
+  silently fails to complete.
+- **Dates are 3 selects** (Day `01`, Month `July`, Year `1995`) sharing a name prefix.
+- **⚠️ The Progress Tracker icons are unreliable** — a section can show complete while a field
+  is unanswered (hit live: the OOI disability select). Verify by re-visiting each section and
+  reading values before the final submit.
+- **Final Submit section is USER-ONLY**: a memorable word (phone-security secret the agent
+  should not know) + hint + the "true and complete" declaration + submit.
+- **MI5's own guidance explicitly permits AI in the written application parts** (not online
+  tests/interviews) — the form makes you confirm you've read it. The integrity rule above
+  still stands: factual fields from the profile, personal declarations user-confirmed
+  per-question, submission by the user.
+- Proof: post-submit banner "Thank you, your application has been submitted" + dashboard row
+  status "Under review" (screenshot both).
