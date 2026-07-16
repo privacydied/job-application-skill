@@ -46,7 +46,7 @@ atsform.py`) drives many other standard ATS forms via label-based field matching
 | Reed | sourcing + apply (`reed.co.uk`) |
 | Welcome to the Jungle | sourcing + **in-platform apply** (`welcometothejungle.com`) |
 | Civil Service Jobs | sourcing + apply (`civilservicejobs.service.gov.uk`) |
-| Adzuna | sourcing via API (`adzuna.co.uk`) |
+| Adzuna | sourcing via API (`adzuna.co.uk`) — needs a **free** `app_id`/`app_key` from [developer.adzuna.com](https://developer.adzuna.com) |
 | The Dots | sourcing (`the-dots.com`) |
 | Hackney Council | sourcing + apply (`recruitment.hackney.gov.uk`) |
 | MoJ / HMCTS | apply wizard (`jobs.justice.gov.uk`) |
@@ -122,6 +122,10 @@ This repo does **not** ship the browser backend — point the `CFX_*` env vars a
    # ats-credentials.csv, columns: site,email,password,date
    printf 'site,email,password,date\n' > ats-credentials.csv
    ```
+   Most boards use a login (email/password). **Adzuna is API-based** — register (free) at
+   [developer.adzuna.com](https://developer.adzuna.com) for an `app_id` + `app_key`, then either
+   `export ADZUNA_APP_ID=… ADZUNA_APP_KEY=…` or add a row `adzuna-api,<app_id>,<app_key>` to
+   `ats-credentials.csv`.
 
 6. **Add your resumes** as PDFs in `uploads/` (also gitignored).
 
