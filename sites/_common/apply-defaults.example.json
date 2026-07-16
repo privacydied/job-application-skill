@@ -11,7 +11,9 @@
     "Portfolio": "https://example.com",
     "Website": "https://example.com",
     "GitHub": "https://github.com/your-handle",
+    "Address line 1": "1 Example Street",
     "City": "London",
+    "Postal": "AB1 2CD",
     "Notice period": "Available immediately"
   },
   "select": {

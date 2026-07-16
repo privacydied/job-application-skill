@@ -148,18 +148,23 @@ def run(job, resume="am-uxd.pdf"):
         print(f"step {step}: {cur!r}")
         if re.search(r"review", cur or "", re.I):
             break
-        # Contact info: fill from profile if present
+        # Contact info: fill from your gitignored apply-defaults.json (never hard-code PII
+        # here — this file is committed). Falls back to apply-defaults.example.json's
+        # placeholders on a fresh clone; empty/missing fields are just skipped.
         if re.search(r"contact", cur or "", re.I):
-            for lbl, v in [("First name", "Jane"), ("Last name", "Doe"),
-                           ("Address line 1", "[your address]"),
-                           ("City", "London"), ("Postal", "[postcode]")]:
-                atsform.fill(lbl, v); time.sleep(0.3)
+            fill = atsform._load_defaults(True).get("fill", {})
+            for lbl in ("First name", "Last name", "Address line 1", "City", "Postal"):
+                v = fill.get(lbl, "")
+                if v:
+                    atsform.fill(lbl, v); time.sleep(0.3)
             atsform.answer("country/region", "United Kingdom")
-            try:
-                cfx.post(f"/tabs/{cfx._tab()}/type", {"userId": cfx._uid(),
-                         "selector": "input[type=tel]", "text": "+44 7700 900000", "mode": "fill"})
-            except cfx.CfxError:
-                pass
+            phone = fill.get("Phone", "")
+            if phone:
+                try:
+                    cfx.post(f"/tabs/{cfx._tab()}/type", {"userId": cfx._uid(),
+                             "selector": "input[type=tel]", "text": phone, "mode": "fill"})
+                except cfx.CfxError:
+                    pass
         # Resume upload
         if re.search(r"resume", cur or "", re.I):
             try:

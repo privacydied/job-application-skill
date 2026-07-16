@@ -11,7 +11,12 @@
 #
 # Exit 0 = clean (or no config to check against); exit 1 = a personal token is tracked.
 set -u
-cd "$(dirname "$0")/.." || exit 0
+# Resolve the repo root robustly: `git rev-parse` works whether this runs as a pre-commit
+# hook (git sets cwd to the worktree root) or is invoked manually from anywhere in the tree.
+# Fall back to the script's own location for a non-git checkout.
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || ROOT=""
+[ -n "$ROOT" ] || ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT" || exit 0
 CFG="sites/_common/apply-defaults.json"
 PROFILE="references/applicant-profile.md"
 
