@@ -57,16 +57,55 @@ FEEDS = {
     "csj":      ("civilservicejobs",   lambda nav: (["--nav", nav, "--all-pages"] if nav else ["--all-pages"])),
     "hackney":  ("hackney",            lambda nav: ["--nav", nav] if nav else []),
     "adzuna":   ("adzuna.co.uk",       lambda nav: ["--nav", nav] if nav else []),
-    "reed":     ("reed.co.uk",         lambda nav: ["--nav", nav] if nav else []),
+    "reed":     ("reed.co.uk",         lambda nav: (["--nav", nav, "--pages", "4"] if nav else ["--pages", "4"])),
     "thedots":  ("the-dots.com",       lambda nav: ["--nav", nav] if nav else []),
     "totaljobs":("totaljobs.com",      lambda nav: ["--nav", nav] if nav else []),
     "cwjobs":   ("totaljobs.com",      lambda nav: ["--nav", nav] if nav else []),  # StepStone sibling, same adapter (nav carries cwjobs.co.uk host)
     "guardian": ("jobs.theguardian.com", lambda nav: ["--nav", nav] if nav else []),
     "charityjob":("charityjob.co.uk",    lambda nav: ["--nav", nav] if nav else []),
+    "escapecity":("escapethecity.org",   lambda nav: ["--nav", nav] if nav else []),  # purpose-driven board via its public Algolia index (browser-free)
+    "thirdsector":("jp.thirdsector.co.uk", lambda nav: (["--nav", nav] if nav else ["--pages", "5"])),  # whole board is ~97 rows / 5 pages — sweep it all
     "cvlibrary":("cv-library.co.uk",     lambda nav: ["--nav", nav] if nav else []),
     "nhs":      ("jobs.nhs.uk",          lambda nav: ["--nav", nav] if nav else []),
     "mi5":      ("applicationtrack.com", lambda nav: ["--nav", nav] if nav else ["--tenant", "mi5"]),  # apply account-gated (noVNC oversight)
     "mi6":      ("applicationtrack.com", lambda nav: ["--nav", nav] if nav else ["--tenant", "mi6"]),  # apply account-gated (noVNC oversight)
+    # ── IT / security / finance lanes ────────────────────────────────────────
+    "jobserve": ("jobserve.com",         lambda nav: (["--nav", nav, "--pages", "3"] if nav else ["--pages", "3"])),  # huge UK IT inventory, contract-skewed
+    "cybersecjobsite": ("cybersecurityjobsite.com", lambda nav: ["--nav", nav] if nav else []),  # niche cyber board (~87 live) — apply needs camofox
+    "efinancial": ("efinancialcareers.co.uk", lambda nav: (["--nav", nav, "--pages", "3"] if nav else ["--pages", "3"])),  # 15/page, so sweep 3
+    "hackajob": ("hackajob.com",         lambda nav: ["--nav", nav] if nav else []),  # ⚠️ DISCOVERY ONLY — rows are not applyable (profile-gated); see NOTES.md
+    # ── design / creative / music lanes ──────────────────────────────────────
+    # ⚠️ mbw/designweek/dezeen take NO --nav: their feeds consume an RSS/JSON endpoint, not the
+    # human listing page, so handing them a searches.csv nav URL feeds HTML to a non-HTML parser
+    # and silently yields 0 rows. They build their own URL from --what/--where; each board is
+    # small enough that a full sweep is the correct pass anyway.
+    "ifyoucould": ("ifyoucouldjobs.com", lambda nav: ["--nav", nav] if nav else []),  # It's Nice That's board — whole board is 1 page, no pagination
+    "mbw":       ("musicbusinessworldwide.com", lambda nav: []),  # RSS job_feed; posts_per_page=100 = whole board in 1 GET
+    "creativepool": ("creativepool.com", lambda nav: (["--nav", nav, "--pages", "4"] if nav else ["--pages", "4"])),  # 437 jobs @25/page — sweep 4
+    "designweek": ("designweek.co.uk",   lambda nav: []),  # jm-ajax JSON (RSS keyword search is broken upstream) — see NOTES.md
+    "dezeen":    ("dezeen.com",          lambda nav: ["--pages", "3"]),  # ⚠️ camofox-only (Cloudflare challenge); ~140 jobs @50/page
+    "dribbble":  ("dribbble.com",        lambda nav: (["--nav", nav, "--pages", "2"] if nav else ["--pages", "2"])),  # ~69 jobs, remote-heavy
+    # ── ATS-direct: employers' own boards, no aggregator in the middle ───────
+    # ⭐ The highest-yield channel: every row is on an ATS that accepts an application with
+    # NO ACCOUNT (greenhouse/lever/ashby/workable/smartrecruiters/recruitee), so it sidesteps
+    # the downstream-employer-ATS wall that stops Adzuna/WTTJ/Dots at submit time. `ats_hint`
+    # names the driver to use. Company universe: sites/ats-direct/companies.csv.
+    "atsdirect": ("ats-direct",          lambda nav: []),   # filters are --what/--sector/--ats, not nav
+    # ── academic / gov / public-sector portals ──────────────────────────────
+    "jobsac":    ("jobs.ac.uk",          lambda nav: (["--nav", nav, "--pages", "2"] if nav else ["--pages", "2"])),  # unis: web/digital officer + IT/AV support
+    "gchq":      ("gchq-careers.co.uk",  lambda nav: []),   # ⚠️ camofox-only: /api/search is Cloudflare-gated (facets are HTTP)
+    "jgp":       ("jobsgopublic.com",    lambda nav: ["--nav", nav] if nav else []),  # councils/housing/charities
+    "lgjobs":    ("lgjobs.com",          lambda nav: ["--nav", nav] if nav else []),  # ⚠️ strict SUBSET of jgp (same Jobiqo index) — shares jgp's seen_pattern
+    "apprentice":("findapprenticeship.service.gov.uk", lambda nav: ["--nav", nav] if nav else []),  # cyber/DevOps L4 — ask before a volume run
+    "tfl":       ("tfl.gov.uk",          lambda nav: ["--nav", nav] if nav else []),  # SuccessFactors RMK; board is TfL+GLA+OPDC
+    "bbc":       ("careers.bbc.co.uk",   lambda nav: []),   # POST API — a nav URL is meaningless here
+    # ── aggregator APIs ─────────────────────────────────────────────────────
+    "himalayas": ("himalayas.app",       lambda nav: ["--pages", "5"]),  # keyless JSON; no keyword search upstream, volume comes from --pages
+    "talent":    ("talent.com",          lambda nav: (["--nav", nav, "--pages", "2"] if nav else ["--pages", "2"])),
+    # Key-gated (feed exits 2 naming the exact ats-credentials.csv row + free signup URL):
+    "reedapi":   ("reed.co.uk",          lambda nav: ["--nav", nav] if nav else [], "feed_api.py"),  # official API; distinct from the `reed` scraper
+    "jooble":    ("jooble.org",          lambda nav: ["--nav", nav] if nav else []),
+    "careerjet": ("careerjet.co.uk",     lambda nav: ["--nav", nav] if nav else []),
 }
 
 # ── family classifier (for per-family resume bases, Tier 2) ──────────────────
@@ -221,8 +260,13 @@ def run_feed(board, nav, force, timeout=420):
     spec = FEEDS.get(bc.norm(board))
     if not spec:
         return [], f"no feed adapter for board {board!r}"
-    subdir, argb = spec
-    feed = os.path.join(_ROOT, "sites", subdir, "scripts", "feed.py")
+    # A spec is (subdir, argbuilder) or (subdir, argbuilder, script_name). The 3rd element
+    # exists because a couple of domains ship TWO feeds — e.g. reed.co.uk has the browser
+    # scraper `feed.py` AND the official-API `feed_api.py`. Without it, FEEDS could only
+    # ever reach `feed.py` and the second feed was unroutable from the loop.
+    subdir, argb = spec[0], spec[1]
+    script = spec[2] if len(spec) > 2 else "feed.py"
+    feed = os.path.join(_ROOT, "sites", subdir, "scripts", script)
     if not os.path.isfile(feed):
         return [], f"feed not found: {feed}"
     cmd = [sys.executable, feed] + argb(nav) + (["--force"] if force else [])

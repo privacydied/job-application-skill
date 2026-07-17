@@ -70,9 +70,10 @@ camofox-browser.env
 # =============================================================================
 # SECRETS / ENV — never commit
 # =============================================================================
-.jobenv
-.jobenv.run
-.jobenv.persist
+# Glob, NOT one line per variant: every .jobenv* holds CFX_KEY, and cfx.ensure_tab's
+# CFX_TAB_FILE writes a NEW variant on demand (a per-run tab file such as .jobenv.apply),
+# so an enumerated list silently leaves the next one committable.
+.jobenv*
 .runenv
 .myenv
 .runtab

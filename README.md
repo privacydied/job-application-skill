@@ -19,8 +19,10 @@ operating manual is **`SKILL.md`** — read that after this.
 
 ## What it does
 
-- **Source** — pull fresh postings from job boards (LinkedIn, Indeed, Reed, Welcome to the
-  Jungle, Civil Service Jobs, Adzuna, and more) via `sites/<board>/scripts/feed.py`.
+- **Source** — pull fresh postings from **41 channels** via `sites/<board>/scripts/feed.py`:
+  aggregators (LinkedIn, Indeed, Reed, Adzuna, Totaljobs…), gov/public (Civil Service, NHS,
+  MI5/MI6, GCHQ, councils, TfL, BBC), sector boards (design, music, IT/security, charity),
+  and **ATS-direct** — employers' own Greenhouse/Lever/Ashby boards, keyless and browser-free.
 - **Screen** — filter to roles that genuinely fit your profile (title, seniority, location,
   right-to-work) before spending any effort. On-profile only; no spray-and-pray.
 - **Apply** — drive the ATS form to submission: Ashby, Greenhouse, Lever, Workday, Workable,
@@ -36,6 +38,11 @@ operating manual is **`SKILL.md`** — read that after this.
 Each lives under `sites/<name>/` (a `feed.py` for sourcing and/or a `NOTES.md` apply recipe).
 Beyond the ATSes with bespoke recipes below, the generic form engine (`sites/_common/scripts/
 atsform.py`) drives many other standard ATS forms via label-based field matching.
+
+Most feeds are declarative specs over the shared runtime `sites/_common/scripts/httpfeed.py`
+(a `Board` describing how to build a search URL, pull rows, and map one row to the common
+posting shape) — so a new board is ~40 lines, not ~200. Most are plain HTTP: no browser, no
+key, runnable from cron or CI.
 
 **Job boards** (source postings, and apply where supported):
 
@@ -58,6 +65,21 @@ atsform.py`) drives many other standard ATS forms via label-based field matching
 | Hackney Council | sourcing + apply (`recruitment.hackney.gov.uk`) |
 | MoJ / HMCTS | apply wizard (`jobs.justice.gov.uk`) |
 | SEEK | **Australia/NZ only** (`seek.com.au` / `seek.co.nz`) — no UK site; vestigial for a London search |
+| **ATS-direct** ⭐ | **not a board** — reads employers' own Greenhouse/Lever/Ashby/Workable/SmartRecruiters/Recruitee boards (`sites/ats-direct/`, universe in `companies.csv`). Keyless, browser-free, fresher than aggregators; `ats_hint` names the driver. Applying needs **no account** |
+| Himalayas | sourcing via keyless JSON API (`himalayas.app`) — remote roles |
+| Talent.com | sourcing (`uk.talent.com`) |
+| Reed API / Jooble / Careerjet | sourcing via official APIs — each needs a **free key** in `ats-credentials.csv` (the feed exits 2 telling you the exact row + signup URL) |
+| GCHQ | sourcing (`gchq-careers.co.uk`) — cyber/DevOps; ⚠️ search is Cloudflare-gated so this feed needs the browser; apply is account-gated |
+| Jobs Go Public / LGjobs | sourcing (`jobsgopublic.com`, `lgjobs.com`) — councils, housing, charities. LGjobs is a strict **subset** of JGP (same index) |
+| jobs.ac.uk | sourcing (`jobs.ac.uk`) — universities: web/digital officer, IT & AV support |
+| TfL / BBC | sourcing (`tfl.gov.uk` → SuccessFactors board shared with GLA+OPDC; `careers.bbc.co.uk` via its JSON API). Apply account-gated |
+| Find an Apprenticeship | sourcing (`findapprenticeship.service.gov.uk`) — cyber/DevOps L4; apply needs a DfE account |
+| If You Could | sourcing (`ifyoucouldjobs.com`) — London junior/mid design board |
+| Music Business Worldwide | sourcing (`musicbusinessworldwide.com`) — music industry; apply is an on-site form gated by an **emailed OTP** |
+| Creativepool / Design Week / Dezeen / Dribbble | sourcing — creative/design boards. Dezeen is camofox-only (Cloudflare); Creativepool + Dribbble apply is account-gated |
+| JobServe / eFinancialCareers / CyberSecurityJobsite | sourcing — IT, finance and cyber lanes |
+| hackajob | sourcing **only** (`hackajob.com`) — discovery signal; rows aren't applyable (profile-gated), and it's US-heavy |
+| Escape the City / Third Sector | sourcing — purpose-driven & charity digital roles |
 
 **ATS platforms** (application forms the drivers can fill + submit):
 
@@ -73,6 +95,21 @@ atsform.py`) drives many other standard ATS forms via label-based field matching
 | HiBob (Bob Hiring) | `*.careers.hibob.com` |
 | Lumesse TalentLink | hosted recruitment platform |
 | Application Track (MI5/MI6) | `recruitmentservices.applicationtrack.com` — VacancyFiller ATS, UK public sector incl. **MI5 & MI6/SIS** (see the ⛔ integrity note in `sites/applicationtrack.com/NOTES.md`) |
+
+**⚠️ Sourcing an ATS ≠ submitting to it.** All of the above are account-less to *apply*, but
+most now gate the submit button with anti-bot: **Greenhouse** submits (reCAPTCHA v2 — handled
+by `recaptcha.py`), while **Lever** (hCaptcha), **Ashby** (spam-flags valid forms) and
+**Workable** (Cloudflare Turnstile) do not. Route submissions to Greenhouse first and treat
+the rest as sourced-only until proven. Some employers also require an **anti-AI attestation**
+("I agree to use only my own words…") — the skill will not tick that box, and skips the role.
+Detail: `references/ats-apply-surface.md`.
+
+**Deliberately not built** (probed 2026-07-17, all dead — don't re-add): DWP Find a Job
+(`findajob.dwp.gov.uk` — returns HTTP 200 with "This site is now closed"), Technojobs
+(dangling CNAME, ports closed since ~Nov 2025), Charity Digital jobs (links to an NXDOMAIN
+host), `workforus.parliament.uk` (NXDOMAIN). Profile-only platforms (Cord, YunoJuno,
+Worksome, Contra, and the AI-training marketplaces) have no public feed and are documented
+in `references/profile-platforms.md` instead.
 
 ---
 

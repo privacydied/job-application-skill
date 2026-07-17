@@ -72,12 +72,29 @@ def _js(s):
     return json.dumps(s)
 
 
-# Resolve a fillable field (input/textarea) by a label substring → a stable CSS
-# selector (prefers name, then id). Matches labels[0], aria-label, or a wrapping
+# Resolve a fillable field (input/textarea) by a label → a stable CSS selector
+# (prefers name, then id). Matches labels[0], aria-label, or a wrapping
 # fieldset/label's text. Returns '' if none.
+#
+# ⚠️ MATCH PRECEDENCE (do NOT collapse back to "first substring wins"):
+#   1. exact       — normalised label == want
+#   2. word-prefix — label starts with want at a word boundary ("Phone" ~ "Phone Number")
+#   3. word-match  — want appears in the label at word boundaries
+#   4. substring   — the old loose behaviour, last resort
+# Normalisation strips a trailing `*`, a parenthetical like "(Optional)", and
+# collapses whitespace, so "Phone*" / "Phone (Optional)" still match "Phone".
+#
+# WHY: the resolver used to take the FIRST loose substring hit in DOM order, so a
+# short label silently captured a *different*, earlier field whose text merely
+# contained it. Verified live on Paddle's Ashby form (2026-07-17):
+# `fill "Phone" "+44…"` wrote the phone number into **"Phonetic Pronunciation
+# (Optional)"** — which appears first — and left the real "Phone" field empty.
+# That is a silent wrong-data submission, not a crash: `check` reported the form
+# "answered" while the data sat in the wrong box. Exact-first fixes the whole class
+# ("Name" vs "Full Name"/"Name of referrer", "Email" vs "Email me updates", …).
 _RESOLVE = r"""
 (() => {
-  const want = %s.toLowerCase();
+  const want = %s.toLowerCase().trim();
   const kinds = %s;  // e.g. 'input,textarea' or 'select'
   const labelText = el => {
     if (el.labels && el.labels[0]) return el.labels[0].innerText;
@@ -85,13 +102,31 @@ _RESOLVE = r"""
     const fs = el.closest('fieldset,label,div');
     return fs ? (fs.querySelector('label,legend') || fs).innerText || '' : '';
   };
+  // strip required marker + trailing parenthetical, collapse whitespace
+  const norm = s => (s || '')
+    .replace(/\*/g, ' ')
+    .replace(/\((?:optional|required)\)/ig, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+  const sel = el => {
+    if (el.name) return '[name="' + el.name.replace(/"/g,'\\"') + '"]';
+    if (el.id) return '[id="' + el.id.replace(/"/g,'\\"') + '"]';
+    return null;  // matched but unaddressable
+  };
+  const esc = want.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const wordRe   = new RegExp('\\b' + esc + '\\b');
+  const prefixRe = new RegExp('^' + esc + '\\b');
+  const tiers = [[], [], [], []];
   for (const el of document.querySelectorAll(kinds)) {
-    if ((labelText(el) || '').toLowerCase().includes(want)) {
-      if (el.name) return '[name="' + el.name.replace(/"/g,'\\"') + '"]';
-      if (el.id) return '[id="' + el.id.replace(/"/g,'\\"') + '"]';
-      return null;  // matched but unaddressable
-    }
+    const lab = norm(labelText(el));
+    if (!lab) continue;
+    if (lab === want) tiers[0].push(el);
+    else if (prefixRe.test(lab)) tiers[1].push(el);
+    else if (wordRe.test(lab)) tiers[2].push(el);
+    else if (lab.includes(want)) tiers[3].push(el);
   }
+  for (const tier of tiers) if (tier.length) return sel(tier[0]);
   return '';
 })()
 """.strip()

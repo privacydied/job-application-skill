@@ -75,7 +75,35 @@ def _root():
 
 
 def master_path():
-    return os.path.join(_root(), "jane-doe-resume.html")
+    """Path to the master resume HTML.
+
+    Resolution order (first hit wins):
+      1. $RESUME_MASTER — explicit override (absolute, or relative to the skill root).
+      2. The single `*-resume.html` at the skill root — the real user's master, whatever
+         they are called.
+      3. `jane-doe-resume.html` — the shipped placeholder / example name.
+
+    WHY: this used to hard-code the placeholder name, so tailoring was silently broken for
+    every real user (their master is `<their-name>-resume.html`) — `tailor.py find` and
+    `apply` both failed with "cannot read master resume". The glob makes the engine work
+    out of the box for anyone who dropped their own master in, with no config.
+    If several `*-resume.html` files exist the choice would be ambiguous, so we require
+    $RESUME_MASTER rather than guess.
+    """
+    import glob
+    root = _root()
+    env = os.environ.get("RESUME_MASTER")
+    if env:
+        return env if os.path.isabs(env) else os.path.join(root, env)
+    found = sorted(glob.glob(os.path.join(root, "*-resume.html")))
+    real = [f for f in found if os.path.basename(f) != "jane-doe-resume.html"]
+    if len(real) == 1:
+        return real[0]
+    if len(real) > 1:
+        raise SystemExit(
+            "FAIL: several master resumes at the skill root (%s) — set RESUME_MASTER to "
+            "the one to tailor." % ", ".join(os.path.basename(f) for f in real))
+    return os.path.join(root, "jane-doe-resume.html")
 
 
 def _family_data():

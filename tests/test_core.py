@@ -2108,5 +2108,342 @@ class TestWttjSendOutcomes(unittest.TestCase):
         self.assertTrue(clicked.get("yes"))
 
 
+class TestHttpFeedHelpers(unittest.TestCase):
+    """httpfeed.py is the shared runtime EVERY new board feed is built on — a regression in
+    one of these pure helpers silently corrupts a dozen feeds at once, so they're locked here."""
+    def _m(self):
+        import httpfeed
+        return httpfeed
+
+    def test_clean_strips_tags_entities_and_whitespace(self):
+        h = self._m()
+        self.assertEqual(h.clean("  <b>UX</b>&nbsp;Designer\n\n "), "UX Designer")
+        self.assertEqual(h.clean("&pound;30,000 &amp; up"), "£30,000 & up")
+        self.assertEqual(h.clean("&#163;45,000"), "£45,000")
+        self.assertEqual(h.clean(None), "")
+        self.assertEqual(h.clean(""), "")
+
+    def test_clean_decodes_hex_entities(self):
+        """REGRESSION: clean() decoded named + decimal but NOT hex, so GOV.UK's
+        `&#xA3;` leaked through and salaries rendered as "&#xA3;19,747" (hit
+        independently by the apprenticeships and Escape the City feeds)."""
+        h = self._m()
+        self.assertEqual(h.clean("&#xA3;19,747"), "£19,747")
+        self.assertEqual(h.clean("&#x2019;"), "\u2019")
+        self.assertEqual(h.clean("&#xa3;30,000 to &#xA3;40,000"), "£30,000 to £40,000")
+
+    def test_absolutise(self):
+        h = self._m()
+        b = "https://x.com"
+        self.assertEqual(h.absolutise("/job/1", b), "https://x.com/job/1")
+        self.assertEqual(h.absolutise("https://y.com/j#frag", b), "https://y.com/j")
+        self.assertEqual(h.absolutise("//cdn.z/j", b), "https://cdn.z/j")
+        self.assertEqual(h.absolutise("", b), "")
+
+    def test_money_formats_and_tolerates_junk(self):
+        h = self._m()
+        self.assertEqual(h.money(30000, 40000), "£30,000–£40,000")
+        self.assertEqual(h.money(30000, 30000), "£30,000")   # equal min/max collapses
+        self.assertEqual(h.money(30000, None), "£30,000")
+        self.assertEqual(h.money(None, None), "")
+        self.assertEqual(h.money("junk", None), "")
+        self.assertEqual(h.money(50000, 60000, cur="$"), "$50,000–$60,000")
+
+    def test_jsonpath_never_raises(self):
+        h = self._m()
+        row = {"company": {"name": "Acme"}, "tags": ["a", "b"]}
+        self.assertEqual(h.jsonpath(row, "company", "name"), "Acme")
+        self.assertEqual(h.jsonpath(row, "company", "missing"), "")
+        self.assertEqual(h.jsonpath(row, "nope", "deep", "deeper"), "")
+        self.assertEqual(h.jsonpath(row, "tags", 1), "b")
+        self.assertEqual(h.jsonpath(row, "tags", 9), "")
+        self.assertEqual(h.jsonpath(None, "a"), "")
+
+    def test_query_param_case_insensitive(self):
+        h = self._m()
+        u = "https://b.com/search?Keywords=UX+Designer&Where=London"
+        self.assertEqual(h.query_param(u, "keywords"), "UX Designer")
+        self.assertEqual(h.query_param(u, "where"), "London")
+        self.assertEqual(h.query_param(u, "absent"), "")
+        self.assertEqual(h.query_param("", "q"), "")
+
+    def test_ld_json_and_next_data_tolerate_garbage(self):
+        h = self._m()
+        good = '<script type="application/ld+json">{"@type":"JobPosting","title":"X"}</script>'
+        self.assertEqual(h.ld_json(good)[0]["title"], "X")
+        bad = '<script type="application/ld+json">{not json</script>'
+        self.assertEqual(h.ld_json(bad), [])          # malformed blob must not raise
+        self.assertEqual(h.ld_json(""), [])
+        nd = '<script id="__NEXT_DATA__" type="application/json">{"props":{"n":1}}</script>'
+        self.assertEqual(h.next_data(nd)["props"]["n"], 1)
+        self.assertEqual(h.next_data("<html></html>"), {})
+
+    def test_deep_find_locates_nested_dicts(self):
+        h = self._m()
+        blob = {"a": {"b": [{"jobId": 1}, {"jobId": 2}]}, "c": {"jobId": 3}}
+        found = h.deep_find(blob, lambda d: "jobId" in d)
+        self.assertEqual(sorted(d["jobId"] for d in found), [1, 2, 3])
+
+    def test_board_spec_defaults(self):
+        h = self._m()
+        b = h.Board(board="x", name="X", base="https://x.com",
+                    search_url=lambda w, r, p: "u", parse=lambda t, c: [],
+                    normalize=lambda r, c: None, seen_pattern=r"x/(\d+)")
+        self.assertEqual(b.fetch, "http")            # browser-free by default
+        self.assertIsNone(b.needs())                 # no credential requirement by default
+        self.assertTrue(b.apply_hint)                # always has an agent-facing hint
+
+
+class TestAtsDirectFeed(unittest.TestCase):
+    """ATS-direct: the feed that sources straight from account-less employer ATSes. Its
+    per-ATS row mappers and the London/remote gate are pure — locked here (no network)."""
+    def _load(self):
+        import importlib.util
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        spec = importlib.util.spec_from_file_location(
+            "atsdirect_feed", os.path.join(root, "sites", "ats-direct", "scripts", "feed.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_greenhouse_rows(self):
+        m = self._load()
+        co = {"slug": "monzo", "name": "Monzo", "ats": "greenhouse", "sector": "fintech"}
+        payload = {"jobs": [{"id": 7564605, "title": "Product Designer",
+                             "absolute_url": "https://job-boards.greenhouse.io/monzo/jobs/7564605",
+                             "location": {"name": "London"}, "updated_at": "2026-07-15T10:00:00Z"},
+                            {"title": "no id — dropped"}]}
+        rows = list(m.gh_rows(payload, co))
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["id"], "greenhouse:monzo:7564605")
+        self.assertEqual(rows[0]["company"], "Monzo")
+        self.assertEqual(rows[0]["location"], "London")
+        self.assertEqual(rows[0]["ats_hint"], "greenhouse")   # names the driver to use
+        self.assertEqual(rows[0]["created"], "2026-07-15")
+
+    def test_lever_ashby_workable_rows(self):
+        m = self._load()
+        co = {"slug": "s", "name": "S", "ats": "x", "sector": ""}
+        lv = list(m.lv_rows([{"id": "abc", "text": "UX Designer",
+                              "hostedUrl": "https://jobs.lever.co/s/abc",
+                              "categories": {"location": "London", "commitment": "Full-time"}}], co))
+        self.assertEqual(lv[0]["id"], "lever:s:abc")
+        self.assertEqual(lv[0]["title"], "UX Designer")
+        ab = list(m.ab_rows({"jobs": [{"id": "u1", "title": "Designer", "location": "Remote",
+                                       "isRemote": True, "jobUrl": "https://jobs.ashbyhq.com/s/u1",
+                                       "publishedAt": "2026-07-10T00:00:00Z"}]}, co))
+        self.assertEqual(ab[0]["id"], "ashby:s:u1")
+        self.assertTrue(ab[0]["_remote"])
+        wk = list(m.wk_rows({"jobs": [{"shortcode": "ABC123", "title": "IT Support",
+                                       "city": "London", "country": "UK",
+                                       "telecommuting": False}]}, co))
+        self.assertEqual(wk[0]["id"], "workable:s:ABC123")
+        self.assertEqual(wk[0]["location"], "London UK")
+
+    def test_row_mappers_tolerate_garbage(self):
+        m = self._load()
+        co = {"slug": "s", "name": "S", "ats": "x", "sector": ""}
+        for fn, junk in ((m.gh_rows, {}), (m.ab_rows, {"jobs": None}), (m.lv_rows, {}),
+                         (m.wk_rows, {"jobs": []}), (m.sr_rows, {}), (m.rc_rows, {})):
+            self.assertEqual(list(fn(junk, co)), [])
+
+    def test_is_remote_and_where_gate(self):
+        m = self._load()
+        self.assertTrue(m.is_remote({"location": "Remote (UK)"}))
+        self.assertTrue(m.is_remote({"location": "", "_remote": True}))
+        self.assertTrue(m.is_remote({"location": "Work from home"}))
+        self.assertFalse(m.is_remote({"location": "Manchester"}))
+        # London matches; remote always passes; EMPTY location passes (a false negative here
+        # silently drops real inventory — the JD screen catches those later).
+        self.assertTrue(m.match_where({"location": "London, UK"}, "London"))
+        self.assertTrue(m.match_where({"location": "Remote"}, "London"))
+        self.assertTrue(m.match_where({"location": ""}, "London"))
+        self.assertFalse(m.match_where({"location": "Berlin"}, "London"))
+        self.assertTrue(m.match_where({"location": "Berlin"}, ""))     # empty where disables
+
+    def test_match_what_or_semantics(self):
+        m = self._load()
+        j = {"title": "Junior UX Designer"}
+        self.assertTrue(m.match_what(j, ""))                       # no filter = pass
+        self.assertTrue(m.match_what(j, "designer"))
+        self.assertTrue(m.match_what(j, "devops OR designer"))     # OR bundle
+        self.assertTrue(m.match_what(j, "devops, designer"))       # comma bundle
+        self.assertFalse(m.match_what(j, "devops OR sre"))
+        self.assertTrue(m.match_what(j, '"ux designer"'))          # quoted = phrase
+        self.assertFalse(m.match_what(j, '"senior ux designer"'))
+
+    def test_companies_csv_is_wellformed(self):
+        """Every registry row must name a REAL supported ATS and be unique per company —
+        a company listed on two ATSes double-sources the same job under two ids."""
+        m = self._load()
+        cos = m.load_companies()
+        self.assertGreater(len(cos), 20, "company registry suspiciously small")
+        for c in cos:
+            self.assertIn(c["ats"], m.ATS, f"{c['slug']}: unknown ats {c['ats']!r}")
+            self.assertTrue(c["name"], f"{c['slug']}: missing name")
+        slugs = [c["slug"].lower() for c in cos]
+        dupes = {s for s in slugs if slugs.count(s) > 1}
+        self.assertEqual(dupes, set(), f"company on 2+ ATSes double-sources: {dupes}")
+
+    def test_every_ats_has_url_and_row_mapper(self):
+        m = self._load()
+        for name, (url_fn, rows_fn) in m.ATS.items():
+            self.assertTrue(callable(url_fn) and callable(rows_fn), name)
+            self.assertIn("://", url_fn("slug"))
+
+
+class TestJobsAcFeed(unittest.TestCase):
+    """jobs.ac.uk — the reference declarative feed; its normalize() is the shape every
+    httpfeed-based board copies."""
+    def _load(self):
+        import importlib.util
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        spec = importlib.util.spec_from_file_location(
+            "jobsac_feed", os.path.join(root, "sites", "jobs.ac.uk", "scripts", "feed.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_normalize_extracts_card_fields(self):
+        m = self._load()
+        card = {"advert_id": "1081894", "html": '''
+            <div class="j-search-result__text">
+              <a href="/job/DSG684/lecturer-in-digital-design"> Lecturer in Digital Design </a>
+              <div class="j-search-result__employer"><b>Queen Margaret University</b></div>
+              <div>Location: Edinburgh </div>
+              <div class="j-search-result__info"><strong>Salary: </strong> £44,746 to £56,535 (Grade 8)</div>
+              <div><strong>Date Placed: </strong>15 Jul</div>
+            </div>'''}
+        r = m.normalize(card, {})
+        self.assertEqual(r["id"], "DSG684")             # the stable code, not the advert id
+        self.assertEqual(r["url"], "https://www.jobs.ac.uk/job/DSG684/lecturer-in-digital-design")
+        self.assertEqual(r["title"], "Lecturer in Digital Design")
+        self.assertEqual(r["company"], "Queen Margaret University")
+        self.assertEqual(r["location"], "Edinburgh")
+        self.assertEqual(r["salary"], "£44,746 to £56,535")   # trailing (Grade 8) trimmed
+        self.assertEqual(r["source"], "jobsac")
+
+    def test_normalize_drops_unusable_cards(self):
+        m = self._load()
+        self.assertIsNone(m.normalize({"html": "<div>no link</div>"}, {}))
+        self.assertIsNone(m.normalize({"html": '<a href="/job/X1/s"></a>'}, {}))  # empty title
+
+    def test_search_url_paginates_by_startindex(self):
+        from urllib.parse import urlparse, parse_qs
+        m = self._load()
+        qs = parse_qs(urlparse(m.search_url("ux", "London", 3)).query)
+        self.assertEqual(qs["keywords"], ["ux"])
+        self.assertEqual(qs["location"], ["London"])
+        self.assertEqual(qs["startIndex"], ["51"])      # page 3 @ 25/page => 1-based 51
+        self.assertEqual(qs["pageSize"], ["25"])
+
+
+class TestAtsformResolvePrecedence(unittest.TestCase):
+    """REGRESSION (live, Paddle/Ashby 2026-07-17): _RESOLVE took the FIRST loose
+    substring hit in DOM order, so `fill "Phone"` wrote the phone number into
+    **"Phonetic Pronunciation (Optional)"** — which appears earlier — and left the real
+    "Phone" field empty. Silent wrong-data submission, not a crash. Exact/word matches
+    must beat incidental substrings. Asserted on the JS source: the matcher runs in the
+    browser, so this locks the tiering that implements the rule."""
+    def _src(self):
+        import atsform
+        return atsform._RESOLVE
+
+    def test_resolver_is_tiered_exact_first(self):
+        js = self._src()
+        self.assertIn("tiers", js, "resolver must rank candidates, not take first hit")
+        # exact equality tier must exist and come before the loose `includes` tier
+        self.assertIn("lab === want", js)
+        self.assertLess(js.index("lab === want"), js.index("lab.includes(want)"),
+                        "exact match must be tried before loose substring")
+
+    def test_resolver_normalises_required_and_optional_markers(self):
+        js = self._src()
+        # "Phone*" / "Phone (Optional)" must still match a want of "phone"
+        self.assertIn("optional|required", js)
+        self.assertIn("replace(/\\*/g", js)
+
+    def test_resolver_uses_word_boundaries(self):
+        js = self._src()
+        self.assertIn("\\b", js, "word-boundary matching is what stops Phone~Phonetic")
+
+    def test_python_mirror_of_tiering(self):
+        """The tiering rule, expressed in Python over the same inputs — documents and
+        pins the intended semantics independently of the JS."""
+        def norm(s):
+            import re as _re
+            s = _re.sub(r"\*", " ", s or "")
+            s = _re.sub(r"\((?:optional|required)\)", " ", s, flags=_re.I)
+            return _re.sub(r"\s+", " ", s).strip().lower()
+
+        def resolve(labels, want):
+            import re as _re
+            want = want.lower().strip()
+            esc = _re.escape(want)
+            tiers = ([], [], [], [])
+            for i, raw in enumerate(labels):
+                lab = norm(raw)
+                if not lab:
+                    continue
+                if lab == want:
+                    tiers[0].append(i)
+                elif _re.match(r"^" + esc + r"\b", lab):
+                    tiers[1].append(i)
+                elif _re.search(r"\b" + esc + r"\b", lab):
+                    tiers[2].append(i)
+                elif want in lab:
+                    tiers[3].append(i)
+            for t in tiers:
+                if t:
+                    return t[0]
+            return None
+
+        # the exact live DOM order that caused the bug
+        labels = ["Full Name*", "Phonetic Pronunciation (Optional)", "Preferred Pronouns (Optional)",
+                  "Email*", "Phone", "What are your annual salary expectations?*"]
+        self.assertEqual(resolve(labels, "Phone"), 4)        # NOT 1 (Phonetic…)
+        self.assertEqual(resolve(labels, "Full Name"), 0)
+        self.assertEqual(resolve(labels, "Email"), 3)
+        # exact beats an earlier prefix-match
+        self.assertEqual(resolve(["Name of referrer", "Name"], "Name"), 1)
+        # word-match still reachable when nothing is exact
+        self.assertEqual(resolve(["Annual salary expectations"], "salary"), 0)
+        self.assertIsNone(resolve(["Country"], "phone"))
+
+
+class TestPipelineFeedSpec(unittest.TestCase):
+    """FEEDS specs are (subdir, argb) or (subdir, argb, script). The 3rd element exists
+    because reed.co.uk ships TWO feeds (browser scraper `feed.py` + official-API
+    `feed_api.py`); without it the API feed is unroutable from the loop."""
+    def test_every_feed_resolves_to_a_real_script(self):
+        import pipeline
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        missing = []
+        for name, spec in pipeline.FEEDS.items():
+            self.assertGreaterEqual(len(spec), 2, f"{name}: malformed spec")
+            subdir, argb = spec[0], spec[1]
+            script = spec[2] if len(spec) > 2 else "feed.py"
+            p = os.path.join(root, "sites", subdir, "scripts", script)
+            if not os.path.isfile(p):
+                missing.append(f"{name} -> {os.path.relpath(p, root)}")
+            self.assertTrue(callable(argb), f"{name}: argbuilder not callable")
+            argb("https://x/?q=y")            # must not raise
+            argb(None)                        # nav-less form must not raise
+        self.assertEqual(missing, [], "FEEDS point at missing scripts -> " + "; ".join(missing))
+
+    def test_custom_script_name_is_honoured(self):
+        import pipeline
+        spec = pipeline.FEEDS["reedapi"]
+        self.assertEqual(len(spec), 3)
+        self.assertEqual(spec[2], "feed_api.py")
+        # and the plain `reed` scraper is still its own, separate entry
+        self.assertEqual(len(pipeline.FEEDS["reed"]), 2)
+
+    def test_new_channels_are_registered(self):
+        import pipeline
+        for slug in ("atsdirect", "jobsac", "gchq", "jgp", "himalayas", "mbw", "hackajob"):
+            self.assertIn(slug, pipeline.FEEDS, f"{slug} missing from FEEDS")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

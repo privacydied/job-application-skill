@@ -1,0 +1,102 @@
+slug,ats,name,sector
+# ── ATS-direct company registry ──────────────────────────────────────────────
+# The employer universe `scripts/feed.py` watches. Every row's ATS accepts an
+# application with NO account — so anything sourced here is directly submittable
+# with the driver named in the `ats` column (sites/<ats>/).
+#
+# slug    the company's board slug on that ATS (the bit in its careers URL).
+# ats     greenhouse | lever | ashby | workable | smartrecruiters | recruitee
+# name    display name (lands in the tracker's Company column).
+# sector  pipe-separated tags; filter with `--sector music,design`.
+#         Tags in use: design research music devops security fintech saas consumer
+#         media health ai data ecommerce travel energy agency cms devtools purpose.
+#
+# ⚠️ ONE ROW PER COMPANY. Several firms answer on two ATSes (Skyscanner, Wayve,
+# TooGoodToGo, Peak) — listing both double-sources the same job under two ids.
+# Keep the board with more live postings; re-check with `feed.py --verify`.
+#
+# All slugs below verified live (non-empty listing endpoint) on 2026-07-17.
+# Add companies freely: find a careers page on one of the six ATSes, take the slug,
+# then confirm with:  python3 scripts/feed.py --verify --companies <slug>
+
+# ── design / product / research — the core lane (§1–§3) ──────────────────────
+figma,greenhouse,Figma,design|saas
+miro,ashby,Miro,design|saas
+webflow,greenhouse,Webflow,design|devtools
+linear,ashby,Linear,design|devtools
+notion,ashby,Notion,design|saas
+dovetail,ashby,Dovetail,research|design
+ideo,greenhouse,IDEO,design|agency
+rga,greenhouse,R/GA,design|agency
+typeform,greenhouse,Typeform,design|saas
+sanity,ashby,Sanity,cms|devtools
+contentful,greenhouse,Contentful,cms|saas
+storyblok,greenhouse,Storyblok,cms|saas
+prismic,lever,Prismic,cms|devtools
+contentsquare,lever,Contentsquare,data|design
+fullstory,ashby,FullStory,data|design
+airtable,greenhouse,Airtable,saas|design
+
+# ── music / audio — his standout differentiator (§10) ────────────────────────
+spotify,lever,Spotify,music|design
+splice,greenhouse,Splice,music
+musixmatch,lever,Musixmatch,music
+downtownmusic,greenhouse,Downtown Music Holdings,music
+mubi,ashby,MUBI,media|music
+
+# ── devops / infra / linux (§5) ──────────────────────────────────────────────
+canonical,greenhouse,Canonical (Ubuntu),devops|security
+elastic,greenhouse,Elastic,devops|data
+vercel,greenhouse,Vercel,devops|devtools
+netlify,greenhouse,Netlify,devops|devtools
+mongodb,greenhouse,MongoDB,devops|data
+graphcore,greenhouse,Graphcore,devops|ai
+
+# ── cybersecurity (§6) ───────────────────────────────────────────────────────
+sophos,lever,Sophos,security
+quantexa,ashby,Quantexa,security|data
+
+# ── fintech — London's deepest junior/mid pool ───────────────────────────────
+monzo,greenhouse,Monzo,fintech|design
+tide,greenhouse,Tide,fintech
+sumup,greenhouse,SumUp,fintech
+gocardless,greenhouse,GoCardless,fintech
+truelayer,greenhouse,TrueLayer,fintech
+dojo,greenhouse,Dojo,fintech
+liberis,greenhouse,Liberis,fintech
+cleo,greenhouse,Cleo,fintech|ai
+zopa,lever,Zopa,fintech
+plaid,ashby,Plaid,fintech
+pleo,ashby,Pleo,fintech
+lendable,ashby,Lendable,fintech
+oaknorth,ashby,OakNorth,fintech
+primer,ashby,Primer,fintech
+freetrade,ashby,Freetrade,fintech
+gohenry,ashby,GoHenry,fintech
+paddle,ashby,Paddle,fintech|saas
+zego,workable,Zego,fintech
+Visa,smartrecruiters,Visa,fintech
+Experian,smartrecruiters,Experian,fintech|data
+
+# ── consumer / ecommerce / travel ────────────────────────────────────────────
+deliveroo,ashby,Deliveroo,consumer|design
+trainline,ashby,Trainline,travel|design
+skyscanner,ashby,Skyscanner,travel|design
+toogoodtogo,ashby,Too Good To Go,consumer|purpose
+hellofresh,greenhouse,HelloFresh,consumer
+butternutbox,greenhouse,Butternut Box,consumer
+gymshark,greenhouse,Gymshark,ecommerce|design
+farfetch,lever,Farfetch,ecommerce|design
+moonpig,lever,Moonpig,ecommerce|design
+trustpilot,greenhouse,Trustpilot,saas
+peak,greenhouse,Peak,ai|data
+wayve,greenhouse,Wayve,ai|devops
+improbable,ashby,Improbable,media|devops
+ovoenergy,greenhouse,OVO Energy,energy
+disney,greenhouse,Disney,media
+
+# ── health / purpose ─────────────────────────────────────────────────────────
+accurx,ashby,Accurx,health|design
+unmind,ashby,Unmind,health|design
+echo,greenhouse,Echo,health
+lantum,workable,Lantum,health
