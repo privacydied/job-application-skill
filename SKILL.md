@@ -264,6 +264,26 @@ Why it matters — a bash sweep silently drops four things `pipeline.run()` does
 build their own request) — that is the sanctioned way to change what's hunted. A feed in
 `FEEDS` but absent from `searches.csv` is unreachable from the loop; a bash loop is not the
 fix for that.
+
+**⛔ Want "just a list of URLs to drive"? It already exists — do NOT write a parser.**
+`queue.jsonl` is that list, already screened and pre-ordered easiest-ATS-first. Every row
+carries `url`, `ats_hint`, `apply_rank`, `family`, `tier`, `verdict` and the `jd`. Filter it
+with one line:
+```bash
+# every applyable row, in apply order
+python3 -c "import json;[print(json.loads(l)['url']) for l in open('queue.jsonl')]"
+# just one ATS (reed-easyapply | linkedin-easyapply | greenhouse | mhr-webrec | …)
+python3 -c "import json;[print(json.loads(l)['url']) for l in open('queue.jsonl') if json.loads(l).get('ats_hint')=='reed-easyapply']"
+# one family (design | support | devops | research | content | …)
+python3 -c "import json;[print(json.loads(l)['url']) for l in open('queue.jsonl') if json.loads(l).get('family')=='support']"
+```
+**A hand-written `/tmp/parse_<board>.py` that greps feed output and re-applies a title
+filter is the single most damaging shortcut in this repo** — it re-implements
+`check_title.py`'s tiered vocabulary from memory, and prose-recall always under-matches.
+Measured on one real instance (2026-07-17): its keyword lists silently threw away **22 of 29
+on-profile titles, 13 of them Tier A** — every IT-support, DevOps, security, digital-officer,
+growth and creative family, plus Web/Visual/Brand Designer — while reporting a healthy URL
+list. The screen is `check_title.py` + `precheck.py`, once. Never a copy.
 Run `python3 -c "import sys;sys.path.insert(0,'sites/_common/scripts');import pipeline;print(*sorted(pipeline.FEEDS))"`
 for the live list. By lane:
 

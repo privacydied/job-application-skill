@@ -134,6 +134,51 @@ class TestNoDivergentTitleScreen(unittest.TestCase):
         self.assertEqual(offenders, [], "Title-eligibility word lists must live ONLY in "
                          f"check_title.py (single source of truth). Divergent copies: {offenders}")
 
+    def test_no_inline_seniority_wordlist(self):
+        """The named-constant check above is evadable: a throwaway parser hides the same
+        lists INLINE, e.g. `any(k in tl for k in ['senior','lead','principal','director'])`.
+
+        That is not academic. A real /tmp/parse_reed.py (2026-07-17) did exactly this and,
+        measured against check_title over target-roles.md, silently threw away 22 of 29
+        on-profile titles — 13 Tier A — killing the whole IT-support, DevOps, security,
+        digital-officer, growth and creative families while printing a healthy URL list.
+        The screen is check_title.py + precheck.py, once. Want a URL list? Read queue.jsonl.
+        """
+        import re
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        allowed = {
+            os.path.join(root, "sites", "_common", "scripts", "check_title.py"),
+            os.path.join(root, "sites", "_common", "scripts", "precheck.py"),
+        }
+        # a literal list/tuple/set holding >=3 seniority words = a re-implemented screen
+        SENIORITY = ("senior", "lead", "principal", "staff", "head of", "chief", "director",
+                     "manager", "vp", "junior", "associate")
+        lit = re.compile(r"[\[\(\{]([^\[\]\(\)\{\}]{0,400}?)[\]\)\}]", re.S)
+        offenders = []
+        for dirpath, _dirs, files in os.walk(root):
+            if "__pycache__" in dirpath or "/.git" in dirpath or f"{os.sep}tests" in dirpath:
+                continue
+            for fn in files:
+                if not fn.endswith(".py"):
+                    continue
+                p = os.path.join(dirpath, fn)
+                if p in allowed:
+                    continue
+                try:
+                    txt = open(p, encoding="utf-8", errors="replace").read()
+                except OSError:
+                    continue
+                for m in lit.finditer(txt):
+                    body = m.group(1).lower()
+                    if "'" not in body and '"' not in body:
+                        continue
+                    hits = {w for w in SENIORITY if f"'{w}'" in body or f'"{w}"' in body}
+                    if len(hits) >= 3:
+                        offenders.append(f"{os.path.relpath(p, root)}: inline seniority list "
+                                         f"{sorted(hits)} — use check_title.check_title()")
+                        break
+        self.assertEqual(offenders, [], "re-implemented title screen -> " + " | ".join(offenders))
+
 
 class TestBoardCooldown(unittest.TestCase):
     def setUp(self):
