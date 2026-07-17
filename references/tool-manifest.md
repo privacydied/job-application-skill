@@ -10,6 +10,16 @@ canonical path. This table is the fast intent→tool lookup so that never repeat
 new one.** A test (`TestNoDivergentTitleScreen`) fails the build if title-screen word
 lists reappear outside `check_title.py`.
 
+> ⛔ **NEVER write a bespoke sourcing/harvest script (e.g. `/tmp/reed_harvest.py`,
+> `*_scrape.py`).** EVERY board already has a ready `sites/<board>/scripts/feed.py`, all
+> registered in `pipeline.py` `FEEDS`. To source a board: `python3
+> sites/<board>/scripts/feed.py --nav "<url>"` (or `pipeline.py` for the whole funnel) —
+> never re-implement the scrape. **Boards with shipped feeds (2026-07-17):** `linkedin`,
+> `indeed`, `wttj`, `csj`, `hackney`, `adzuna`, `reed` → `sites/reed.co.uk/scripts/feed.py`,
+> `thedots`, `totaljobs`, `cwjobs`, `guardian`, `charityjob`, `cvlibrary`, `nhs`, `mi5`,
+> `mi6`. If the feed seems to under-produce, it's almost always the browser wedge / page-1-only
+> / cooldown (see SKILL.md §sourcing) — fix *that*, don't fork a new harvester.
+
 | I need to… | Use (single source of truth) | Never do instead |
 |---|---|---|
 | Run the whole sourcing→screening funnel | `pipeline.py` (CLI) or `import pipeline; pipeline.run(...)` | hand-chain feeds+merge+precheck |
