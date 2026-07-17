@@ -42,8 +42,12 @@ board-cooldown.csv
 queue.jsonl
 deferred-applications.jsonl
 volume-loop.log
+# Personal loop prompts / goals — these name YOU and carry your real counts, so they are
+# yours alone. (The TRACKED prompts — loop-prompt.md, hermes-apply-loop.md,
+# maintenance-loop-prompt.md — are deliberately generic and name nobody; keep it that way.)
 GOAL.md
 goal-condition.txt
+apply-100-hard-loop.md
 cover-letter-template.md
 
 # --- Credentials / sessions / cookies (NEVER commit) -----------------------
