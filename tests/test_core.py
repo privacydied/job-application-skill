@@ -2726,5 +2726,58 @@ class TestCsjWhatSourcing(unittest.TestCase):
         self.assertEqual(m.DEFAULT_WHERE, "London")
 
 
+class TestAuditRecipe(unittest.TestCase):
+    """SKILL.md documents ONE way to answer "what's on this board vs what have I applied
+    to": `feed.py --all | precheck.py -`. queue.jsonl cannot answer it (merge_sources
+    drops tracked rows by design), and agents kept hand-rolling 100-line audit scripts to
+    fill the hole. These pin the two contracts that recipe depends on."""
+
+    def test_precheck_flags_tracked_rows_with_a_readable_reason(self):
+        """The recipe reads `drop` + verdict_reason to find already-applied rows. If the
+        wording or the bucket changes, the documented audit silently stops working."""
+        import importlib.util, tempfile, json as _json
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        spec = importlib.util.spec_from_file_location(
+            "precheck_audit_t", os.path.join(root, "sites", "_common", "scripts", "precheck.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        with tempfile.NamedTemporaryFile("w", suffix=".csv", delete=False, newline="") as fh:
+            fh.write("Date,Company,Role,Source,URL,Status,Next Action,Notes\n")
+            fh.write("2026-07-17,X,User Researcher,csj,"
+                     "https://www.civilservicejobs.service.gov.uk/csr/jobs.cgi?jcode=1234567,"
+                     "Applied,,\n")
+            tracker = fh.name
+        try:
+            tracked = m.load_tracker(tracker) if "tracker" in m.load_tracker.__code__.co_varnames \
+                else None
+        except Exception:
+            tracked = None
+        # canon_ids must fold the CSJ jcode URL to its stable id — that is what the audit
+        # matches "already tracked" on.
+        ids = m.canon_ids("https://www.civilservicejobs.service.gov.uk/csr/jobs.cgi?jcode=1234567")
+        self.assertIn("1234567", ids, "CSJ jcode must canonicalise for tracked-detection")
+        os.unlink(tracker)
+
+    def test_drop_bucket_documents_already_tracked(self):
+        """precheck's own docstring is the contract SKILL.md points at."""
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(root, "sites", "_common", "scripts", "precheck.py"),
+                  encoding="utf-8") as fh:
+            doc = fh.read().lower()
+        self.assertIn("already tracked", doc,
+                      "precheck must still classify tracked rows into drop — the audit "
+                      "recipe in SKILL.md reads that bucket")
+
+    def test_skill_documents_the_audit_recipe(self):
+        """Keep the recipe documented — deleting it is what breeds hand-rolled auditors."""
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(root, "SKILL.md"), encoding="utf-8") as fh:
+            body = fh.read().lower()
+        self.assertIn("precheck.py -", body, "SKILL.md lost the audit pipe recipe")
+        self.assertIn("audit", body)
+        # and it must explain WHY queue.jsonl can't do it, or the hole reopens
+        self.assertIn("drop-tracked", body.replace("_", "-"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

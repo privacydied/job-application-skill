@@ -284,6 +284,21 @@ Measured on one real instance (2026-07-17): its keyword lists silently threw awa
 on-profile titles, 13 of them Tier A** — every IT-support, DevOps, security, digital-officer,
 growth and creative family, plus Web/Visual/Brand Designer — while reporting a healthy URL
 list. The screen is `check_title.py` + `precheck.py`, once. Never a copy.
+
+**⛔ Want an AUDIT — "what's on this board, and what have I already applied to?" — do NOT
+write one.** `queue.jsonl` can't answer it (`merge_sources --drop-tracked` removes tracked
+rows by design, so the queue is only what's LEFT TO DO). The audit is `feed.py … --all`
+(the `--all` includes already-tracked rows) piped into `precheck.py`:
+
+```bash
+python3 sites/civilservicejobs/scripts/feed.py --what "user researcher" --all-pages --all \
+  | python3 sites/_common/scripts/precheck.py -
+```
+Read the buckets: **`keep` = on-profile and NOT yet applied** (the "new" list) · **`drop`
+with `verdict_reason` "duplicate — already tracked"** = already applied · other `drop`s =
+real title/location rejects, each with its reason. That is the whole audit, with
+canonical-id dedup and the canonical screen. A 100-line hand-rolled `<board>_audit.py`
+(2026-07-17) produced strictly worse output than this one line.
 Run `python3 -c "import sys;sys.path.insert(0,'sites/_common/scripts');import pipeline;print(*sorted(pipeline.FEEDS))"`
 for the live list. By lane:
 
