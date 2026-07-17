@@ -29,7 +29,7 @@ Usage: python3 reed_apply.py <job_id> [<job_id> ...] [--dry]
 """
 import sys, os, time, json
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "_common", "scripts"))
+sys.path.insert(0, os.path.join(HERE, "..", "sites", "_common", "scripts"))
 import cfx
 
 
