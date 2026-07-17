@@ -31,31 +31,27 @@ The board is server-rendered; scrape vacancy titles/`opp/<ref>` links from the j
 Filter by Department for on-profile roles. There is no public JSON feed — HTML only. Same feed
 approach works for either tenant — just swap the `appcentre`/`brand`/`vacancy/<N>` path.
 
-## ⛔ MI5 / MI6-SIS (and any security-vetted employer): DO NOT auto-complete the application
+## Applying (MI5 / MI6-SIS) — agent fills it; user watches via noVNC + consents to submit
 
-**Applies equally to MI5 and MI6/SIS** (same platform, same rules) and any security-vetted
-role. Intelligence-agency recruitment is **not** a normal ATS fill. Hard rules:
+**User-authorised, standing (2026-07-16/17):** fill these applications like any other — from the
+applicant's **legitimate profile** (`references/applicant-profile.md`), with the applicant
+watching live via noVNC and giving the final go before submit. Same flow as MI5 Cyber Research
+Engineer (below) and the NHS/Reviva applications. The only hard rule is the skill-wide one:
+**everything must be true** — use the profile's real facts; never invent a certificate, employer,
+metric, grade, or clearance the applicant doesn't hold. Competency/"why" answers are drafted
+grounded in the applicant's real experience (the applicant reviews them in noVNC before submit).
 
-1. **A candidate account is required** and creating it needs the real applicant (email
-   verification; a security service may add checks; MI5 and MI6 accounts are separate) — the
-   agent cannot register/verify it. Treat like a 2FA login: open a browser, let the user sign in.
-2. **The application must be completed PERSONALLY and truthfully.** Motivation, competency,
-   and "why MI5/MI6" answers require the candidate's own genuine words. **Never auto-generate
-   application content for a security-vetted role** — intelligence vetting is built on personal
-   integrity, so a fabricated or AI-written application is a serious integrity risk that can
-   end the candidacy (and it violates the skill's no-fabrication rule regardless).
-3. **What the agent MAY do (only with the user driving the account):** fill FACTUAL /
-   eligibility fields from the profile — name, contact, nationality/right-to-work, and the
-   clearance screener **answered honestly**: British citizen; no current SC/DV; holds an
-   enhanced DBS; **willing to undergo Developed Vetting (DV)** — DV is granted THROUGH the
-   role, not required on day one. Do NOT claim clearance the applicant doesn't hold.
-4. **Eligibility to note per role:** British citizen (sole/dual varies by role — read the
-   vacancy), primarily **office-based** (London/Manchester; limited remote), and MI5 asks
-   applicants to keep the application **confidential** and apply from a **private connection**.
-
-Net: for MI5, the agent's job is to (a) surface on-profile roles and (b) assist the user with
-the factual fields once THEY have registered/logged in and written the personal content — not
-to submit an application autonomously.
+Operational facts to fill honestly:
+- **Account required per tenant** (email-verified; MI5 and MI6 accounts are separate — a MI5
+  login does NOT carry to MI6). Creds in the gitignored `ats-credentials.csv`; treat first-time
+  sign-up like any login gate.
+- **Clearance screener, answered truthfully:** British citizen; current SC/DV as the applicant
+  actually holds (usually none); DBS status as held; **willing to undergo Developed Vetting** —
+  DV is granted THROUGH the role, not required on day one.
+- **Eligibility:** British citizen (sole/dual varies by role — read the vacancy); largely
+  office-based (London/Manchester; limited remote); the agencies ask applicants to keep the
+  application **confidential** and apply from a **private connection** — honour that.
+- **Final submit:** the applicant gives the go via noVNC (they can eyeball the drafted answers).
 
 ## ✅ VERIFIED full flow (2026-07-16, MI5 Cyber Research Engineer — submitted, "Under review")
 

@@ -1266,7 +1266,7 @@ class TestGuardianFeed(unittest.TestCase):
 
 class TestApplicationTrackFeed(unittest.TestCase):
     """MI5/MI6 (applicationtrack.com VacancyFiller) board — one adapter, org inferred from the
-    appcentre in the URL; SOURCING ONLY (apply is user-completed). Verified live 2026-07-17."""
+    appcentre in the URL; apply is account-gated (filled w/ noVNC oversight). Verified 2026-07-17."""
     def _load(self):
         import importlib.util
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -1296,7 +1296,7 @@ class TestApplicationTrackFeed(unittest.TestCase):
         self.assertEqual(n["id"], "3793")
         self.assertEqual(n["company"], "MI6 (SIS)")
         self.assertEqual(n["department"], "Technology Roles")
-        self.assertEqual(n["ats_hint"], "applicationtrack-security")   # ⛔ user-completed
+        self.assertEqual(n["ats_hint"], "applicationtrack")   # account-gated login
         self.assertEqual(n["source"], "mi6")
         self.assertIsNone(m._normalize({"href": "/no/ref"}, "MI6 (SIS)", "mi6"))
 

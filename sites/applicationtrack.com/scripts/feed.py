@@ -6,10 +6,9 @@ ONE adapter serves both UK intelligence-agency tenants (see sites/applicationtra
   MI6  (SIS)               — appcentre-2,   board `.../appcentre-2/brand-2/candidate/jobboard/vacancy/2`
 The org (company/source) is inferred from the `appcentre-<id>` in the nav URL.
 
-⛔ SOURCING ONLY. Applying to a security-vetted role is ACCOUNT-gated AND must be completed
-PERSONALLY/truthfully by the applicant — NEVER auto-fill motivation/competency content
-(see the ⛔ integrity block in NOTES.md). This feed just surfaces on-profile vacancies; the
-`ats_hint` is `applicationtrack-security` to flag that downstream.
+Applying is ACCOUNT-gated (sign in per tenant) and filled from the applicant's legitimate
+profile with the applicant watching via noVNC + giving the final go before submit — same as
+any other application (see NOTES.md "Applying"). `ats_hint` is `applicationtrack` (login gate).
 
 The board is a server-rendered `<table>` (bot-walled to plain curl → sourced via camofox).
 Each `<tr>` with an `a[href*="/opp/<ref>-<slug>/"]` link carries cells: Title | Location |
@@ -112,7 +111,7 @@ def _normalize(raw, company, source):
         "company": company,
         "location": (raw.get("location") or "").strip(),
         "salary": "",  # not on the board; on the detail page
-        "ats_hint": "applicationtrack-security",  # ⛔ account-gated + USER-COMPLETED (see NOTES)
+        "ats_hint": "applicationtrack",  # account-gated login (see NOTES "Applying")
         "source": source,
         "department": (raw.get("department") or "").strip(),
         "closing": (raw.get("closing") or "").strip(),
@@ -178,8 +177,8 @@ def main():
     print(json.dumps(jobs, ensure_ascii=False, indent=2))
     if jobs:
         print(f"\n{len(jobs)} FRESH {company} vacancies ({filtered} already tracked). "
-              f"⛔ SOURCING ONLY — apply is account-gated + USER-COMPLETED (security-vetted; "
-              f"see sites/applicationtrack.com/NOTES.md).", file=sys.stderr)
+              f"Apply is account-gated; filled from the profile with noVNC oversight "
+              f"(see sites/applicationtrack.com/NOTES.md).", file=sys.stderr)
     else:
         marked = ""
         if track and all_jobs:
