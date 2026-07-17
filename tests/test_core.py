@@ -1264,6 +1264,55 @@ class TestGuardianFeed(unittest.TestCase):
         self.assertEqual(pipeline.FEEDS["guardian"][0], "jobs.theguardian.com")
 
 
+class TestNHSFeed(unittest.TestCase):
+    """NHS Jobs (jobs.nhs.uk) scraper pure logic — data-test hooks, /candidate/jobadvert/<REF>,
+    employer folded as firstChild of the location hook (verified live 2026-07-17)."""
+    def _load(self):
+        import importlib.util
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        spec = importlib.util.spec_from_file_location(
+            "nhs_feed", os.path.join(root, "sites", "jobs.nhs.uk", "scripts", "feed.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_helpers(self):
+        m = self._load()
+        self.assertEqual(m._job_ref("/candidate/jobadvert/C9289-SC-388?keyword=digital"), "C9289-SC-388")
+        self.assertEqual(m._job_ref("/candidate/jobadvert/M0048-26-0366"), "M0048-26-0366")
+        self.assertEqual(m._job_ref("/candidate/search/results"), "")
+        self.assertEqual(m._clean_salary("Salary: £39,959 to £48,117 a year"), "£39,959 to £48,117 a year")
+        self.assertEqual(m._canonical_url("/candidate/jobadvert/C9289-SC-388?keyword=x"),
+                         "https://www.jobs.nhs.uk/candidate/jobadvert/C9289-SC-388")
+        from urllib.parse import urlparse, parse_qs
+        qs = parse_qs(urlparse(m._search_url("digital", "London", 10)).query)
+        self.assertEqual(qs["keyword"], ["digital"])
+        self.assertEqual(qs["location"], ["London"])
+        import board_cooldown as bc
+        self.assertEqual(m._query_from_nav(m._search_url("digital", "London", 10)), "digital")
+        self.assertEqual(bc.norm(m._query_from_nav(m._search_url("digital", "London", 10))), bc.norm("digital"))
+
+    def test_normalize_real_card(self):
+        m = self._load()
+        raw = {"href": "/candidate/jobadvert/C9289-SC-388?keyword=digital",
+               "title": "Digital Implementation Lead", "employer": "Chelsea and Westminster Hospital",
+               "location": "London SW10", "salary": "Salary: £58,133 to £65,261 a year"}
+        n = m._normalize(raw)
+        self.assertEqual(n["id"], "C9289-SC-388")
+        self.assertEqual(n["url"], "https://www.jobs.nhs.uk/candidate/jobadvert/C9289-SC-388")
+        self.assertEqual(n["company"], "Chelsea and Westminster Hospital")
+        self.assertEqual(n["location"], "London SW10")
+        self.assertEqual(n["salary"], "£58,133 to £65,261 a year")
+        self.assertEqual(n["ats_hint"], "nhs-jobs")
+        self.assertEqual(n["source"], "nhs")
+        self.assertIsNone(m._normalize({"href": "/candidate/search/results"}))
+
+    def test_wired_into_pipeline_feeds(self):
+        import pipeline
+        self.assertIn("nhs", pipeline.FEEDS)
+        self.assertEqual(pipeline.FEEDS["nhs"][0], "jobs.nhs.uk")
+
+
 class TestCVLibraryFeed(unittest.TestCase):
     """CV-Library scraper pure logic — stable data-qa hooks, /job/<id>/<slug>, SEO path search
     /<role>-jobs-in-<location> (verified live 2026-07-17)."""

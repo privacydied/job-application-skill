@@ -53,6 +53,7 @@ atsform.py`) drives many other standard ATS forms via label-based field matching
 | Guardian Jobs | sourcing + **direct apply** (`jobs.theguardian.com`) — Madgex; on-page form (name/email/CV), reCAPTCHA-gated |
 | CharityJob | sourcing (`charityjob.co.uk`) — charity/third-sector digital & comms roles |
 | CV-Library | sourcing (`cv-library.co.uk`) — major agency board; apply is account + chooser-gated |
+| NHS Jobs | sourcing (`jobs.nhs.uk`) — gov/health digital & service-design; apply account-gated (native or Trac hand-off) |
 | Hackney Council | sourcing + apply (`recruitment.hackney.gov.uk`) |
 | MoJ / HMCTS | apply wizard (`jobs.justice.gov.uk`) |
 | SEEK | **Australia/NZ only** (`seek.com.au` / `seek.co.nz`) — no UK site; vestigial for a London search |
