@@ -11,14 +11,24 @@ new one.** A test (`TestNoDivergentTitleScreen`) fails the build if title-screen
 lists reappear outside `check_title.py`.
 
 > ⛔ **NEVER write a bespoke sourcing/harvest script (e.g. `/tmp/reed_harvest.py`,
-> `*_scrape.py`).** EVERY board already has a ready `sites/<board>/scripts/feed.py`, all
-> registered in `pipeline.py` `FEEDS`. To source a board: `python3
-> sites/<board>/scripts/feed.py --nav "<url>"` (or `pipeline.py` for the whole funnel) —
-> never re-implement the scrape. **Boards with shipped feeds (2026-07-17):** `linkedin`,
-> `indeed`, `wttj`, `csj`, `hackney`, `adzuna`, `reed` → `sites/reed.co.uk/scripts/feed.py`,
-> `thedots`, `totaljobs`, `cwjobs`, `guardian`, `charityjob`, `cvlibrary`, `nhs`, `mi5`,
-> `mi6`. If the feed seems to under-produce, it's almost always the browser wedge / page-1-only
-> / cooldown (see SKILL.md §sourcing) — fix *that*, don't fork a new harvester.
+> `*_scrape.py`).** EVERY board has a ready `sites/<board>/scripts/feed.py`, all registered
+> in `pipeline.py` `FEEDS` (41 as of 2026-07-17 — get the live list, never trust a copy
+> pasted here:
+> `python3 -c "import sys;sys.path.insert(0,'sites/_common/scripts');import pipeline;print(*sorted(pipeline.FEEDS))"`).
+> To source a board: `python3 sites/<board>/scripts/feed.py --nav "<url>"`, or `pipeline.py`
+> for the whole funnel — never re-implement the scrape. If a feed seems to under-produce it
+> is almost always the browser wedge / page-1-only / cooldown (SKILL.md §sourcing) — fix
+> *that*, don't fork a new harvester.
+>
+> ⛔ **The same rule covers the FUNNEL, not just the scrape.** A hand-rolled
+> `/tmp/<board>_sweep.sh` that loops role families over the *shipped* `feed.py`, greps the
+> JSON out of stdout, and `sort -u`s it is **still forbidden** — it re-implements
+> `pipeline.run()` minus `merge_sources` (canonical-id dedup → `sort -u` re-surfaces the
+> same vacancy as two rows) and minus `precheck` (unscreened titles → the
+> check_title-divergence bug class). Writing `for kw in <families>`, `data.find('[')` +
+> `raw_decode`, or `sort -u` over feed output means you are re-writing a program that
+> already exists: use `apply_queue.py --refresh --boards <b>` / `pipeline.run(only_boards=…)`.
+> Need a family sourced? **Add a `searches.csv` row** — that is the sanctioned knob.
 
 | I need to… | Use (single source of truth) | Never do instead |
 |---|---|---|

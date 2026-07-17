@@ -2445,5 +2445,91 @@ class TestPipelineFeedSpec(unittest.TestCase):
             self.assertIn(slug, pipeline.FEEDS, f"{slug} missing from FEEDS")
 
 
+class TestNoHandRolledFunnel(unittest.TestCase):
+    """The 'never hand-write a harvester' rule had a loophole: it forbade re-implementing the
+    *fetch* layer while explicitly endorsing `feed.py --nav`, so a bash sweep that LOOPS the
+    shipped feed.py, greps its stdout JSON and `sort -u`s the result read as compliant. It
+    isn't — it re-implements pipeline.run() minus merge_sources (canonical-id dedup) and
+    minus precheck (title/seniority screen). These tests keep the closed loophole closed:
+    the rule must stay documented, and no tracked script may re-introduce the pattern."""
+
+    def _root(self):
+        import subprocess
+        try:
+            return subprocess.check_output(["git", "rev-parse", "--show-toplevel"], cwd=_HERE,
+                                           text=True, stderr=subprocess.DEVNULL).strip()
+        except Exception:
+            return None
+
+    def _tracked(self, *globs):
+        import subprocess
+        root = self._root()
+        if not root:
+            return None, []
+        out = []
+        for g in globs:
+            try:
+                listing = subprocess.check_output(["git", "ls-files", g], cwd=root, text=True)
+            except Exception:
+                continue
+            out += [os.path.join(root, p) for p in listing.splitlines() if p.strip()]
+        return root, out
+
+    def test_rule_documented_in_both_surfaces(self):
+        """SKILL.md and tool-manifest.md both carry the funnel rule. It is mirrored on
+        purpose (same reason the CAPTCHA directive is) — deleting either re-opens it."""
+        root = self._root()
+        if not root:
+            self.skipTest("not a git checkout")
+        for rel in ("SKILL.md", "references/tool-manifest.md"):
+            with open(os.path.join(root, rel), encoding="utf-8") as fh:
+                body = fh.read().lower()
+            self.assertIn("sort -u", body, f"{rel}: lost the sort-u-is-not-dedup warning")
+            self.assertIn("funnel", body, f"{rel}: lost the funnel rule")
+            self.assertTrue("searches.csv" in body,
+                            f"{rel}: must point at the sanctioned knob (searches.csv row)")
+
+    def test_no_tracked_script_reimplements_the_funnel(self):
+        """A committed .sh/.py must not loop feed.py and hand-dedup its stdout."""
+        import re
+        root, files = self._tracked("*.sh", "*.py")
+        if root is None:
+            self.skipTest("not a git checkout")
+        offenders = []
+        for f in files:
+            rel = os.path.relpath(f, root)
+            if rel.startswith("tests/"):
+                continue
+            try:
+                body = open(f, encoding="utf-8", errors="replace").read()
+            except OSError:
+                continue
+            calls_feed = re.search(r"sites/[^\s\"']+/scripts/feed\.py", body) is not None
+            if not calls_feed:
+                continue
+            # the funnel-reimplementation tells
+            if re.search(r"sort\s+-u", body):
+                offenders.append(f"{rel}: `sort -u` over feed output — use merge_sources "
+                                 f"(canonical-id dedup); sort -u dedups JSON strings")
+            if re.search(r"raw_decode|\.find\(\s*['\"]\[['\"]\s*\)", body):
+                offenders.append(f"{rel}: hand-rolled feed-stdout JSON extraction — use "
+                                 f"pipeline._parse_feed_stdout()")
+        self.assertEqual(offenders, [],
+                         "tracked script re-implements the pipeline funnel -> " + " | ".join(offenders))
+
+    def test_pipeline_is_the_documented_alternative(self):
+        """The rule sends you to pipeline.run()/apply_queue.py — they must actually exist
+        with the signature the docs promise, or the rule is unfollowable."""
+        import inspect
+        import pipeline
+        sig = inspect.signature(pipeline.run)
+        for p in ("only_boards", "force", "no_screen"):
+            self.assertIn(p, sig.parameters, f"pipeline.run lost {p!r} — SKILL.md promises it")
+        root = self._root()
+        if root:
+            self.assertTrue(os.path.isfile(os.path.join(root, "scripts", "apply_queue.py")),
+                            "apply_queue.py missing — SKILL.md points at it")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
