@@ -77,6 +77,40 @@ Root-level entrypoints (the ONLY scripts that live at repo root):
 5. Before adding a script, check it doesn't already exist:
    `git ls-files | grep <name>` and `find . -name '<name>'`.
 
+## 🔒 PII & the config-routing model (never commit the applicant's data)
+
+**The model: real personal data lives ONLY in gitignored files; tracked files carry
+placeholders or read the real values at runtime. So applications get the applicant's REAL
+answers, while the repo stays PII-free.**
+
+Gitignored (real PII — never tracked):
+- `references/applicant-profile.md` — the answer-as-applicant source of truth
+- `sites/_common/apply-defaults.json` — form-fill facts + an `applicant` block
+  (gender / school / area_of_study / …) that drivers read at runtime
+- `ats-credentials.csv`, `application-tracker.csv`, `applications/` — accounts, tracker, generated artifacts
+
+Tracked (must be PII-free):
+- Every `*.example.json` / `applicant-profile.example.md` — placeholder shapes for a fresh clone
+- Notes / references / templates — use the **`[your …]` placeholder convention**
+  (`[your gender]`, `[your ethnicity]`, `[your religion]`, `[your age band]`, …)
+- **Drivers must not hardcode PII.** Route demographic/education answers through the
+  gitignored config — e.g. `scripts/amazon_apply.py` reads `apply-defaults.json`→`applicant`
+  via `_af("gender", …)`. The tracked driver has no personal value; the applicant's real
+  `apply-defaults.json` fills the form. Add a new fact to the `applicant` block (+ the
+  `.example`), never to the driver.
+
+Rules:
+1. **NEVER put the applicant's real name, email, phone, address, postcode, NINO, DOB, or any
+   demographic (gender / ethnicity / religion / age band / national identity / sexual
+   orientation / disability) into a tracked file.** Placeholder it, or route via config.
+2. **Demographic *words* (Man / Mixed / Jewish / British) can't be auto-detected** (common
+   English → false positives), so the placeholder convention is the only defense — apply it.
+3. **ALWAYS run `bash scripts/check-no-pii.sh` before every push** (or wire it as a
+   pre-commit hook: `ln -sf ../../scripts/check-no-pii.sh .git/hooks/pre-commit`). It derives
+   your tokens from the gitignored config/profile — name, email, phone, handle, **NINO, UK
+   postcode, DOB** — and fails if any appear in a tracked file. A push is not done until it
+   prints the ✓ line. If it flags something, move it to a gitignored file or placeholder it.
+
 ## Verifying a stale-vs-canonical pair (the method used here)
 - `git log --oneline -- <path>` on each copy — the one touched only by the initial commit
   is stale; the one with later bugfix/feature commits is canonical.

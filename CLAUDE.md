@@ -22,3 +22,9 @@ Quick pointers:
 - **Integrity is the hard rule** (see SKILL.md): every field must be true to the applicant's
   real profile (`references/applicant-profile.md`); personal declarations and final submits
   are the user's. Never fabricate experience, grades, or answers to eligibility gates.
+- **PII: run `bash scripts/check-no-pii.sh` before EVERY push — the push isn't done until it
+  prints ✓.** Real personal data lives only in gitignored files (`applicant-profile.md`,
+  `apply-defaults.json`); tracked files use the `[your …]` placeholder convention or read the
+  real value at runtime from the config (config-routing model — see AGENTS.md §PII). So
+  applications get the applicant's real answers while the repo stays PII-free. Never hardcode
+  a name, address, postcode, NINO, DOB, or any demographic into a tracked file or driver.

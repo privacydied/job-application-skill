@@ -24,5 +24,11 @@
     "receive relevant jobs": "No",
     "similar jobs": "No"
   },
-  "checkboxes": {}
+  "checkboxes": {},
+  "applicant": {
+    "_note": "Demographic + education facts read at runtime by drivers (e.g. scripts/amazon_apply.py) so your REAL answers go into applications while this repo stays PII-free. Fill YOUR values in the gitignored apply-defaults.json copy.",
+    "gender": "[your gender, e.g. Male / Female / Prefer not to answer]",
+    "school": "[your university / school name]",
+    "area_of_study": "[your degree subject]"
+  }
 }

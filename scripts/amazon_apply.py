@@ -15,6 +15,7 @@ The answer map encodes the applicant's responses (edit for a different profile).
 Yes/No questions default to Yes for "do you have experience…" (qualifying) and No otherwise
 (compliance) — override in ANSWERS as needed.
 """
+import json
 import os
 import re
 import sys
@@ -25,7 +26,31 @@ sys.path.insert(0, os.path.join(_HERE, "..", "sites", "_common", "scripts"))
 import cfx        # noqa: E402
 import atsform    # noqa: E402
 
+
+def _applicant_facts():
+    """Load the applicant's real demographic/education answers from the GITIGNORED config
+    (sites/_common/apply-defaults.json → "applicant"). Routing them through config keeps
+    this tracked driver PII-free while applications still get the real values. A fresh clone
+    with no config falls back to safe placeholders (fill your copy from *.example.json)."""
+    path = os.path.join(_HERE, "..", "sites", "_common", "apply-defaults.json")
+    try:
+        with open(path, encoding="utf-8") as fh:
+            return json.load(fh).get("applicant", {}) or {}
+    except (OSError, ValueError):
+        return {}
+
+
+_AF = _applicant_facts()
+
+
+def _af(key, default):
+    v = _AF.get(key)
+    return v if isinstance(v, str) and v.strip() and not v.strip().startswith("[") else default
+
+
 # question-text regex (lowercased) -> answer. First match wins.
+# Demographic/education answers come from the gitignored config via _af() — never hardcoded
+# here (so no PII lands in the repo); your real values in apply-defaults.json fill the forms.
 ANSWERS = [
     (r"salary expectation", "£50,000"),
     (r"willing to relocate", "No"),
@@ -35,8 +60,8 @@ ANSWERS = [
     (r"when did you graduate", "More than 3 years ago"),
     (r"non-internship professional experience", "Yes"),
     (r"education level", "Bachelor's"),
-    (r"area.*of study|area\(s\) of study", "Information & Interface Design"),
-    (r"school name", "University of the Arts London"),
+    (r"area.*of study|area\(s\) of study", _af("area_of_study", "")),
+    (r"school name", _af("school", "")),
     (r"bachelor.?s degree.*(design|hci)|degree.*above.*(design|hci)", "Yes"),
     (r"previously applied to amazon|previously been employed by amazon", "No"),
     (r"non-competition agreement", "No"),
@@ -48,7 +73,7 @@ ANSWERS = [
      r"restriction|reside in|permanent resident in any other", "No"),
     (r"sanctioned countries", "No"),
     (r"in which country/region do you have citizenship|citizenship", "United Kingdom"),
-    (r"what is your gender", "I prefer not to answer"),
+    (r"what is your gender", _af("gender", "I prefer not to answer")),
     (r"military|veteran|ex-military|reserve forces", "I prefer not to answer"),
 ]
 
