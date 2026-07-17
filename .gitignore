@@ -130,3 +130,4 @@ captcha-audit.csv
 captcha-type-memory.csv
 captcha-solve-pending.json
 /tmp/recaptcha-challenge-*.png
+.csjtab

@@ -85,6 +85,30 @@ Server-rendered classic forms (no React) — native DOM APIs work; the traps are
   `a.jump-to-page` → `parentElement.className` = `tracker_stat_complete` /
   **`tracker_stat_incomplete`** / `tracker_stat_mandatory_complete`. This pinpoints the
   blocking section instantly — use it BEFORE anything else when Submit won't appear.
+- **⛔⛔ ANTI-PATTERN — NEVER chase a `display:none` field. RUN `diagnose.py` FIRST.**
+  Encoded as a tool: **`python3 sites/applicationtrack.com/scripts/diagnose.py`** (read-only;
+  needs `CFX_TAB` on the eform). It prints per-section status + the site's own
+  `a.eform-jump-to-field` culprits for each incomplete section, with each culprit's
+  type/options — so you fill named fields from the profile instead of guessing.
+  Verify the detector itself any time with **`diagnose.py --selftest`** (injects a synthetic
+  incomplete-section + hidden-trap DOM and asserts the probes catch both; no live app needed).
+  **Why this exists (GCHQ 3780, 2026-07-17):** a prior agent (Hermes) spent *five firings*
+  concluding a hidden field (`datafield_17712`, grandparent `display:none`) was a
+  "provably unreachable VacancyFiller form bug" and declared the whole application
+  unsubmittable. **Every part of that was wrong.** The Equal Opportunities section holding
+  17712 was *already complete*; the real blockers were three OTHER sections
+  (Personal Details / Minimum Eligibility / Security Vetting), each missing ONE plain
+  eligibility answer (British-citizen / over-17 / UK-7-of-10-yrs / agree-to-vetting). It
+  submitted in minutes once the section tracker was read. **Rules, non-negotiable:**
+  (1) A field whose computed `display` is `none` (walk up ~6 ancestors) is **NEVER the
+  blocker** — VacancyFiller hides fields whose reveal condition doesn't apply, and no human
+  could fill a hidden field either. (2) The blocker is ALWAYS a *section* marked
+  `tracker_stat_incomplete`; its `a.eform-jump-to-field` anchors name the exact visible
+  fields to fill. (3) If a genuinely-needed field is hidden, the fix is upstream (set the
+  parent select whose value REVEALS it, then re-scan) — never force `display:block`
+  (VF's render loop reverts it) and never `execCommand`/synthetic-key a hidden input.
+  (4) Spend **at most one** pass looking at any hidden field, then go back to `diagnose.py`.
+  "Provably unreachable field" is almost always "wrong section — I never read the tracker."
 - **⚠️ Hidden conditional required fields** — selecting **Ethnic Origin = "Mixed - Other"**
   reveals a required free-text **"Please specify"** (`datafield_17697_1_1`) that does NOT
   appear in a first field scan and silently keeps Equal Opportunities `incomplete`. Re-scan a
