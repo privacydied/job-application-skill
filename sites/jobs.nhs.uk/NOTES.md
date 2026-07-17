@@ -46,27 +46,43 @@ ATS, each with its own account:
 - Job detail → "Apply for job" (`/DecideInternalExternal/...`) → **"I don't work here"**
   (external path) → **RegisterNoPassword** (register-as-you-apply, passwordless): First/Last
   name → email + mobile + terms checkbox → drops you into the application.
-- **⛔ Jobtrain inputs are JS-model-bound — programmatic `.value` does NOT bind.** Text inputs
-  (`RegisterNoPassword` name/email, About-You address, DOB) need **real keystrokes**
-  (`cfx.press` char-by-char); native value-setter is silently ignored by its custom model.
-- **Textareas DO bind via native value-setter** (supporting-statement answers + the word
-  counter update correctly). This is the split: textarea=native OK, input/select=real keys.
-- Sections: **About You** (title/name/address/contact — address accepts commas here;
-  `TemplateData[N].SelectedValue` named fields) → **References** (skippable — Continue with none)
-  → **Supporting information** (competency questions, per-question word limits — for this role
-  4×300 words on interest, coordinating workstreams, delivering in a complex org w/ WCAG+GDPR,
-  and an accessibility/inclusion example) → **Monitoring/Equal-opportunities** → **Criminal
-  Record Declaration** → **Review and submit**.
-- **⚠️ CAPABILITY GAP — the Monitoring section's custom select + date-picker widgets resist
-  automation.** DOM `.value`/`selectedIndex` set correctly (native-set AND keyboard type-ahead),
-  but "Save and Continue" still returns a generic "Please complete all mandatory questions" with
-  no per-field marker — the widget validates an internal state that neither native-set nor
-  synthetic/real keyboard `change` events reliably update. **Hand this section to the user in
-  noVNC** (native dropdown clicks bind instantly); it's OPTIONAL demographic data anyway. Pre-fill
-  the `.value`s so the user only has to re-confirm.
-- **Final submit is the applicant's** (review + submit their own application).
-- "Where did you hear": pick **NHS Jobs**. AI-use question ("Do you intend to use AI tools?"):
-  the applicant decides — flag it, don't answer silently.
+- **✅ Inputs/selects/textareas ALL bind via the native value-setter + `input`/`change` events.**
+  (An earlier note claimed selects/date-pickers "resist automation" — that was a RED HERRING: the
+  values bound fine; the real bug was clicking the wrong save button, so the section never POSTed
+  and re-showed a stale error. See the button rule below.) HTML5 constraint validation
+  (`required` + Bootstrap `was-validated`) is the gate — after setting `.value`, `checkValidity()`
+  returns true. The one exception where **real keystrokes** (`cfx.press`) were still needed: the
+  `RegisterNoPassword` name/email step (pre-application, before the main form).
+- **⛔ EACH section/modal has its OWN save button — there is NO single "Save and Continue".** You
+  MUST target the right one or the section silently never submits (the trap that wasted a whole
+  pass):
+  - Page sections (About You, Monitoring): **`#saveReferenceFormTab`** (text "Continue") /
+    `#savePersnalApplicationFormBtn`.
+  - **Employment** modal: **`#btnConform`** (text "Confirm").
+  - **Education** modals (Higher Ed / Secondary / Other Training): **`#saveEducation`** ("Save").
+  - **References** modal: **`#saveReferenceFormTab`** ("Continue").
+  - Final: **`#saveApplicationForm`** ("Submit application") — disabled until the declaration
+    checkbox `Declare` is ticked.
+- Sections + modal fields (all `TemplateData[N].SelectedValue`; verified):
+  - **About You**: title/name/address/contact (address accepts commas). AI-use radio `69`
+    (applicant decides — flag it). "Where did you hear" → **NHS Jobs**.
+  - **Supporting information**: competency textareas, per-question word limit (word counter
+    updates on native-set input). This role: 4×300 words.
+  - **Monitoring/Equal-opportunities**: 8 native `<select>`s + DOB text (DD/MM/YYYY) + Relationships
+    textarea ("N/A") + Criminal Record. Optional per its own intro, but marked required.
+  - **Employment** (Add → modal per role, most-recent first): Employer, City, Job title, Duties
+    (textarea, required), Start/End dates `dateFromControl.SelectedValue` / `empEndDate`
+    (DD/MM/YYYY), `experience_currently_working` checkbox.
+  - **Education**: three Add sub-blocks — **Higher Education** (Subject/Qual, Year, Grade
+    1st/2.1/2.2/3rd, Obtained/Expected), **Secondary/Further Education** (Year/Subject/Grade free
+    text), **Other Training / Qualifications \*** (required; Details textarea + a required "UK
+    professional registration" select → "Not required for this post" for non-clinical roles).
+  - **References** (Add → modal per referee): Name+Email+Relationship+Type+Period all required
+    (email enforced — phone alone fails). One referee clears the section; add more for full
+    3-year coverage. Referee contacts are **real people → user-provided, never fabricated**.
+- **Final submit is the applicant's**: tick the `Declare` checkbox → `#saveApplicationForm`. The
+  supporting statements are agent-drafted (truthful/grounded) so the applicant should review before
+  certifying "true and complete".
 
 ## Trac (trac.jobs) hand-off
 Some trusts route "Apply" to their own **Trac** instance (trac.jobs — 403 to plain curl, needs
