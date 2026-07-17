@@ -1,6 +1,7 @@
 # applicationtrack.com (VacancyFiller / "Application Track") — verified site notes
 
-A UK public-sector ATS. **Both UK intelligence agencies recruit here on this ONE platform**,
+A UK public-sector ATS. **All THREE UK intelligence agencies recruit here on this ONE
+platform** (MI5, MI6/SIS, **and GCHQ** — corrected 2026-07-17, GCHQ 3780 submitted here),
 each as a separate `appcentre`/`brand` tenant — the ATS mechanics + the ⛔ integrity rules
 below are IDENTICAL across them; only the tenant path differs:
 
@@ -8,9 +9,22 @@ below are IDENTICAL across them; only the tenant path differs:
 |-----|--------------|--------------------|----------|
 | **MI5** (Security Service) | mi5.gov.uk | `appcentre-a18` / `brand-5`, `.../jobboard/vacancy/1`; vacancy `.../so/pm/1/pl/4/opp/<ref>` | 2026-07-16 |
 | **MI6 / SIS** (Secret Intelligence Service) | **sis.gov.uk** (`/careers/`) | `appcentre-2` / `brand-2` job board `.../appcentre-2/brand-2/candidate/jobboard/vacancy/2`; vacancy `.../appcentre-2/brand-6/xf-<hash>/candidate/so/pm/1/pl/5/opp/<ref>` | 2026-07-17 |
+| **GCHQ** | gchq-careers.co.uk | `appcentre-3` / `brand-7`, board `.../appcentre-3/brand-7/user-<id>/candidate/jobboard/vacancy/3`; **apply-start URL = `.../opp/<REF>/apply/en-GB`** (the detail page has NO visible Apply button — the action is a hidden form; navigate straight to `…/apply/en-GB`) | 2026-07-17 |
 
-(GCHQ is NOT here — it runs its own careers ATS; see CAPABILITY-GAPS if added later.) Other
-public-sector orgs use their own `appcentre-<id>`.
+**⚠️ ONE candidate account spans all three** — the `ats-credentials.csv` MI5 applicationtrack
+row (email in that gitignored file) **logs into GCHQ's tenant too** (lands on
+`appcentre-3/brand-7/user-<id>`, with the applicant's name in the welcome header). Do NOT
+self-register a GCHQ account or treat GCHQ as an "account wall" if the MI5 row exists. (Parliament / TfL / BBC are
+DIFFERENT ATS vendors — those do need their own accounts.) Other public-sector orgs use their
+own `appcentre-<id>`.
+
+## ⚙️ camofox `/evaluate` gotcha (cost a prior agent ~5 firings — do NOT relearn it)
+`cfx.evaluate` / `cfx.sh eval` runs the JS as an **EXPRESSION**, like a devtools one-liner.
+A bare `return x;` or a multi-statement `var … ; …` block returns `{"error":"Internal server
+error"}` — a FALSE failure repeatedly misblamed on "camofox crashing on reflective setters."
+Wrap statements in an IIFE that returns: `(function(){ …; return x; })()`. The reflective
+native value-setter works reliably in expression form. Litmus: if `1+1` evaluates but your
+real eval 500s, you have a `return`/multi-statement outside an IIFE — not a camofox limit.
 
 ## URLs (substitute the tenant from the table above)
 - **Job board:** `https://recruitmentservices.applicationtrack.com/vx/lang-en-GB/mobile-0/appcentre-<id>/candidate/jobboard/vacancy/<N>`
@@ -92,6 +106,17 @@ Server-rendered classic forms (no React) — native DOM APIs work; the traps are
   type/options — so you fill named fields from the profile instead of guessing.
   Verify the detector itself any time with **`diagnose.py --selftest`** (injects a synthetic
   incomplete-section + hidden-trap DOM and asserts the probes catch both; no live app needed).
+- **✅ For the full unblock, drive it with `autofill.py`** —
+  **`python3 sites/applicationtrack.com/scripts/autofill.py`** (needs `CFX_TAB` on the eform).
+  The STRUCTURAL fix: it walks the section tracker as its work-list (re-read each pass), fills
+  the site-named culprits from a profile ruleset (citizenship / age / UK-residency /
+  apprenticeship / jobshare / bankruptcy / willing-to-be-vetted), **skips every `display:none`
+  field by construction**, and **cannot loop** — a progress guard stops the instant a pass
+  fills nothing new on the same incomplete set. It **never submits and never fabricates**:
+  unmatched culprits and the user-only final page (memorable word + hint + declaration) are
+  reported as `needs_human` and handed back. `--dry` classifies without changing anything;
+  `--selftest` proves all four guarantees against a mock (no live app). Extend its `RULES`
+  ONLY with facts verifiably true from `references/applicant-profile.md`.
   **Why this exists (GCHQ 3780, 2026-07-17):** a prior agent (Hermes) spent *five firings*
   concluding a hidden field (`datafield_17712`, grandparent `display:none`) was a
   "provably unreachable VacancyFiller form bug" and declared the whole application
