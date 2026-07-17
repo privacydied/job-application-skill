@@ -3,10 +3,16 @@
 
 Totaljobs (totaljobs.com) is a large UK aggregator in the **StepStone family** — the same
 "genesis" design system + stable `data-at` DOM hooks also power **CWJobs** (cwjobs.co.uk,
-tech/IT — DevOps/cyber/support lanes) and **Jobsite** (jobsite.co.uk). One adapter serves
-all three: pass `--base https://www.cwjobs.co.uk` (or set TJ_BASE) to retarget. Distinct
+tech/IT — DevOps/cyber/support lanes), **Jobsite** (jobsite.co.uk) and **Milkround**
+(milkround.com — early-careers/junior, unusually on-profile for a junior→mid search; same
+`data-at`/`job-item` hooks confirmed via plain HTTP 200 on 2026-07-17). One adapter serves
+all four: pass `--base https://www.cwjobs.co.uk` (or set TJ_BASE) to retarget. Distinct
 employer inventory vs Indeed/Reed; guest-browsable (no login to search/view); server-
 rendered (not Cloudflare-walled at the HTTP layer — verified 2026-07-16).
+
+Cooldown board slug is derived from the site host (`totaljobs` / `cwjobs` / `jobsite` /
+`milkround`) so each sibling cools independently and loop-preflight.py's searches.csv
+`board` column agrees with what the feed records in board-cooldown.csv.
 
 Every result is `[data-at="job-item"]`; the canonical posting URL is
 `https://www.totaljobs.com/job/<slug>/<company-slug>-job<ID>`. Selectors (verified against
@@ -59,6 +65,16 @@ def load_seen_ids(base=BASE):
     """Totaljobs posting ids already in application-tracker.csv (via the shared scan).
     Host-agnostic so a sibling base (cwjobs/jobsite) is de-duped against its own rows too."""
     return load_seen(r"/job/[^,\s]*?-job(\d{6,})", tracker=TRACKER)
+
+
+def _board_from_base(base):
+    """Cooldown board slug from the site host, so siblings cool independently and the
+    slug matches the searches.csv `board` column (totaljobs|cwjobs|jobsite|milkround)."""
+    host = urlparse(base).netloc or base
+    for slug in ("cwjobs", "jobsite", "milkround"):
+        if slug in host:
+            return slug
+    return BOARD
 
 
 def _slug(text):
@@ -130,7 +146,7 @@ def _normalize(raw, base=BASE):
         "location": (raw.get("location") or "").strip(),
         "salary": (raw.get("salary") or "").strip(),
         "ats_hint": "",  # Totaljobs "Apply" resolves per-listing (on-site quick-apply OR external ATS)
-        "source": BOARD,
+        "source": _board_from_base(base),
     }
 
 
@@ -171,13 +187,15 @@ def main():
         if pr.scheme and pr.netloc:
             base = f"{pr.scheme}://{pr.netloc}"
 
+    board = _board_from_base(base)
+
     # Cooldown key: query param first (siblings may use it), else parse the /jobs/<what>/ path.
     query = board_cooldown.query_from_url(nav) or _query_from_nav(nav) or what or ""
     if query and not force:
-        rem = board_cooldown.remaining_hours(BOARD, query)
+        rem = board_cooldown.remaining_hours(board, query)
         if rem > 0:
             print("[]")
-            print(f"\nCOOLDOWN: {BOARD}/{query!r} confirmed exhausted ({rem:.1f}h remaining). "
+            print(f"\nCOOLDOWN: {board}/{query!r} confirmed exhausted ({rem:.1f}h remaining). "
                   f"Skipped WITHOUT re-fetching. --force to override.", file=sys.stderr)
             return 1
 

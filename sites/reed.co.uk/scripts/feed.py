@@ -47,8 +47,14 @@ TRACKER = os.path.join(_here, "..", "..", "..", "application-tracker.csv")
 
 
 def load_seen_ids():
-    """Reed posting ids already in application-tracker.csv (via the shared scan)."""
-    return load_seen(r"reed\.co\.uk/jobs/[^/,\s]+/([0-9]+)", tracker=TRACKER)
+    """Reed posting ids already in application-tracker.csv (via the shared scan).
+
+    Tracker rows are BARE (`…/jobs/<id>`), but live Reed URLs carry a slug
+    (`…/jobs/<slug>/<id>`); both shapes must dedup to the same numeric id or every
+    re-source reports ~100% "fresh" (false-exhaustion). The optional `(?:[^/,\s]+/)?`
+    group makes the slug optional.
+    """
+    return load_seen(r"reed\.co\.uk/jobs/(?:[^/,\s]+/)?([0-9]+)", tracker=TRACKER)
 
 
 def _search_url(what, location=DEFAULT_LOCATION):

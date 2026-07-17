@@ -76,6 +76,10 @@ def canon_ids(url):
                 r"[?&]jk=([0-9a-f]+)", r"welcometothejungle\.com/jobs/([a-z0-9_-]+)",
                 r"civilservicejobs[^\"]*?(?:jcode=|joblist_view_vac=)(\d+)",
                 r"recruitment\.hackney\.gov\.uk/vacancy/([a-z0-9-]+)",
+                # Reed: canonical URL is `…/jobs/<slug>/<id>` but tracker rows are BARE
+                # `…/jobs/<id>` (and some slugs) — all three shapes must dedup to the
+                # same numeric id or re-sources report ~100% "fresh" (false-exhaustion).
+                r"reed\.co\.uk/jobs/(?:[^/]+/)?(\d{5,8})",
                 r"greenhouse\.io/[^/]+/jobs/(\d+)", r"jobs\.lever\.co/[^/]+/([0-9a-f-]{8,})",
                 r"ashbyhq\.com/[^/]+/([0-9a-f-]{8,})", r"myworkdayjobs\.com/.*/job/[^/]+/([^/?]+)"):
         m = re.search(pat, u)
