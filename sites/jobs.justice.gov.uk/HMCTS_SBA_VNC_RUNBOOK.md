@@ -40,8 +40,8 @@ Everything else is built. Account already created.
    - Making Effective Decisions
    - Changing and Improving
    (reuse applications/cabinet-office-user-researcher/personal-statement.txt)
-5. Equality & Diversity — Jane defaults: [your ethnicity] / [your gender] / [your orientation] /
-   British / age 30-34 / not disabled / not a carer.
+5. Equality & Diversity — applicant defaults: [your ethnicity] / [your gender] / [your orientation] /
+   [your national identity] / [your age band] / [your disability status] / [your carer status].
 6. Declaration — confirm.
 7. Submit.
 

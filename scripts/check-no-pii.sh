@@ -70,11 +70,21 @@ if os.path.exists(cfg):
 
 # name from the profile heading ("# Applicant Profile — <Name>")
 if os.path.exists(prof):
-    first = open(prof, encoding="utf-8", errors="replace").readline()
-    m = re.search(r"Applicant Profile\s*[—-]\s*(.+)", first)
+    body = open(prof, encoding="utf-8", errors="replace").read()
+    m = re.search(r"Applicant Profile\s*[—-]\s*(.+)", body.splitlines()[0] if body else "")
     if m:
         for w in m.group(1).split():
             add(w)
+    # STRUCTURED identifiers anywhere in the profile — distinctive patterns that are safe to
+    # grep literally (unlike demographic words such as "Man"/"Mixed"/"Jewish", which are common
+    # English and would false-positive everywhere, so those can't be auto-checked — keep them
+    # OUT of tracked files via the [your …] placeholder convention instead).
+    for m in re.findall(r"\b[A-Z]{2}\d{6}[A-Z]\b", body):                 # National Insurance No.
+        add(m)
+    for m in re.findall(r"\b[A-Z]{1,2}\d[A-Z\d]? ?\d[A-Z]{2}\b", body):   # UK postcode
+        add(m)
+    for m in re.findall(r"\b\d{2}/\d{2}/(?:19|20)\d{2}\b", body):         # DOB dd/mm/yyyy
+        add(m)
 
 print("\n".join(sorted(toks)))
 PY

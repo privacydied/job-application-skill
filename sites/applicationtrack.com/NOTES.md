@@ -134,12 +134,12 @@ Server-rendered classic forms (no React) — native DOM APIs work; the traps are
   (VF's render loop reverts it) and never `execCommand`/synthetic-key a hidden input.
   (4) Spend **at most one** pass looking at any hidden field, then go back to `diagnose.py`.
   "Provably unreachable field" is almost always "wrong section — I never read the tracker."
-- **⚠️ Hidden conditional required fields** — selecting **Ethnic Origin = "Mixed - Other"**
-  reveals a required free-text **"Please specify"** (`datafield_17697_1_1`) that does NOT
-  appear in a first field scan and silently keeps Equal Opportunities `incomplete`. Re-scan a
-  section AFTER setting its selects.
+- **⚠️ Hidden conditional required fields** — selecting an **Ethnic Origin option whose label
+  ends in "… - Other"** (any "Other" category) reveals a required free-text **"Please specify"**
+  (`datafield_17697_1_1`) that does NOT appear in a first field scan and silently keeps Equal
+  Opportunities `incomplete`. Re-scan a section AFTER setting its selects.
 - **⚠️ Label mis-detection on Personal Details**: `datafield_31846_1_1` is the **POSTCODE**
-  (needs CAPITALS, e.g. `[postcode]`) even though naive label-walking reads it as "Email". The
+  (needs CAPITALS — enter your postcode in caps) even though naive label-walking reads it as "Email". The
   form-wide "There is a problem" banner is generic — resolve the real field via the
   `a.eform-jump-to-field` link's `href="#datafield_…"` anchor, which names the exact culprit.
 - Buttons per page: pages 1–6 = **`continue_button`** ("Save and continue"; NOT "Submit" —

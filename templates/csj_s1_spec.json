@@ -7,26 +7,26 @@
     "datafield_138183_1_1": "No",
     "datafield_138179_1_1": "No",
     "datafield_36491_1_1": "No",
-    "datafield_12784_1_1": "Man",
+    "datafield_12784_1_1": "[your gender]",
     "datafield_35296_1_1": "[your orientation]",
-    "datafield_54157_1_1": "British",
+    "datafield_54157_1_1": "[your national identity]",
     "datafield_178072_1_1": "Prefer not to say",
     "datafield_178075_1_1": "without employees",
     "datafield_178114_1_1": "Prefer not to say"
   },
   "select": {
     "datafield_177937_1_1": "Cabinet Office",
-    "datafield_53438_1_1": "30-34",
-    "datafield_53446_1_1": "Mixed",
+    "datafield_53438_1_1": "[your age band]",
+    "datafield_53446_1_1": "[your ethnic group]",
     "datafield_35302_1_1": "[your ethnicity]",
-    "datafield_53463_1_1": "Jewish"
+    "datafield_53463_1_1": "[your religion]"
   },
   "text": {
     "datafield_87776_1_1": "Self-employed contractor",
     "datafield_11625_1_1": "Jane",
     "datafield_11628_1_1": "Doe",
     "datafield_11631_1_1": "you@example.com",
-    "datafield_97665_1_1": "Male",
+    "datafield_97665_1_1": "[your gender]",
     "datafield_97658_1_1": "[your orientation]",
     "datafield_35261_1_1": "[your ethnicity]"
   },

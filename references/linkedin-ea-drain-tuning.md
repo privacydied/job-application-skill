@@ -37,8 +37,8 @@ same postings (0 new). To get more:
   Verified teachable this run: "do you have professional servic"->Yes,
   "linkedin profile"->Yes, "this role pays up to"->Yes, "are you comfortable
   commuting"->Yes, "location (c"->select London. Do NOT auto-answer genuine
-  eligibility gates like "Are you a 2025/2026 graduate?" (Jane is 30-34 -> truthful
-  No; falsifying is out of scope).
+  eligibility gates like "Are you a 2025/2026 graduate?" (Jane is not a recent
+  graduate -> truthful No; falsifying is out of scope).
 - When a re-source returns the SAME postings and `needs_human` is all eligibility
   gates, the pool is exhausted for this rotation — stop re-sourcing (looping is the
   documented failure mode). Re-run `--refresh` later as the 7-day window rotates.

@@ -48,7 +48,7 @@ ANSWERS = [
      r"restriction|reside in|permanent resident in any other", "No"),
     (r"sanctioned countries", "No"),
     (r"in which country/region do you have citizenship|citizenship", "United Kingdom"),
-    (r"what is your gender", "Male"),
+    (r"what is your gender", "I prefer not to answer"),
     (r"military|veteran|ex-military|reserve forces", "I prefer not to answer"),
 ]
 

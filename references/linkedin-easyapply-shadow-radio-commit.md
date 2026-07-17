@@ -59,7 +59,7 @@ log `Blocked` with the symptom and move on — do NOT keep re-clicking. Prefer o
 Apply roles.
 
 ## EEO answers for Jane (pass to the widgets above)
-gender = **Man**, ethnicity = **Mixed** (Mixed/Multiple ethnic group — the "Mixed" option in
+gender = **[your gender]**, ethnicity = **[your ethnic group]** (the matching option in
 LinkedIn's list), disability = **Prefer not to disclose**, right-to-work = **Yes**,
 sponsorship = **No**. Set these via the wrapper-click technique, never via a substring
 `radio` that can collide.

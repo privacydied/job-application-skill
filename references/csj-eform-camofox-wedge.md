@@ -130,8 +130,8 @@ is the only thing that survives the flake).
   not to say (48027–48033 are the school bands) · `datafield_165298_1_1` (text — likely
   socio-economic "other"; leave blank unless label requires). Ethnicity broad/sub radios were
   NOT present on this campaign's Diversity page (some CSJ campaigns omit them; if present they
-  follow the same datafield_NNNNN pattern — broad "Mixed / multiple ethnic groups", sub "Any
-  other Mixed / Multiple background"; resolve radios by VISIBLE LABEL TEXT, not value).
+  follow the same datafield_NNNNN pattern — broad "[your ethnic group]", sub "[your ethnicity]";
+  resolve radios by VISIBLE LABEL TEXT, not value).
 - **Declaration**: `datafield_22499_1_1` agreement checkbox (tick, value 804) — tick AND click
   Continue in the same evaluate call (see write-then-verify above).
 

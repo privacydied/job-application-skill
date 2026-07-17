@@ -66,16 +66,16 @@ MOST are required. Leaving any select on "Select" is why Section 1 reported
 "Diversity monitoring problem" and the Declaration Submit never appeared. Canonical
 filled spec: `templates/csj_s1_spec.json`.
 - `datafield_36491_1_1` (radio) disability → **No** (730)
-- `datafield_12784_1_1` (radio) gender → **Man** (27)
-- `datafield_97665_1_1` (TEXT) gender self-describe → **"Male"** (required even when Man)
+- `datafield_12784_1_1` (radio) gender → **[your gender]** (id varies)
+- `datafield_97665_1_1` (TEXT) gender self-describe → **"[your gender]"** (required even when a non-self-describe option is picked)
 - `datafield_35296_1_1` (radio) sexual orientation → **[your orientation]** (4012)
 - `datafield_97658_1_1` (TEXT) sexual-orientation self-describe → **"[your orientation]"** (required even when [your orientation])
-- `datafield_53438_1_1` (SELECT) age group → **30-34** (14529)
-- `datafield_54157_1_1` (radio) national identity → **British** (14553)
-- `datafield_53446_1_1` (SELECT) ethnic group → **Mixed / multiple ethnic groups** (14514) [match substring "Mixed"]
-- `datafield_35302_1_1` (SELECT) ethnicity → **[your ethnicity]** (4032) [match "[your ethnicity]"]
+- `datafield_53438_1_1` (SELECT) age group → **[your age band]** (id varies) [match your band]
+- `datafield_54157_1_1` (radio) national identity → **[your national identity]** (id varies)
+- `datafield_53446_1_1` (SELECT) ethnic group → **[your ethnic group]** (id varies) [match your ethnic-group substring]
+- `datafield_35302_1_1` (SELECT) ethnicity → **[your ethnicity]** (id varies) [match your ethnicity]
 - `datafield_35261_1_1` (TEXT) other ethnicity → **[your ethnicity]** (required)
-- `datafield_53463_1_1` (SELECT) religion or belief → **Jewish** (14523)
+- `datafield_53463_1_1` (SELECT) religion or belief → **[your religion]** (id varies)
 - `datafield_178072_1_1` (radio) socio-economic parental occupation → **Prefer not to say** (48019)
 - `datafield_178075_1_1` (radio) employment status → **Self-employed/freelancer without employees** (48022) — see warning above; match "without employees"
 - `datafield_178114_1_1` (radio) school type → **Prefer not to say** (48034)
