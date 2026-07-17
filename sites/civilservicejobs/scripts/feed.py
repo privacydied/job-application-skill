@@ -22,12 +22,20 @@ Returns a de-duplicated JSON list of
 Usage:
     CFX_KEY=... CFX_TAB=... python3 feed.py [--nav "<search SID url>"] [--pages N | --all-pages] [--all] [--force]
 
-  --nav    navigate to this CSJ search URL first (the saved-search SID URL in
-           searches.csv row `csj`). Without it, enumerates whatever CSJ results page
-           the tab is already on. If CSJ answers "Cannot view job" / a generic page,
-           the search-context SID has EXPIRED (reqsig is timestamped) — regenerate it:
-           open civilservicejobs.service.gov.uk, run the search (London, radius 10mi),
-           and paste the resulting index.cgi?SID=… URL into searches.csv.
+  --what   ⭐ PREFERRED. A keyword ("interaction designer"). The feed drives CSJ's own
+           search form, mints a FRESH SID for it, and enumerates the results — so no SID
+           ever has to be parked anywhere. Cooldown keys on the keyword, so each family
+           cools independently. `--where` defaults to London.
+             python3 feed.py --what "service designer" --all-pages
+           searches.csv therefore carries ONE BLANK-NAV ROW PER FAMILY (`csj,design,`);
+           pipeline passes the row's `query` through as --what.
+  --nav    LEGACY. Navigate to a pre-minted CSJ search SID URL first. ⚠️ Do NOT park one
+           of these in searches.csv: CSJ SIDs are one-shot and expiry-signed
+           (`reqsig=<epoch>-<hmac>`), so a parked SID dies and takes CSJ sourcing down —
+           and the loop could only ever source the ONE keyword that SID encoded. That gap
+           is why agents kept hand-rolling family-loop orchestrators. Use --what instead;
+           --nav remains for driving a specific results page you already hold.
+           If CSJ answers "Cannot view job" / a generic page, the SID has expired.
   --pages  follow "next »" up to N pages (default 2; 25 cards/page).
   --all-pages  follow "next »" to the END of the result set (a London radius-10
            search is ~17 pages), capped at SAFETY_CAP. USE THIS for a real source
@@ -73,10 +81,53 @@ except Exception:
     check_title = None
 
 BOARD = "csj"
-# The saved search context is not keyword-parameterized (the SID encodes it), so the
-# cooldown key is a fixed slug — same pattern as WTTJ's "home". Keep in sync with the
-# `query` column of the `csj` row in searches.csv (loop-preflight.py matches on it).
+# Default cooldown key for the legacy `--nav <SID>` path, whose SID encodes the search so
+# the URL carries no keyword. `--what` overrides this with the keyword itself, giving each
+# family its own cooldown key. Keep in sync with the `query` column of the csj rows in
+# searches.csv (loop-preflight.py matches on it).
 QUERY = "london-search"
+
+DEFAULT_WHERE = "London"
+CSJ_HOME = "https://www.civilservicejobs.service.gov.uk/csr/index.cgi"
+
+
+def mint_sid(what, where=DEFAULT_WHERE, timeout=6):
+    """Drive the CSJ search form for `what` and return the fresh results SID URL.
+
+    WHY THIS LIVES HERE (2026-07-17): CSJ search-context SIDs are one-shot and
+    **expiry-signed** (`reqsig=<epoch>-<hmac>`), so — unlike every other board — a CSJ
+    search URL cannot be parked in searches.csv and reused. The old contract was "mint one
+    by hand with scripts/csj_search.py and paste it into the csj row", which meant the loop
+    could source exactly ONE keyword, until that SID died. That gap is why agents kept
+    hand-rolling `/tmp/csj_sweep.sh` / `scripts/csj_source_families.py` orchestrators to
+    loop families: the sanctioned path genuinely could not do it.
+
+    With `--what`, this feed builds its own search like every other feed does, so
+    `searches.csv` can carry one blank-nav row per family (`csj,design,`) and the loop
+    sources CSJ natively. Returns None if the form didn't yield a SID.
+    """
+    cfx.navigate(CSJ_HOME)
+    time.sleep(4)
+    setter = (
+        '(name,val)=>{const e=document.querySelector(\'input[name="\'+name+\'"]\');'
+        "if(!e)return 'NO:'+name;"
+        "const s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;"
+        "s.call(e,val);e.dispatchEvent(new Event('input',{bubbles:true}));"
+        "e.dispatchEvent(new Event('change',{bubbles:true}));return 'OK:'+name;}"
+    )
+
+    def _call(fn, *a):
+        import json as _json
+        return cfx.evaluate("(" + fn + ").apply(null,[" +
+                            ",".join(_json.dumps(x) for x in a) + "])")
+
+    _call(setter, "what", what)
+    _call(setter, "where", where)
+    cfx.evaluate("(()=>{const b=document.querySelector('input[name=search_button]');"
+                 "if(!b)return 'NOBTN';b.click();return 'CLICKED';})()")
+    time.sleep(timeout)
+    url = cfx.evaluate("location.href")
+    return url if (isinstance(url, str) and "SID=" in url) else None
 
 STABLE_URL = "https://www.civilservicejobs.service.gov.uk/csr/jobs.cgi?jcode={}"
 
@@ -244,7 +295,53 @@ def main():
     all_pages = "--all-pages" in args
     force = "--force" in args or "--all" in args
 
-    if "--nav" in args:
+    # --what: mint a fresh SID for this keyword, so the loop can source CSJ per family
+    # without a hand-pasted (and expiring) SID in searches.csv. Takes precedence over
+    # --nav; the cooldown key becomes the keyword, so each family cools independently.
+    what = None
+    if "--what" in args:
+        try:
+            what = args[args.index("--what") + 1]
+        except IndexError:
+            print("ERROR: --what needs a keyword")
+            return 2
+    where = DEFAULT_WHERE
+    if "--where" in args:
+        try:
+            where = args[args.index("--where") + 1]
+        except IndexError:
+            pass
+
+    if what:
+        query = what
+        if not force:
+            rem = board_cooldown.remaining_hours(BOARD, query)
+            if rem > 0:
+                print("[]")
+                print(f"\nCOOLDOWN: {BOARD}/{query!r} confirmed exhausted ({rem:.1f}h "
+                      f"remaining). Skipped WITHOUT re-fetching. --force to override.",
+                      file=sys.stderr)
+                return 1
+        try:
+            sid = mint_sid(what, where)
+        except cfx.CfxError as e:
+            print(f"ERROR: could not mint a CSJ SID for {what!r}: {e}", file=sys.stderr)
+            return 2
+        if not sid:
+            print("[]")
+            print(f"\nERROR: CSJ search form returned no SID for {what!r} — the form may "
+                  f"have changed, or the session bounced. Re-run; if it persists, check "
+                  f"the form field names (what/where/search_button).", file=sys.stderr)
+            return 2
+        try:
+            cfx.navigate(sid)
+            cfx.poll("document.readyState", predicate=lambda r: r == "complete", timeout=30.0)
+        except cfx.CfxError as e:
+            print(f"ERROR nav: {e}")
+            return 2
+        globals()["QUERY"] = query      # the rest of main() records yield/cooldown on this
+
+    elif "--nav" in args:
         try:
             raw_nav = args[args.index("--nav") + 1]
         except IndexError:

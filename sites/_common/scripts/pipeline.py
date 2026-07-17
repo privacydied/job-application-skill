@@ -30,6 +30,7 @@ USAGE (needs a live tab on the browser-driving path — CFX_KEY/CFX_TAB in env):
 
 Exit codes: 0 WORK (queue written; may be empty) · 10 SLEEP · 11 HOLD · 12 DONE · 2 ERROR.
 """
+import inspect
 import json
 import os
 import subprocess
@@ -54,7 +55,12 @@ FEEDS = {
     "linkedin": ("linkedin",           lambda nav: ["--nav", nav] if nav else []),
     "indeed":   ("indeed.com",         lambda nav: ["--nav", nav] if nav else []),
     "wttj":     ("welcometothejungle", lambda nav: []),
-    "csj":      ("civilservicejobs",   lambda nav: (["--nav", nav, "--all-pages"] if nav else ["--all-pages"])),
+    # 2-arg builder: CSJ SIDs are one-shot + expiry-signed, so a parked nav dies. With a
+    # blank nav the feed mints its own SID from --what, letting searches.csv carry one
+    # row per family. Legacy --nav <SID> still honoured if a row supplies one.
+    "csj":      ("civilservicejobs",   lambda nav, query: (["--nav", nav, "--all-pages"] if nav
+                                                          else (["--what", query, "--all-pages"] if query
+                                                                else ["--all-pages"]))),
     "hackney":  ("hackney",            lambda nav: ["--nav", nav] if nav else []),
     "adzuna":   ("adzuna.co.uk",       lambda nav: ["--nav", nav] if nav else []),
     "reed":     ("reed.co.uk",         lambda nav: (["--nav", nav, "--pages", "4"] if nav else ["--pages", "4"])),
@@ -253,7 +259,24 @@ def _run_feed_once(cmd, board, timeout):
     return posts, err
 
 
-def run_feed(board, nav, force, timeout=420):
+def _build_args(argb, nav, query):
+    """Call a FEEDS arg-builder with (nav) or (nav, query) depending on its arity.
+
+    WHY: builders used to receive ONLY `nav`, so a board whose feed needs a *keyword*
+    (rather than a parked search URL) could not be driven per-family from searches.csv —
+    every family row produced the identical argv and re-sourced the same thing. That gap is
+    exactly why agents hand-rolled family-loop orchestrators for CSJ. Two-arg builders now
+    get the row's `query`; one-arg builders are untouched, so all pre-existing entries keep
+    working unchanged.
+    """
+    try:
+        n = len(inspect.signature(argb).parameters)
+    except (TypeError, ValueError):
+        n = 1
+    return argb(nav, query) if n >= 2 else argb(nav)
+
+
+def run_feed(board, nav, force, timeout=420, query=""):
     """Run one board's feed.py as a subprocess; return (postings, err_or_None).
 
     Tab-death self-heal: a dead camofox tab (410/500 'Tab not found') makes the feed exit
@@ -272,7 +295,7 @@ def run_feed(board, nav, force, timeout=420):
     feed = os.path.join(_ROOT, "sites", subdir, "scripts", script)
     if not os.path.isfile(feed):
         return [], f"feed not found: {feed}"
-    cmd = [sys.executable, feed] + argb(nav) + (["--force"] if force else [])
+    cmd = [sys.executable, feed] + _build_args(argb, nav, query) + (["--force"] if force else [])
     posts, err = _run_feed_once(cmd, board, timeout)
     if err and _tab_dead():                       # dead tab → reopen + retry ONCE (read-only)
         try:
@@ -321,12 +344,12 @@ def run(target=None, no_screen=False, screen_limit=40, force=False,
     all_posts, errors, per_board = [], [], {}
     for s in clear:
         t0 = time.time()
-        posts, err = run_feed(s["board"], s.get("nav", ""), force)
+        posts, err = run_feed(s["board"], s.get("nav", ""), force, query=s.get("query", ""))
         # C.7: one retry on a TRANSIENT feed error (never on a timeout — that would
         # double the tab cost). Feeds self-cooldown, so a flaky nav/consent hiccup
         # shouldn't zero a board's whole yield for the firing.
         if err and not posts and "timed out" not in err:
-            posts, err2 = run_feed(s["board"], s.get("nav", ""), force)
+            posts, err2 = run_feed(s["board"], s.get("nav", ""), force, query=s.get("query", ""))
             if posts:
                 err = None
             elif err2:

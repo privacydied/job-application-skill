@@ -85,8 +85,14 @@ def answer_yes_and_advance():
     return res
 
 
-def apply(job_id, dry=False):
-    url = f"https://www.reed.co.uk/jobs/ux-designer/{job_id}"
+def apply(job_arg, dry=False):
+    # job_arg may be a bare id (default ux-designer slug) or a full Reed URL.
+    if str(job_arg).startswith("http"):
+        url = job_arg
+        job_id = job_arg.rstrip("/").split("/")[-1]
+    else:
+        job_id = job_arg
+        url = f"https://www.reed.co.uk/jobs/ux-designer/{job_id}"
     print(f"[{job_id}] nav {url}")
     if dry:
         return "dry"

@@ -2472,8 +2472,10 @@ class TestPipelineFeedSpec(unittest.TestCase):
             if not os.path.isfile(p):
                 missing.append(f"{name} -> {os.path.relpath(p, root)}")
             self.assertTrue(callable(argb), f"{name}: argbuilder not callable")
-            argb("https://x/?q=y")            # must not raise
-            argb(None)                        # nav-less form must not raise
+            # via _build_args: builders may take (nav) or (nav, query) — both must work
+            pipeline._build_args(argb, "https://x/?q=y", "some query")
+            pipeline._build_args(argb, None, "some query")
+            pipeline._build_args(argb, None, "")
         self.assertEqual(missing, [], "FEEDS point at missing scripts -> " + "; ".join(missing))
 
     def test_custom_script_name_is_honoured(self):
@@ -2541,22 +2543,34 @@ class TestNoHandRolledFunnel(unittest.TestCase):
         if root is None:
             self.skipTest("not a git checkout")
         offenders = []
+        # The canonical consumers of feed output — parsing it IS their job. Everything
+        # else calling feed.py and then digging JSON out of its stdout is re-implementing
+        # the funnel.
+        CANON = {os.path.join("sites", "_common", "scripts", n)
+                 for n in ("pipeline.py", "precheck.py", "merge_sources.py")}
         for f in files:
             rel = os.path.relpath(f, root)
-            if rel.startswith("tests/"):
+            if rel.startswith("tests/") or rel in CANON:
                 continue
             try:
                 body = open(f, encoding="utf-8", errors="replace").read()
             except OSError:
                 continue
-            calls_feed = re.search(r"sites/[^\s\"']+/scripts/feed\.py", body) is not None
+            # Catch BOTH spellings: a literal "sites/<b>/scripts/feed.py" path, and a
+            # composed one — os.path.join(ROOT, "sites", <b>, "scripts", "feed.py") — which
+            # a real offender used to slip straight past a literal-path-only check.
+            calls_feed = re.search(r"sites/[^\s\"']+/scripts/feed\.py|['\"]feed\.py['\"]",
+                                   body) is not None
             if not calls_feed:
                 continue
             # the funnel-reimplementation tells
             if re.search(r"sort\s+-u", body):
                 offenders.append(f"{rel}: `sort -u` over feed output — use merge_sources "
                                  f"(canonical-id dedup); sort -u dedups JSON strings")
-            if re.search(r"raw_decode|\.find\(\s*['\"]\[['\"]\s*\)", body):
+            # every hand-rolled way of digging the JSON array out of feed stdout seen so far:
+            # raw_decode, .find("["), and a bare re.search(r"\[.*\]") over stdout
+            _extract = [r"raw_decode", r"\.find\(\s*['\"]\[", r"re\.(?:search|findall)\(\s*r?['\"]\\?\["]
+            if any(re.search(px, body) for px in _extract):
                 offenders.append(f"{rel}: hand-rolled feed-stdout JSON extraction — use "
                                  f"pipeline._parse_feed_stdout()")
         self.assertEqual(offenders, [],
@@ -2656,6 +2670,60 @@ class TestParliamentFeed(unittest.TestCase):
         # nav is meaningless for an SPA the feed sweeps itself
         self.assertEqual(argb("http://x?q=y"), [])
         self.assertEqual(argb(None), [])
+
+
+class TestCsjWhatSourcing(unittest.TestCase):
+    """CSJ SIDs are one-shot and expiry-signed, so a parked search URL dies and takes CSJ
+    sourcing with it — and the loop could only ever source the ONE keyword that SID
+    encoded. That gap is why agents kept hand-rolling CSJ family-loop orchestrators. The
+    feed now mints its own SID from --what, so searches.csv carries blank-nav family rows.
+    These lock that contract."""
+
+    def test_pipeline_passes_query_as_what(self):
+        import pipeline
+        argb = pipeline.FEEDS["csj"][1]
+        # blank nav + query -> --what <query>
+        self.assertEqual(pipeline._build_args(argb, "", "interaction designer"),
+                         ["--what", "interaction designer", "--all-pages"])
+        self.assertEqual(pipeline._build_args(argb, None, "it support"),
+                         ["--what", "it support", "--all-pages"])
+        # legacy --nav still honoured, and wins over query
+        self.assertEqual(pipeline._build_args(argb, "https://x/?SID=a", "ignored"),
+                         ["--nav", "https://x/?SID=a", "--all-pages"])
+        # no nav, no query -> still safe
+        self.assertEqual(pipeline._build_args(argb, None, ""), ["--all-pages"])
+
+    def test_build_args_is_arity_aware(self):
+        """1-arg builders must keep working untouched — 40+ entries rely on it."""
+        import pipeline
+        self.assertEqual(pipeline._build_args(lambda nav: ["--nav", nav], "u", "q"),
+                         ["--nav", "u"])
+        self.assertEqual(pipeline._build_args(lambda nav, query: [nav, query], "u", "q"),
+                         ["u", "q"])
+
+    def test_searches_csj_rows_are_blank_nav(self):
+        """A parked SID in searches.csv is the bug this replaced — keep the rows blank."""
+        import search_plan
+        rows = [r for r in search_plan.read_searches() if r["board"] == "csj"]
+        self.assertGreater(len(rows), 1, "csj should have one row per family")
+        for r in rows:
+            self.assertEqual(r["nav"], "",
+                             f"csj row {r['query']!r} parks a nav URL — CSJ SIDs expire; "
+                             f"leave nav blank so feed.py --what mints a fresh one")
+
+    def test_feed_exposes_what_and_mint_sid(self):
+        import importlib.util
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        p = os.path.join(root, "sites", "civilservicejobs", "scripts", "feed.py")
+        with open(p, encoding="utf-8") as fh:
+            src = fh.read()
+        self.assertIn("--what", src)
+        self.assertIn("def mint_sid", src)
+        spec = importlib.util.spec_from_file_location("csj_feed_t", p)
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        self.assertTrue(callable(m.mint_sid))
+        self.assertEqual(m.DEFAULT_WHERE, "London")
 
 
 if __name__ == "__main__":
