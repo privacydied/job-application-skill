@@ -2531,5 +2531,87 @@ class TestNoHandRolledFunnel(unittest.TestCase):
                             "apply_queue.py missing — SKILL.md points at it")
 
 
+class TestParliamentFeed(unittest.TestCase):
+    """UK Parliament (MHR iTrent). Pure bits: the 3-stream registry, the session-free
+    canonical URL, and card normalisation. No browser/network."""
+    def _load(self):
+        import importlib.util
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        spec = importlib.util.spec_from_file_location(
+            "parliament_feed", os.path.join(root, "sites", "parliament.uk", "scripts", "feed.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_three_streams_registered(self):
+        m = self._load()
+        self.assertEqual(set(m.TENANTS), {"pds", "commons", "lords"})
+        # Lords is a DIFFERENT host + instance path, not just another WVID
+        self.assertIn("hrhol", m.TENANTS["lords"]["base"])
+        self.assertIn("ce0913li", m.TENANTS["lords"]["base"])
+        self.assertIn("hrhoc", m.TENANTS["commons"]["base"])
+        self.assertIn("ce0912li", m.TENANTS["pds"]["base"])
+        for t in m.TENANTS.values():
+            self.assertTrue(t["wvid"] and t["employer"])
+
+    def test_canonical_url_is_session_free_deep_link(self):
+        """Must be ETREC179GF + WVID + VACANCY_ID. Never ETREC148GF (the apply/screening
+        flow) and never carry USESSION (expires -> dead tracker links)."""
+        m = self._load()
+        u = m.canonical_url("commons", "4199306Sbb")
+        self.assertIn("ETREC179GF.open", u)
+        self.assertIn("WVID=3402965kYE", u)
+        self.assertIn("VACANCY_ID=4199306Sbb", u)
+        self.assertNotIn("USESSION", u)
+        self.assertNotIn("ETREC148GF", u)
+        self.assertTrue(m.canonical_url("lords", "X1").startswith("https://hrhol."))
+
+    def test_normalize_maps_entry_labels(self):
+        m = self._load()
+        card = {"id": "4199306Sbb", "title": " Investigations Support Officer ",
+                "entries": {"apply by": "27/07/2026", "location": "Hybrid (on-site and remote)",
+                            "salary": "Band B1 - \u00a345,359 - \u00a351,885 per annum",
+                            "basis": "Full Time"}}
+        r = m.normalize(card, "commons")
+        self.assertEqual(r["id"], "4199306Sbb")
+        self.assertEqual(r["title"], "Investigations Support Officer")
+        self.assertEqual(r["location"], "Hybrid (on-site and remote)")
+        self.assertEqual(r["closes"], "27/07/2026")
+        self.assertEqual(r["basis"], "Full Time")
+        self.assertEqual(r["ats_hint"], "mhr-webrec")
+        self.assertEqual(r["source"], "parliament")
+        self.assertEqual(r["tenant"], "commons")
+        self.assertIn("House of Commons", r["company"])
+        self.assertIn("VACANCY_ID=4199306Sbb", r["url"])
+
+    def test_normalize_drops_unusable_cards(self):
+        m = self._load()
+        self.assertIsNone(m.normalize({"id": "", "title": "x", "entries": {}}, "pds"))
+        self.assertIsNone(m.normalize({"id": "A1", "title": "", "entries": {}}, "pds"))
+        self.assertIsNone(m.normalize({}, "pds"))
+        # missing entries must not raise — fields just come back empty
+        r = m.normalize({"id": "A1", "title": "T"}, "pds")
+        self.assertEqual((r["location"], r["salary"], r["closes"]), ("", "", ""))
+
+    def test_match_what_or_semantics(self):
+        m = self._load()
+        j = {"title": "Investigations Support Officer"}
+        self.assertTrue(m.match_what(j, ""))
+        self.assertTrue(m.match_what(j, "support"))
+        self.assertTrue(m.match_what(j, "designer OR support"))
+        self.assertFalse(m.match_what(j, "designer OR devops"))
+        self.assertTrue(m.match_what(j, '"support officer"'))
+        self.assertFalse(m.match_what(j, '"senior support officer"'))
+
+    def test_wired_into_pipeline_feeds(self):
+        import pipeline
+        self.assertIn("parliament", pipeline.FEEDS)
+        subdir, argb = pipeline.FEEDS["parliament"][0], pipeline.FEEDS["parliament"][1]
+        self.assertEqual(subdir, "parliament.uk")
+        # nav is meaningless for an SPA the feed sweeps itself
+        self.assertEqual(argb("http://x?q=y"), [])
+        self.assertEqual(argb(None), [])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

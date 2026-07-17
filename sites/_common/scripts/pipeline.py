@@ -94,6 +94,9 @@ FEEDS = {
     # ── academic / gov / public-sector portals ──────────────────────────────
     "jobsac":    ("jobs.ac.uk",          lambda nav: (["--nav", nav, "--pages", "2"] if nav else ["--pages", "2"])),  # unis: web/digital officer + IT/AV support
     "gchq":      ("gchq-careers.co.uk",  lambda nav: []),   # ⚠️ camofox-only: /api/search is Cloudflare-gated (facets are HTTP)
+    # ⚠️ camofox-only: MHR iTrent SPA — list is client-rendered and fires NO xhr, so there is
+    # nothing to intercept. Sweeps all 3 streams (pds/commons/lords); nav is meaningless.
+    "parliament":("parliament.uk",       lambda nav: []),
     "jgp":       ("jobsgopublic.com",    lambda nav: ["--nav", nav] if nav else []),  # councils/housing/charities
     "lgjobs":    ("lgjobs.com",          lambda nav: ["--nav", nav] if nav else []),  # ⚠️ strict SUBSET of jgp (same Jobiqo index) — shares jgp's seen_pattern
     "apprentice":("findapprenticeship.service.gov.uk", lambda nav: ["--nav", nav] if nav else []),  # cyber/DevOps L4 — ask before a volume run

@@ -19,7 +19,7 @@ operating manual is **`SKILL.md`** — read that after this.
 
 ## What it does
 
-- **Source** — pull fresh postings from **41 channels** via `sites/<board>/scripts/feed.py`:
+- **Source** — pull fresh postings from **42 channels** via `sites/<board>/scripts/feed.py`:
   aggregators (LinkedIn, Indeed, Reed, Adzuna, Totaljobs…), gov/public (Civil Service, NHS,
   MI5/MI6, GCHQ, councils, TfL, BBC), sector boards (design, music, IT/security, charity),
   and **ATS-direct** — employers' own Greenhouse/Lever/Ashby boards, keyless and browser-free.
@@ -70,6 +70,7 @@ key, runnable from cron or CI.
 | Talent.com | sourcing (`uk.talent.com`) |
 | Reed API / Jooble / Careerjet | sourcing via official APIs — each needs a **free key** in `ats-credentials.csv` (the feed exits 2 telling you the exact row + signup URL) |
 | GCHQ | sourcing (`gchq-careers.co.uk`) — cyber/DevOps; ⚠️ search is Cloudflare-gated so this feed needs the browser; apply is account-gated |
+| UK Parliament | sourcing (`hrhoc`/`hrhol.parliament.uk`) — MHR iTrent; **three streams**: PDS (digital/UX), Commons, Lords. ⚠️ client-rendered SPA so the feed needs the browser; apply is account-gated |
 | Jobs Go Public / LGjobs | sourcing (`jobsgopublic.com`, `lgjobs.com`) — councils, housing, charities. LGjobs is a strict **subset** of JGP (same index) |
 | jobs.ac.uk | sourcing (`jobs.ac.uk`) — universities: web/digital officer, IT & AV support |
 | TfL / BBC | sourcing (`tfl.gov.uk` → SuccessFactors board shared with GLA+OPDC; `careers.bbc.co.uk` via its JSON API). Apply account-gated |

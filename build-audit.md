@@ -11,8 +11,8 @@
 > | DWP Find a Job = "easiest new headless board", build #3 | ⛔ **PERMANENTLY CLOSED.** HTTP 200 + body "This site is now closed". Looked alive. |
 > | Technojobs = "weak anti-bot" | ⛔ **DEAD.** `www` is a dangling CNAME (no A record); apex has 80/443 closed. Last archive.org 200: 2025-11-03. |
 > | Charity Digital jobs | ⛔ **DEAD.** Renders a job list whose links all point at `charitydigitaljobs.org` — NXDOMAIN on 4 resolvers. |
-> | UK Parliament `workforus.parliament.uk` | ⛔ **NXDOMAIN.** (Real board: `careers.parliament.uk`.) |
-> | "BBC = Oleeo, 3rd use justifies the driver" | ❌ BBC is **SAP/jobs2web**, not Oleeo. Oleeo is **`*.tal.net`**, not `oleeo.com`. Met's `metpolice.tal.net` reads "System Pending Deletion" (live board: `policecareers.tal.net`). |
+> | UK Parliament `workforus.parliament.uk` | ⛔ **NXDOMAIN** — and so is `careers.parliament.uk`. Real boards: **MHR iTrent**, three streams (PDS / Commons / Lords) on `hrhoc`+`hrhol`. **BUILT** (`parliament`). |
+> | "Parliament/BBC = Oleeo, 3rd use justifies the driver" | ❌ Parliament is **MHR iTrent**; BBC is **SAP/jobs2web**. Neither is Oleeo. Oleeo is **`*.tal.net`**, not `oleeo.com`. Met's `metpolice.tal.net` reads "System Pending Deletion" (live board: `policecareers.tal.net`). |
 > | Dribbble "query Algolia directly" | ❌ Keys are real but the indexes are nav autocomplete — **there is no jobs index**. Its plain GET search works instead. |
 > | "hackajob = no public feed, document only" | ❌ **Wrong** — public Astro directory, `sitemap-jobs.xml` ≈17k URLs. Feed shipped (discovery-only). |
 > | Careerjet legacy API | ⛔ Legacy is **401-dead**; built against live **v4** instead (needs a key). |
