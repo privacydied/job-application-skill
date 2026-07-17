@@ -65,6 +65,8 @@ FEEDS = {
     "charityjob":("charityjob.co.uk",    lambda nav: ["--nav", nav] if nav else []),
     "cvlibrary":("cv-library.co.uk",     lambda nav: ["--nav", nav] if nav else []),
     "nhs":      ("jobs.nhs.uk",          lambda nav: ["--nav", nav] if nav else []),
+    "mi5":      ("applicationtrack.com", lambda nav: ["--nav", nav] if nav else ["--tenant", "mi5"]),  # ⛔ sourcing only; apply user-completed
+    "mi6":      ("applicationtrack.com", lambda nav: ["--nav", nav] if nav else ["--tenant", "mi6"]),  # ⛔ sourcing only; apply user-completed
 }
 
 # ── family classifier (for per-family resume bases, Tier 2) ──────────────────

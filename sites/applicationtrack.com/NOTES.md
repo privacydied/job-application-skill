@@ -1,31 +1,47 @@
 # applicationtrack.com (VacancyFiller / "Application Track") — verified site notes
 
-A UK public-sector ATS. **MI5 (the Security Service)** recruits here under
-`appcentre-a18` / `brand-5`. Other orgs use their own `appcentre-<id>`.
+A UK public-sector ATS. **Both UK intelligence agencies recruit here on this ONE platform**,
+each as a separate `appcentre`/`brand` tenant — the ATS mechanics + the ⛔ integrity rules
+below are IDENTICAL across them; only the tenant path differs:
 
-## URLs
-- **Job board:** `https://recruitmentservices.applicationtrack.com/vx/lang-en-GB/mobile-0/appcentre-a18/candidate/jobboard/vacancy/1`
-  — all current vacancies, with a **Department** filter (Admin, Analysis, Cyber, Engineering,
-  Technology Roles, Information Assurance, Intelligence, Maths & Cryptography, etc.). Job
-  titles link to a detail page.
-- **Vacancy detail:** `.../candidate/so/pm/1/pl/4/opp/<ref>-<slug>/en-GB` (public — no login).
-- **Apply / Login / Register:** applying requires a **candidate ACCOUNT** (top-right
-  "Login or Register"). You cannot reach the application form without one.
+| Org | Careers site | Tenant (job board) | Verified |
+|-----|--------------|--------------------|----------|
+| **MI5** (Security Service) | mi5.gov.uk | `appcentre-a18` / `brand-5`, `.../jobboard/vacancy/1`; vacancy `.../so/pm/1/pl/4/opp/<ref>` | 2026-07-16 |
+| **MI6 / SIS** (Secret Intelligence Service) | **sis.gov.uk** (`/careers/`) | `appcentre-2` / `brand-2` job board `.../appcentre-2/brand-2/candidate/jobboard/vacancy/2`; vacancy `.../appcentre-2/brand-6/xf-<hash>/candidate/so/pm/1/pl/5/opp/<ref>` | 2026-07-17 |
+
+(GCHQ is NOT here — it runs its own careers ATS; see CAPABILITY-GAPS if added later.) Other
+public-sector orgs use their own `appcentre-<id>`.
+
+## URLs (substitute the tenant from the table above)
+- **Job board:** `https://recruitmentservices.applicationtrack.com/vx/lang-en-GB/mobile-0/appcentre-<id>/candidate/jobboard/vacancy/<N>`
+  — all current vacancies, with a **Department** filter. MI6's departments (2026-07-17): Admin,
+  Analysis, Apprentices & Interns, Mission Enablers, **Cyber, Engineering, Technology Roles**,
+  Intelligence, Languages, **Maths & Cryptography**, Trades & Services, Security Officers,
+  Specialist Roles, Building Support Services. (MI5's set is near-identical.) Job titles link to
+  a detail page. On-profile departments for a design/DevOps/cyber applicant: **Technology
+  Roles / Cyber / Engineering** (e.g. MI6 Technical Risk Adviser Ref. 3793, Solutions
+  Architect Ref. 3726 — senior/architect tier).
+- **Vacancy detail:** `.../candidate/so/pm/1/pl/<4|5>/opp/<ref>-<slug>/en-GB` (public — no login).
+- **Apply / Login / Register:** applying requires a **candidate ACCOUNT** per tenant (a MI5
+  account does NOT carry to MI6 — separate registration/email-verification each). You cannot
+  reach the application form without one.
 
 ## Sourcing
 The board is server-rendered; scrape vacancy titles/`opp/<ref>` links from the jobboard page.
-Filter by Department for on-profile roles. There is no public JSON feed — HTML only.
+Filter by Department for on-profile roles. There is no public JSON feed — HTML only. Same feed
+approach works for either tenant — just swap the `appcentre`/`brand`/`vacancy/<N>` path.
 
-## ⛔ MI5 (and any security-vetted employer): DO NOT auto-complete the application
+## ⛔ MI5 / MI6-SIS (and any security-vetted employer): DO NOT auto-complete the application
 
-MI5/SIS/GCHQ recruitment is **not** a normal ATS fill. Hard rules:
+**Applies equally to MI5 and MI6/SIS** (same platform, same rules) and any security-vetted
+role. Intelligence-agency recruitment is **not** a normal ATS fill. Hard rules:
 
 1. **A candidate account is required** and creating it needs the real applicant (email
-   verification; a security service may add checks) — the agent cannot register/verify it.
-   Treat this like a 2FA login: open a browser and let the user register/sign in.
+   verification; a security service may add checks; MI5 and MI6 accounts are separate) — the
+   agent cannot register/verify it. Treat like a 2FA login: open a browser, let the user sign in.
 2. **The application must be completed PERSONALLY and truthfully.** Motivation, competency,
-   and "why MI5" answers require the candidate's own genuine words. **Never auto-generate
-   application content for a security-vetted role** — MI5 vetting is built on personal
+   and "why MI5/MI6" answers require the candidate's own genuine words. **Never auto-generate
+   application content for a security-vetted role** — intelligence vetting is built on personal
    integrity, so a fabricated or AI-written application is a serious integrity risk that can
    end the candidacy (and it violates the skill's no-fabrication rule regardless).
 3. **What the agent MAY do (only with the user driving the account):** fill FACTUAL /

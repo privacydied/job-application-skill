@@ -54,6 +54,7 @@ atsform.py`) drives many other standard ATS forms via label-based field matching
 | CharityJob | sourcing (`charityjob.co.uk`) — charity/third-sector digital & comms roles |
 | CV-Library | sourcing (`cv-library.co.uk`) — major agency board; apply is account + chooser-gated |
 | NHS Jobs | sourcing (`jobs.nhs.uk`) — gov/health digital & service-design; apply account-gated (native or Trac hand-off) |
+| MI5 / MI6 (SIS) | sourcing (`applicationtrack.com`) — intelligence-agency vacancies; ⛔ **apply is user-completed** (security-vetted, no auto-fill) |
 | Hackney Council | sourcing + apply (`recruitment.hackney.gov.uk`) |
 | MoJ / HMCTS | apply wizard (`jobs.justice.gov.uk`) |
 | SEEK | **Australia/NZ only** (`seek.com.au` / `seek.co.nz`) — no UK site; vestigial for a London search |
@@ -71,7 +72,7 @@ atsform.py`) drives many other standard ATS forms via label-based field matching
 | Recruitee | `*.recruitee.com` |
 | HiBob (Bob Hiring) | `*.careers.hibob.com` |
 | Lumesse TalentLink | hosted recruitment platform |
-| Application Track (MI5) | `recruitmentservices.applicationtrack.com` — VacancyFiller ATS, UK public sector incl. MI5 (see the ⛔ integrity note in `sites/applicationtrack.com/NOTES.md`) |
+| Application Track (MI5/MI6) | `recruitmentservices.applicationtrack.com` — VacancyFiller ATS, UK public sector incl. **MI5 & MI6/SIS** (see the ⛔ integrity note in `sites/applicationtrack.com/NOTES.md`) |
 
 ---
 

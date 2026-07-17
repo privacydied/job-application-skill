@@ -1264,6 +1264,49 @@ class TestGuardianFeed(unittest.TestCase):
         self.assertEqual(pipeline.FEEDS["guardian"][0], "jobs.theguardian.com")
 
 
+class TestApplicationTrackFeed(unittest.TestCase):
+    """MI5/MI6 (applicationtrack.com VacancyFiller) board — one adapter, org inferred from the
+    appcentre in the URL; SOURCING ONLY (apply is user-completed). Verified live 2026-07-17."""
+    def _load(self):
+        import importlib.util
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        spec = importlib.util.spec_from_file_location(
+            "apptrack_feed", os.path.join(root, "sites", "applicationtrack.com", "scripts", "feed.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_helpers(self):
+        m = self._load()
+        self.assertEqual(m._ref("/vx/.../opp/3793-Technical-Risk-Adviser-Ref-3793/en-GB"), "3793")
+        self.assertEqual(m._ref("/vx/.../jobboard/vacancy/2"), "")
+        self.assertEqual(m._org_from_url(".../appcentre-a18/candidate/jobboard/vacancy/1"),
+                         ("MI5 (Security Service)", "mi5"))
+        self.assertEqual(m._org_from_url(".../appcentre-2/brand-2/candidate/jobboard/vacancy/2"),
+                         ("MI6 (SIS)", "mi6"))
+        self.assertTrue(m._canonical_url("/vx/x/opp/3726-Solutions-Architect-Ref-3726/en-GB?q=1")
+                        .endswith("/opp/3726-Solutions-Architect-Ref-3726/en-GB"))
+
+    def test_normalize_real_row(self):
+        m = self._load()
+        raw = {"href": "/vx/lang-en-GB/mobile-0/appcentre-2/brand-6/xf-h/candidate/so/pm/1/pl/5/opp/3793-Technical-Risk-Adviser-Ref-3793/en-GB",
+               "title": "Technical Risk Adviser Ref. 3793", "location": "Cheltenham,London",
+               "department": "Technology Roles", "closing": "2026/08/04 23:00 BST"}
+        n = m._normalize(raw, "MI6 (SIS)", "mi6")
+        self.assertEqual(n["id"], "3793")
+        self.assertEqual(n["company"], "MI6 (SIS)")
+        self.assertEqual(n["department"], "Technology Roles")
+        self.assertEqual(n["ats_hint"], "applicationtrack-security")   # ⛔ user-completed
+        self.assertEqual(n["source"], "mi6")
+        self.assertIsNone(m._normalize({"href": "/no/ref"}, "MI6 (SIS)", "mi6"))
+
+    def test_wired_into_pipeline_feeds(self):
+        import pipeline
+        for tok in ("mi5", "mi6"):
+            self.assertIn(tok, pipeline.FEEDS)
+            self.assertEqual(pipeline.FEEDS[tok][0], "applicationtrack.com")
+
+
 class TestNHSFeed(unittest.TestCase):
     """NHS Jobs (jobs.nhs.uk) scraper pure logic — data-test hooks, /candidate/jobadvert/<REF>,
     employer folded as firstChild of the location hook (verified live 2026-07-17)."""
