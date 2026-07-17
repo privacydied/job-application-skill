@@ -159,7 +159,7 @@ def _fill_step():
         time.sleep(0.8)
 
 
-def run(job, resume="am-uxd.pdf"):
+def run(job, resume="am-uxd.pdf", no_submit=False):
     jid = re.sub(r".*/jobs/(\d+).*", r"\1", job) if "/jobs/" in job else job
     url = f"https://www.amazon.jobs/en/jobs/{jid}"
     tab = cfx.ensure_tab(persist=True); cfx.set_tab(tab)
@@ -205,6 +205,12 @@ def run(job, resume="am-uxd.pdf"):
             if atsform.advance() != 0:
                 print(f"  STUCK on {cur!r} — unanswered:", _unanswered_questions()[:4])
                 return 1
+    # --no-submit: the wizard walked every step and reached Review without STUCK, which means
+    # every required field (incl. the config-routed gender/school/degree) filled. Stop here —
+    # nothing is submitted. This is the safe end-to-end verification path.
+    if no_submit:
+        print(f"DRY_REVIEW_REACHED — all steps filled, stopped before submit (step {cur!r}).")
+        return 0
     # Review & submit + pre-submit consent modals
     atsform.rclick("Submit application"); time.sleep(5)
     for _ in range(4):
@@ -223,6 +229,6 @@ def run(job, resume="am-uxd.pdf"):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("usage: amazon_apply.py <jobId|jobUrl> [--resume <file>]"); sys.exit(2)
+        print("usage: amazon_apply.py <jobId|jobUrl> [--resume <file>] [--no-submit]"); sys.exit(2)
     res = sys.argv[sys.argv.index("--resume") + 1] if "--resume" in sys.argv else "am-uxd.pdf"
-    sys.exit(run(sys.argv[1], res))
+    sys.exit(run(sys.argv[1], res, no_submit="--no-submit" in sys.argv))
