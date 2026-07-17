@@ -73,9 +73,29 @@ Server-rendered classic forms (no React) — native DOM APIs work; the traps are
 - **Address line forbids commas** ("Please do not use commas") — strip them or the page
   silently fails to complete.
 - **Dates are 3 selects** (Day `01`, Month `July`, Year `1995`) sharing a name prefix.
-- **⚠️ The Progress Tracker icons are unreliable** — a section can show complete while a field
-  is unanswered (hit live: the OOI disability select). Verify by re-visiting each section and
-  reading values before the final submit.
+- **⛔ THE SUBMIT BUTTON ONLY RENDERS WHEN EVERY SECTION VALIDATES** (verified 2026-07-17, MI5
+  SRE 3772 — this cost hours). Page 7 (Submit) normally shows ONLY `back_button`. Once all
+  sections are complete it also renders **`button[name=submit_button]`** ("Submit") — native
+  `.click()` it and you get "Thank you, your application has been submitted". **If the submit
+  button is absent, do NOT hunt for a hidden control / jump-link / `save_and_goto_location` —
+  a SECTION IS INCOMPLETE.** Filling+saving page 7 (memorable word/declaration persist fine)
+  is NOT the submit; status stays `Incomplete` until every section passes.
+- **✅ Read the REAL per-section status from the tracker link's PARENT class** (the icons/
+  innerHTML are empty — that's why they seemed "unreliable"):
+  `a.jump-to-page` → `parentElement.className` = `tracker_stat_complete` /
+  **`tracker_stat_incomplete`** / `tracker_stat_mandatory_complete`. This pinpoints the
+  blocking section instantly — use it BEFORE anything else when Submit won't appear.
+- **⚠️ Hidden conditional required fields** — selecting **Ethnic Origin = "Mixed - Other"**
+  reveals a required free-text **"Please specify"** (`datafield_17697_1_1`) that does NOT
+  appear in a first field scan and silently keeps Equal Opportunities `incomplete`. Re-scan a
+  section AFTER setting its selects.
+- **⚠️ Label mis-detection on Personal Details**: `datafield_31846_1_1` is the **POSTCODE**
+  (needs CAPITALS, e.g. `[postcode]`) even though naive label-walking reads it as "Email". The
+  form-wide "There is a problem" banner is generic — resolve the real field via the
+  `a.eform-jump-to-field` link's `href="#datafield_…"` anchor, which names the exact culprit.
+- Buttons per page: pages 1–6 = **`continue_button`** ("Save and continue"; NOT "Submit" —
+  searching for "submit" matches nothing and the page silently never advances); page 7 =
+  `back_button` + `submit_button` (the latter only when complete).
 - **Final Submit section is USER-ONLY**: a memorable word (phone-security secret the agent
   should not know) + hint + the "true and complete" declaration + submit.
 - **MI5's own guidance explicitly permits AI in the written application parts** (not online
