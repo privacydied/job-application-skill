@@ -1264,6 +1264,51 @@ class TestGuardianFeed(unittest.TestCase):
         self.assertEqual(pipeline.FEEDS["guardian"][0], "jobs.theguardian.com")
 
 
+class TestCVLibraryFeed(unittest.TestCase):
+    """CV-Library scraper pure logic — stable data-qa hooks, /job/<id>/<slug>, SEO path search
+    /<role>-jobs-in-<location> (verified live 2026-07-17)."""
+    def _load(self):
+        import importlib.util
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        spec = importlib.util.spec_from_file_location(
+            "cvlibrary_feed", os.path.join(root, "sites", "cv-library.co.uk", "scripts", "feed.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_helpers(self):
+        m = self._load()
+        self.assertEqual(m._job_id("/job/225344741/ux-designer?keyword=x"), "225344741")
+        self.assertEqual(m._job_id("/foo/bar"), "")
+        self.assertEqual(m._search_url("UX Designer", "London"),
+                         "https://www.cv-library.co.uk/ux-designer-jobs-in-london")
+        self.assertEqual(m._canonical_url("/job/225344741/ux-designer?keyword=x"),
+                         "https://www.cv-library.co.uk/job/225344741/ux-designer")
+        import board_cooldown as bc
+        self.assertEqual(m._query_from_nav("https://www.cv-library.co.uk/ux-designer-jobs-in-london"),
+                         "ux designer")
+        self.assertEqual(bc.norm(m._query_from_nav(m._search_url("UX Designer", "London"))), bc.norm("ux designer"))
+
+    def test_normalize_real_card(self):
+        m = self._load()
+        raw = {"href": "/job/225363128/ux-designer?keyword=ux", "title": "UX Designer",
+               "company": "Triad", "location": "London", "salary": "£55,000 - £60,000 per annum",
+               "easyApply": True}
+        n = m._normalize(raw)
+        self.assertEqual(n["id"], "225363128")
+        self.assertEqual(n["url"], "https://www.cv-library.co.uk/job/225363128/ux-designer")
+        self.assertEqual(n["company"], "Triad")
+        self.assertEqual(n["salary"], "£55,000 - £60,000 per annum")
+        self.assertEqual(n["ats_hint"], "cvlibrary-easyapply")
+        self.assertEqual(n["source"], "cvlibrary")
+        self.assertIsNone(m._normalize({"href": "/no/id"}))
+
+    def test_wired_into_pipeline_feeds(self):
+        import pipeline
+        self.assertIn("cvlibrary", pipeline.FEEDS)
+        self.assertEqual(pipeline.FEEDS["cvlibrary"][0], "cv-library.co.uk")
+
+
 class TestCharityJobFeed(unittest.TestCase):
     """CharityJob scraper pure logic — article.job-card-wrapper + /jobs/<charity>/<role>/<id>,
     `.organisation` = "<charity>, <location>" (verified live 2026-07-17)."""

@@ -52,6 +52,7 @@ atsform.py`) drives many other standard ATS forms via label-based field matching
 | CWJobs | sourcing (`cwjobs.co.uk`) — Totaljobs/StepStone sibling, same adapter; tech/IT roles |
 | Guardian Jobs | sourcing + **direct apply** (`jobs.theguardian.com`) — Madgex; on-page form (name/email/CV), reCAPTCHA-gated |
 | CharityJob | sourcing (`charityjob.co.uk`) — charity/third-sector digital & comms roles |
+| CV-Library | sourcing (`cv-library.co.uk`) — major agency board; apply is account + chooser-gated |
 | Hackney Council | sourcing + apply (`recruitment.hackney.gov.uk`) |
 | MoJ / HMCTS | apply wizard (`jobs.justice.gov.uk`) |
 | SEEK | **Australia/NZ only** (`seek.com.au` / `seek.co.nz`) — no UK site; vestigial for a London search |
