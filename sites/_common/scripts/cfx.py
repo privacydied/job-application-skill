@@ -248,6 +248,51 @@ def navigate(url: str, referer: str = "", timeout: int = 60, tab: str = None,
         raise
 
 
+def goto(url: str, tab: str = None, verify: bool = True, tries: int = 2,
+         settle: float = 1.5) -> dict:
+    """Navigate and VERIFY the page actually rendered — the scar-killing wrapper (X.1).
+
+    SKILL.md burned ~10 passes on the open-tab-auto-nav-silent-failure trap: a tab that
+    stays at about:blank (title='', innerText.length=0) so every job page reads EMPTY →
+    a FALSE 'NO APPLY BUTTON' → FALSE 'external-route' → FALSE 'backend dead'. The fix was
+    always the same recipe — explicit navigate() (never open_tab's auto-nav), then confirm
+    innerText>0, and re-nav once if it didn't take. This makes that recipe the DEFAULT so
+    the failure is unreachable instead of a paragraph a future agent must remember.
+
+    Returns {url, ok, innerText_len, title_len, attempts}. `ok` is True when the page has
+    real content (or verify=False). On a blank render it re-navigates up to `tries` times.
+    Never raises for a blank page — a blank result with ok=False is the signal to act on."""
+    last = {"url": url, "ok": False, "innerText_len": 0, "title_len": 0, "attempts": 0}
+    for attempt in range(1, max(1, tries) + 1):
+        last["attempts"] = attempt
+        try:
+            navigate(url, tab=tab)
+        except CfxError as e:
+            last["error"] = str(e)
+            time.sleep(settle)
+            continue
+        if not verify:
+            last["ok"] = True
+            return last
+        time.sleep(settle)
+        try:
+            raw = evaluate(
+                "JSON.stringify({t:(document.title||'').length,"
+                "l:(document.body?document.body.innerText.length:0)})", tab=tab, timeout=10)
+            import json as _json
+            d = _json.loads(raw) if isinstance(raw, str) else (raw or {})
+            last["title_len"] = int(d.get("t") or 0)
+            last["innerText_len"] = int(d.get("l") or 0)
+        except CfxError as e:
+            last["error"] = str(e)
+            continue
+        if last["innerText_len"] > 0:
+            last["ok"] = True
+            return last
+        # blank render — the documented trap. Re-nav once more (loop).
+    return last
+
+
 def open_tab(url: str = "about:blank", session_key: str = None, timeout: int = 60,
              before: set = None) -> str:
     """Open a NEW managed tab for CFX_USER and return its tabId. Mirrors the
@@ -680,6 +725,65 @@ def restart_engine(health_timeout_s: float = 90.0) -> bool:
     return False
 
 
+def health_fingerprint(tab: str = None) -> dict:
+    """A cheap, READ-ONLY snapshot of backend liveness — the primitive behind
+    feature-roadmap H.1 (health-fingerprinted verdicts). SKILL.md's CONTAMINATION
+    META-RULE says a DEGRADED camofox backend (blank renders, document.title='',
+    innerText.length=0, eval hangs, /health up but tabs render blank) mints FALSE
+    terminal verdicts ('exhausted' / 'external-route' / 'wedge') that have cost whole
+    sessions. This lets a driver STAMP every terminal negative with the backend's health
+    at verdict time, so a verdict recorded while degraded can be quarantined and re-tested
+    after recovery instead of trusted.
+
+    Does NOT navigate (so it never disturbs an in-progress apply) — it reads /health and
+    runs ONE tiny evaluate on the CURRENT tab. Returns:
+      {ts, browser_connected: bool|None, eval_ok: bool|None, innerText_len, title_len,
+       url, blank_render: bool, degraded: bool|None}
+    Interpretation:
+      degraded=True  — backend is provably unhealthy (not connected, or eval failed): any
+                       terminal negative recorded now is SUSPECT.
+      degraded=False — backend answered and ran JS: the verdict is trustworthy.
+      degraded=None  — health unknown (no CFX_KEY / probe couldn't run): neither confirm
+                       nor deny; a caller may treat as non-suspect but should note it.
+      blank_render   — eval ran but the page has empty title AND empty body text (the
+                       documented open-tab-nav / degraded-render tell). A caller that KNOWS
+                       the tab should have content (just screened/filled a real page) should
+                       treat blank_render as degraded too.
+    Best-effort; never raises."""
+    import os as _os
+    fp = {"ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "browser_connected": None,
+          "eval_ok": None, "innerText_len": 0, "title_len": 0, "url": "",
+          "blank_render": False, "degraded": None}
+    if not _os.environ.get("CFX_KEY"):
+        return fp  # health unknown — no browser configured in this process
+    try:
+        h = get("/health", timeout=5)
+        fp["browser_connected"] = bool(h.get("browserConnected")) if isinstance(h, dict) else None
+    except Exception:  # noqa: BLE001
+        fp["browser_connected"] = None
+    try:
+        raw = evaluate(
+            "JSON.stringify({t:(document.title||'').length,"
+            "l:(document.body?document.body.innerText.length:0),"
+            "u:location.href})", tab=tab, timeout=10)
+        import json as _json
+        d = _json.loads(raw) if isinstance(raw, str) else (raw or {})
+        fp["eval_ok"] = True
+        fp["title_len"] = int(d.get("t") or 0)
+        fp["innerText_len"] = int(d.get("l") or 0)
+        fp["url"] = d.get("u") or ""
+        fp["blank_render"] = (fp["title_len"] == 0 and fp["innerText_len"] == 0
+                              and not fp["url"].startswith("about:"))
+    except Exception:  # noqa: BLE001
+        fp["eval_ok"] = False
+    # degraded verdict: connected==False OR eval failed => provably degraded.
+    if fp["browser_connected"] is False or fp["eval_ok"] is False:
+        fp["degraded"] = True
+    elif fp["browser_connected"] or fp["eval_ok"]:
+        fp["degraded"] = False
+    return fp
+
+
 def _click_through_confirmation_dialog() -> dict:
     """Look for a pre-redirect confirmation dialog (main document OR inside any
     shadow root, one level of `document.querySelectorAll('*')` deep — same pattern
@@ -1045,6 +1149,42 @@ def _cli():
             else:
                 result = click_and_follow(ref=sys.argv[2], auto_heal=auto_heal)
             print(json.dumps(result, indent=2))
+        elif cmd == "goto":
+            # cfx.py goto <url> [--no-verify]  — navigate + verify the page rendered (X.1).
+            # Exit 3 on a blank render (the open-tab-nav trap) so a shell caller can branch.
+            if len(sys.argv) < 3:
+                print("Usage: cfx.py goto <url> [--no-verify]", file=sys.stderr)
+                return 1
+            res = goto(sys.argv[2], verify="--no-verify" not in sys.argv)
+            print(json.dumps(res, indent=2))
+            return 0 if res.get("ok") else 3
+        elif cmd == "persist-env":
+            # cfx.py persist-env [file]  — write BOTH CFX_KEY and CFX_TAB to the persist file
+            # ATOMICALLY (X.1). Kills the `.jobenv.persist` clobber scar: `echo CFX_TAB= >
+            # .jobenv.persist` overwrote the whole file and destroyed CFX_KEY. This always
+            # writes both vars (reading the key from env), so the file is never half-written.
+            dest = sys.argv[2] if len(sys.argv) > 2 else os.environ.get(
+                "CFX_TAB_FILE", os.path.join(os.getcwd(), ".jobenv.persist"))
+            key = os.environ.get("CFX_KEY", "")
+            tab = os.environ.get("CFX_TAB", "")
+            if not key:
+                print("REFUSING: CFX_KEY not in env — persisting would write a keyless file. "
+                      "source .jobenv.run first.", file=sys.stderr)
+                return 2
+            body = f'export CFX_KEY="{key}"\nexport CFX_TAB="{tab}"\n'
+            tmp = dest + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(body)
+            os.replace(tmp, dest)
+            print(f"persisted CFX_KEY + CFX_TAB -> {dest}")
+            return 0
+        elif cmd == "health-fingerprint":
+            # H.1: cheap read-only backend-liveness snapshot to STAMP a terminal verdict
+            # with (so a verdict recorded during a degraded window can be quarantined).
+            # Exit 3 when provably degraded, so a shell caller can branch on it.
+            fp = health_fingerprint()
+            print(json.dumps(fp, indent=2))
+            return 3 if fp.get("degraded") else 0
         elif cmd == "check-engine":
             # Standalone diagnostic: is the click endpoint actually working right now?
             # Useful before starting a run, or when something feels stuck for no visible

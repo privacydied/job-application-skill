@@ -167,6 +167,26 @@ def main():
             page_url = nav if p == 0 else (nav + ("&" if "?" in nav else "?") + f"pageno={p + 1}")
             cfx.navigate(page_url)
             time.sleep(4)
+            # X.1 scar guard: Reed's stale `/jobs/<role>/london` slug now returns the ENTIRE
+            # board UNFILTERED (h1 reads a bare "101,887 Jobs"; results are Baristas/etc.), so
+            # the funnel sources 1000s of cards and precheck drops ~100% → a FALSE "Reed
+            # exhausted". The correctly-filtered URL's h1 always names the query/location
+            # ("1,598 Ux Designer Jobs in London"). Detect the bad-URL signature and abort with
+            # the exact fix instead of harvesting the firehose. (Correct format:
+            # /jobs/<role>-jobs-in-<loc>.)
+            if p == 0:
+                try:
+                    h1 = cfx.evaluate("(document.querySelector('h1')||{}).innerText||''")
+                    if isinstance(h1, str) and re.match(r"^\s*[\d,]{4,}\s+jobs\s*$", h1.strip(), re.I):
+                        print("[]")
+                        print(f"ERROR: Reed returned an UNFILTERED board (h1={h1.strip()!r}) — "
+                              f"the stale `/jobs/<role>/london` URL bug. Use the correct format "
+                              f"`/jobs/<role>-jobs-in-<location>` (e.g. "
+                              f"reed.co.uk/jobs/ux-designer-jobs-in-london). Refusing to harvest "
+                              f"the whole board. URL was: {page_url}", file=sys.stderr)
+                        return 2
+                except cfx.CfxError:
+                    pass
             before = len(pool)
             _enum_page(pool)
             if p > 0 and len(pool) == before:

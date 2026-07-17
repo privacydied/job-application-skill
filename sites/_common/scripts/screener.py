@@ -206,6 +206,75 @@ def record(pattern, answer, kind="text", source="learned"):
     return True
 
 
+# ── M.4: triage coalescer ────────────────────────────────────────────────────
+# WHY: SKILL.md documents a MANUAL recipe — grep every `BLOCKED_UNANSWERED_REQUIRED:` across
+# drain logs, sort|uniq -c, then eyeball each to decide whether to teach it. That recipe was
+# re-derived by hand every session. This makes it a tool: aggregate → dedup → CLASSIFY
+# (teachable vs never-teach eligibility gate) → emit ONE worksheet the model fills in one
+# turn; `teach-batch` then bulk-learns. This preserves the anti-fabrication rule in CODE: an
+# eligibility gate (graduation-year / degree-required / "do you currently hold…") is tagged
+# never_teach so it can't be padded into a false Yes.
+
+# Never-teach: hard ELIGIBILITY gates whose truthful answer is fixed by facts, not consent.
+# Teaching these as Yes would fabricate eligibility (the documented no-fabrication violation).
+_NEVER_TEACH = [
+    r"recent graduate", r"\bgraduat", r"20(2[4-9]|3\d)\s*graduate", r"class of 20",
+    r"currently (hold|have|possess).*(clearance|sc|dv|security)",
+    r"active (sc|dv|security clearance)", r"on day one", r"day-one",
+    r"\bdegree\b", r"\bphd\b", r"bachelor", r"master'?s degree",
+    r"do you have .* years", r"minimum of \d+ years",
+]
+# Teachable: consent / logistics / location / notice / demographics / true years-of-X.
+_TEACHABLE = [
+    r"sponsor", r"right to work", r"authori[sz]ed to work", r"eligible to work",
+    r"notice period", r"available", r"start", r"relocat", r"commut", r"\bbased\b",
+    r"\blocation\b", r"salary", r"expected", r"pronoun", r"gender", r"ethnic",
+    r"disab", r"veteran", r"orientation", r"years of experience", r"how many years",
+    r"driving licen", r"willing to",
+]
+
+
+def classify_question(q):
+    """-> 'never_teach' (eligibility gate — leave needs_human, don't pad the count),
+    'teachable' (consent/location/logistics), or 'unknown' (model decides)."""
+    ql = norm(q)
+    for pat in _NEVER_TEACH:
+        if re.search(pat, ql):
+            return "never_teach"
+    for pat in _TEACHABLE:
+        if re.search(pat, ql):
+            return "teachable"
+    return "unknown"
+
+
+def triage(sources):
+    """Aggregate distinct unanswered screener questions from drain logs (or plain text),
+    with counts + classification + whether the bank ALREADY covers each. `sources` is a list
+    of file paths ('-' = stdin). Returns a list of dicts sorted by count desc."""
+    import collections
+    counts = collections.Counter()
+    for src in sources:
+        try:
+            if src == "-":
+                text = sys.stdin.read()
+            else:
+                with open(src, encoding="utf-8") as _f:
+                    text = _f.read()
+        except OSError:
+            continue
+        for m in re.finditer(r"BLOCKED_UNANSWERED_REQUIRED:\s*(.+)", text):
+            q = m.group(1).strip().strip('"').strip()
+            if q:
+                counts[q] += 1
+    out = []
+    for q, n in counts.most_common():
+        hit = lookup(q)
+        out.append({"question": q, "count": n, "class": classify_question(q),
+                    "already_covered": bool(hit),
+                    "current_answer": hit["answer"] if hit else ""})
+    return out
+
+
 def _cli(argv):
     cmd = argv[1] if len(argv) > 1 else ""
     if cmd == "ask" and len(argv) >= 3:
@@ -227,8 +296,76 @@ def _cli(argv):
         for r in _rows():
             print(f"{r['pattern']}\t{r['kind']}\t{r['answer']}\t{r['source']}")
         return 0
+    if cmd == "triage":
+        # screener.py triage <drain.log ...|->  [--json]
+        srcs = [a for a in argv[2:] if not a.startswith("--")] or ["-"]
+        rows = triage(srcs)
+        if "--json" in argv:
+            print(json.dumps(rows, ensure_ascii=False, indent=1))
+            return 0
+        if not rows:
+            print("no BLOCKED_UNANSWERED_REQUIRED questions found in the given source(s).")
+            return 0
+        teachable = [r for r in rows if r["class"] == "teachable" and not r["already_covered"]]
+        never = [r for r in rows if r["class"] == "never_teach"]
+        unknown = [r for r in rows if r["class"] == "unknown" and not r["already_covered"]]
+        covered = [r for r in rows if r["already_covered"]]
+        print(f"{len(rows)} distinct unanswered question(s):")
+        print(f"\nTEACHABLE ({len(teachable)}) — consent/location/logistics; answer once, "
+              f"free forever. Emit a worksheet with:  screener.py triage <logs> --worksheet ws.csv")
+        for r in teachable:
+            print(f"  [{r['count']:>3}×] {r['question']}")
+        if unknown:
+            print(f"\nUNKNOWN ({len(unknown)}) — model decides teachable-or-not per profile:")
+            for r in unknown:
+                print(f"  [{r['count']:>3}×] {r['question']}")
+        if never:
+            print(f"\n⚠️ NEVER-TEACH ({len(never)}) — hard ELIGIBILITY gates; leave needs_human, "
+                  f"do NOT pad the count (no-fabrication rule):")
+            for r in never:
+                print(f"  [{r['count']:>3}×] {r['question']}")
+        if covered:
+            print(f"\nALREADY COVERED ({len(covered)}) — the bank answers these; a bail on "
+                  f"them is a phrasing/matching miss, not a new question.")
+        if "--worksheet" in argv:
+            ws = argv[argv.index("--worksheet") + 1]
+            with open(ws, "w", newline="", encoding="utf-8") as f:
+                w = csv.writer(f)
+                w.writerow(["question", "class", "count", "pattern", "kind", "answer"])
+                for r in teachable + unknown:
+                    # pre-fill pattern with the question (a substring key) + blank answer to fill
+                    w.writerow([r["question"], r["class"], r["count"], "", "text", ""])
+            print(f"\nworksheet -> {ws} ({len(teachable)+len(unknown)} rows). Fill `answer` "
+                  f"(and optionally a shorter `pattern`/`kind`), then: screener.py teach-batch {ws}")
+        return 0
+    if cmd == "teach-batch" and len(argv) >= 3:
+        # screener.py teach-batch <worksheet.csv> — bulk-learn filled rows. A row with a blank
+        # answer is skipped; class=never_teach is ALWAYS skipped (guardrail — even if a human
+        # accidentally filled it, teaching an eligibility gate is refused).
+        ws = argv[2]
+        learned = skipped = 0
+        try:
+            with open(ws, newline="", encoding="utf-8") as f:
+                for row in csv.DictReader(f):
+                    ans = (row.get("answer") or "").strip()
+                    cls = (row.get("class") or "").strip()
+                    pat = (row.get("pattern") or "").strip() or (row.get("question") or "").strip()
+                    if not ans or not pat or cls == "never_teach":
+                        skipped += 1
+                        continue
+                    if record(pat, ans, (row.get("kind") or "text").strip(), "triage-batch"):
+                        learned += 1
+                    else:
+                        skipped += 1
+        except OSError as e:
+            print(f"FAIL: cannot read worksheet {ws!r}: {e}", file=sys.stderr)
+            return 2
+        print(f"teach-batch: learned {learned}, skipped {skipped} "
+              f"(blank/duplicate/never-teach).")
+        return 0
     print("Usage: screener.py ask <question> | learn <pattern> <answer> [kind] [source] "
-          "| seed [--force] | list", file=sys.stderr)
+          "| seed [--force] | list | triage <logs|-> [--worksheet f.csv] [--json] | "
+          "teach-batch <worksheet.csv>", file=sys.stderr)
     return 2
 
 

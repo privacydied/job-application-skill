@@ -274,3 +274,110 @@ Verified divergence (both real CSJ S2 eforms):
 4. **Page counts differ** — UKEF = 3, BA/CPS = 5, others vary. Set the spec `pages`
    list to the mapped count; an over-long pages list makes the driver walk past the real
    final page and miss Submit.
+
+## S2 submit wall: "There is a problem — Desirable experience and skills" (ROOT CAUSE + FIX, 2026-07-17)
+Symptom: every page fills OK (CV/PS/name-blind/declaration all report OK), but the final
+Declaration page shows **NO Submit button** and the banner reads *"There is a problem —
+Desirable experience and skills. The following form pages have problems…"*. This is NOT a
+generic S2 wall — it is **page 1 failing validation**, and the banner names the TOC
+section, not the field.
+
+Root cause — page 1 has two fields the shipped drivers don't cover:
+- `datafield_50626_1_1` — radio *"Do you have the relevant experience?"* → must be **Yes**
+  (value `1`). **`tal_sec2.py` only handles text/textarea/checkbox/select — it has NO
+  radio kind**, so `50626` is silently never set. (Putting `"kind":"radio"` in the spec
+  yields `BAD_KIND:radio` and is skipped.) Set it manually: click
+  `input[name=datafield_50626_1_1][value="1"]`.
+- `datafield_50629_1_1` — the 250-word *"Provide details of how you meet the experience
+  and skills outlined above"* textarea. If empty (or dropped by an out-of-order
+  re-navigation to `/page/1`), page-1 validation fails and the whole form won't submit.
+
+Also set on page 2: `datafield_53854_1_1` (qualification **select**) = **Degree** — it
+defaults to "Select" and the "problem" banner can cite the Desirable-experience section
+even when `53854` is the only unset field. (`22379/22372/36911` are optional qualification
+rows — safe empty.)
+
+Fix recipe (ONE clean pass, no out-of-order nav — re-navigating `/page/N` reloads and drops
+unsaved page-1 data):
+1. **P1**: click `input[name=datafield_50626_1_1][value="1"]` (radio Yes) AND fill
+   `50629` via prototype `HTMLTextAreaElement.prototype.value` setter + input/change dispatch.
+2. Walk **Continue** P1→P5 (CV 99856/99863, PS 72158, prefs 53467, role-Qs 82664/82671 —
+   already filled by `tal_sec2` or a per-eform spec).
+3. **P6**: tick declaration `205967` + set `76575`='Yes' ("Full Application Form
+   Submitted?"); **Submit then renders** — click it.
+4. Proof = body contains *"Application status: Application received"*.
+
+This variant (eform 57074961, DfE User Researcher) was the one that bit the 2026-07-17 run;
+the pattern (P1 radio + P1 statement + P2 qual select + P6 gating) generalises to other
+CSJ S2 campaigns.
+
+## S1-ONLY eforms & the `35302` submit-wall (ROOT CAUSE + FIX, 2026-07-17 second pass)
+A SEPARATE submit-wall class from the S2 "Desirable experience" one above. Many CSJ roles are
+**single-section** eforms: 5 pages (Application Guidance → Eligibility → Personal information →
+Diversity monitoring → **Declaration = final page, NO S2**). For these, the S1 Declaration page
+has ONLY a "Back" button — no Submit — UNTIL every prior page validates server-side.
+
+Root cause (bit the 2026-07-17 run on OFGEM Content Designer, OFGEM Digital Comms Officer,
+Cabinet Office Motion Designer, Cabinet Office Social Media Manager — ALL initially mis-logged
+Blocked, then recovered): the spec value for the ethnicity **sub-option** `datafield_35302_1_1`
+was `"Any other Mixed/Multiple background"` but the live eform only offers
+`"Any other Mixed background"` (no "Multiple"). Because `35302` didn't match, the Diversity page
+was marked **incomplete** server-side even though `tal_eform.py` reported every field "OK". With
+Diversity incomplete, the S1 Declaration page never renders a Submit control → NO_ADVANCE → wall.
+
+Fix: set `35302` to exactly `"Any other Mixed background"` in `spec_csj_s1_jane.json` (and any
+reused S1 spec). After the fix, S1 completes: for single-section eforms the Declaration page
+renders Submit; for multi-section roles S2 spawns. **Always verify the ethnicity sub-option text
+against the live eform's `<select>` options before trusting a "Submit missing" diagnosis** — a
+mismatched optional-looking diversity value is the #1 silent S1 submit-wall.
+
+This is a SPEC bug, not a driver bug — `tal_eform.py` can't detect it because the server returns
+"OK" on the field fill and only fails server-side validation at submit time. The driver gives no
+signal; you only see it via the missing Submit + the live Applications status (below).
+
+### ⚠️ Per-run regression guard — the `35302` (and S2 PS-id) values DRIFT between sessions
+`spec_csj_s1_jane.json` (and any reused S1/S2 spec) is **gitignored + per-applicant**, so the
+correct `35302` value (`"Any other Mixed background"`) is NOT pinned by the repo. The 2026-07-17
+run fixed it; the very next session started AGAIN with the wrong `"Any other Mixed/Multiple
+background"` and re-walled every single-section eform until re-fixed. **At the start of EVERY CSJ
+session, assert the value before driving:** open any live S1 eform's Diversity page, read
+`select[name=datafield_35302_1_1]` options, and confirm the spec value is an EXACT option string.
+If it drifted, patch the spec — the driver reports the field `OK` regardless (near-misses like
+"Mixed/Multiple" vs "Mixed" produce NO `NO_OPT` warning), so you get NO signal until the
+submit-wall appears. Same drift risk applies to any campaign-specific S2 PS field id
+(`72158` vs `72117` vs `72220`) — re-map the target eform's pages, don't trust last run's spec.
+
+### Broad exhaustion-sweep parsing gotcha (verified pattern)
+To prove CSJ is exhausted, run a multi-family sweep:
+`for F in "product designer" "ux researcher" …; do python3 sites/civilservicejobs/scripts/feed.py --what "$F" --all-pages --all >> /tmp/sweep.jsonl; done`
+then screen `/tmp/sweep.jsonl` with `precheck.py`. **PITFALL:** `feed.py --what --all` emits one
+**pretty-printed JSON array per family** (multi-line), NOT one object per line. Naive
+`for line in open(...): json.loads(line)` yields `4214 bad lines / 0 rows`. Fix: stream with
+`json.JSONDecoder().raw_decode` in a while-loop over the concatenated file (skip whitespace between
+docs), collecting `list` docs into one candidate list; then normalize + dedupe + `precheck.py`.
+This pattern confirmed CSJ's on-profile inventory for Jane = the ~8 candidates already processed
+(4 Applied, 4 Blocked) with **0 new** across 12 families / 233 unique candidates — i.e. genuinely
+exhausted, not a sourcing miss. Re-running it is cheaper than guessing the board still has inventory.
+
+## Verify submission via the LIVE Applications view (not just the save-page text)
+After a submit attempt, open `https://cshr.tal.net/vx/.../candidate/application` and read the
+role's status. Three states, and what each means:
+- **"Application received"** → submitted; capture `…/eform/<ID>/save_page` body
+  ("This application form has already been submitted and can not be edited" or
+  "Application status: Application received") as the proof artifact.
+- **"Application in progress"** → S1 saved but NOT submitted (submit-wall; the Diversity/S1 page
+  is incomplete — almost always the `35302` mismatch above, or a missing required field).
+- **"Application started"** → S1 barely begun.
+The save_page body alone can read "or you can check this in your Application Centre" even when
+only S1 is saved — the Applications-view status is the authoritative submit signal.
+
+## Wall classes for CSJ-derived roles (log Blocked, do NOT loop)
+- **Panpowered proctored SJT:** after S1, some roles (e.g. OFGEM Digital Comms Officer 2005992)
+  route to `euauthoring.panpowered.com/.../Assessment Launcher` — a timed situational-judgement
+  test with "I will not copy… from anyone else". **HARD STOP:** cannot answer a proctored test on
+  the applicant's behalf. S1 may be done; log Blocked with "SJT pending human".
+- **"Apply at advertiser's site" → external ATS:** HMCTS (jobs.justice.gov.uk), OCC
+  (careers.childrenscommissioner.gov.uk) and similar adverts are NOT TAL eforms — the green
+  "Apply now" is absent and the advert links out to the employer's portal (account registration
+  required). That is an **account wall** (CAPTCHA/email verification the agent can't self-serve),
+  not a CSJ flow. Log Blocked; do not attempt to drive the external ATS.

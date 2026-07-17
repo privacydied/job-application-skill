@@ -37,6 +37,7 @@ Exit codes: 0 ok · 2 bad input/IO.
 import csv
 import json
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -121,17 +122,62 @@ def load_postings(paths):
     return posts
 
 
-def merge_lists(posts, drop_tracked=False, tracker=None):
+_CO_SUFFIX_RE = re.compile(
+    r"\b(ltd|limited|inc|incorporated|llc|l\.?l\.?c|plc|co|corp|corporation|gmbh|"
+    r"group|holdings|uk|global)\b")
+
+
+def _norm_company(s):
+    """Company key with legal-suffix noise stripped so 'Acme Ltd' == 'Acme Limited' ==
+    'Acme Ltd UK' (the cross-board dup case). Mirrors company_cache's Ltd/Limited-normalize
+    intent, extended to the common suffixes that vary by board."""
+    base = _norm(s)                       # lowercase, non-alnum -> space
+    base = _CO_SUFFIX_RE.sub(" ", base)
+    return " ".join(base.split())
+
+
+def _location_bucket(loc):
+    low = (loc or "").lower()
+    if re.search(r"(?<!new )\blondon\b", low):
+        return "london"
+    if re.search(r"\bremote\b|work from home|anywhere|worldwide", low):
+        return "remote"
+    return "other" if low else ""
+
+
+def fingerprint(post):
+    """M.2 — a FUZZY cross-board vacancy key: (norm company, norm title, location bucket).
+    canon_ids only dedups URL VARIANTS of one board's posting; the SAME vacancy sourced from
+    two boards (Reed + Adzuna + LinkedIn) mints three different ids and slips past canon-id
+    dedup — a real double-apply risk. Two postings with the same company, same normalized
+    title AND same location bucket are almost certainly the same role (distinct SENIORITY
+    survives because 'Senior Product Designer' normalizes differently from 'Product Designer').
+    Returns None when company or title is missing (can't fingerprint → never collapse)."""
+    comp = _norm_company(post.get("company"))
+    title = _norm(post.get("title") or post.get("role"))
+    if not comp or not title:
+        return None
+    return (comp, title, _location_bucket(post.get("location")))
+
+
+def merge_lists(posts, drop_tracked=False, tracker=None, cross_board=False):
     """Dedupe an IN-MEMORY list of postings (C.1: pipeline already holds `all_posts`,
     so serializing it to a tmp file just to read+re-parse it back is pure waste). Same
     kernel as merge(); stashes the canonical-id set on each kept post as `_canon_ids`
-    (C.5) so precheck/jd don't re-run the 10-regex sweep on the same URL."""
+    (C.5) so precheck/jd don't re-run the 10-regex sweep on the same URL.
+
+    cross_board=True (M.2) additionally collapses fuzzy cross-board duplicates by
+    fingerprint() AFTER canonical-id dedup — the same vacancy reached via two boards is kept
+    ONCE, with the other board's URL recorded on the kept post as `_dup_urls` so the tracker
+    check still catches 'already applied via the other board'. Off by default to preserve the
+    original id-only semantics for existing callers/tests; pipeline enables it."""
     tracked_ids, tracked_pairs = (set(), set())
     if drop_tracked:
         tracked_ids, tracked_pairs = _tracker_maps(tracker)
 
     seen, out = set(), []
-    n_dupe = n_tracked = n_nokey = 0
+    fp_index = {}          # fingerprint -> kept post (for cross_board collapse)
+    n_dupe = n_tracked = n_nokey = n_fuzzy = 0
     for post in posts:
         keys = _keys(post)
         if not keys:
@@ -146,12 +192,29 @@ def merge_lists(posts, drop_tracked=False, tracker=None):
                 seen |= keys
                 n_tracked += 1
                 continue
+        if cross_board:
+            fp = fingerprint(post)
+            if fp is not None and fp in fp_index:
+                # same vacancy already kept from another board — collapse, keep the alt URL
+                kept = fp_index[fp]
+                alt = (post.get("url") or "").strip()
+                if alt and isinstance(kept, dict):
+                    kept.setdefault("_dup_urls", [])
+                    if alt not in kept["_dup_urls"] and alt != kept.get("url"):
+                        kept["_dup_urls"].append(alt)
+                seen |= keys
+                n_fuzzy += 1
+                continue
         seen |= keys
         if isinstance(post, dict):
             post["_canon_ids"] = sorted(keys)  # C.5: reused by precheck + jd cache key
         out.append(post)
+        if cross_board:
+            fp = fingerprint(post)
+            if fp is not None:
+                fp_index[fp] = post
     stats = {"in": len(posts), "out": len(out), "dupes": n_dupe,
-             "tracked_dropped": n_tracked, "no_key": n_nokey}
+             "tracked_dropped": n_tracked, "no_key": n_nokey, "fuzzy_dropped": n_fuzzy}
     return out, stats
 
 

@@ -87,17 +87,36 @@ def load_rows(path):
         return rows, rdr.fieldnames
 
 
-def find_match(rows, url, company, role):
-    """Index of the existing row for this posting, or -1. Canonical URL id first,
-    then normalized Company+Role — the same two keys every dedup pass uses."""
+def find_match_typed(rows, url, company, role):
+    """(index, how) of the existing row for this posting, or (-1, None).
+
+    H.3 — TWO PASSES, canonical URL id first ACROSS ALL ROWS, then (company, role):
+    the old single-pass loop returned on the first row matching EITHER key, so an
+    earlier (company, role) match silently won over a later row that matched on the
+    canonical URL/jcode — the exact DEDUP-COLLISION pitfall (a different posting sharing
+    a role title merged into the wrong row, overwriting its Notes). Matching every URL id
+    before any title fallback makes the canonical id the real primary key.
+
+    `how` is 'url' (matched on canonical id — authoritative) or 'pair' (fell back to
+    normalized Company+Role — ambiguous when a URL was supplied that did NOT match). The
+    caller warns on a 'pair' fallback so a same-title/different-posting collision surfaces
+    instead of silently merging."""
     want_ids = canon_ids(url) if url else set()
+    if want_ids:
+        for i, r in enumerate(rows):
+            if canon_ids(r.get("URL") or "") & want_ids:
+                return i, "url"
     pair = (_norm(company), _norm(role))
-    for i, r in enumerate(rows):
-        if want_ids and (canon_ids(r.get("URL") or "") & want_ids):
-            return i
-        if pair[0] and pair[1] and (_norm(r.get("Company")), _norm(r.get("Role"))) == pair:
-            return i
-    return -1
+    if pair[0] and pair[1]:
+        for i, r in enumerate(rows):
+            if (_norm(r.get("Company")), _norm(r.get("Role"))) == pair:
+                return i, "pair"
+    return -1, None
+
+
+def find_match(rows, url, company, role):
+    """Back-compat int wrapper (kept for callers/tests): index of the match, or -1."""
+    return find_match_typed(rows, url, company, role)[0]
 
 
 def main():
@@ -157,7 +176,22 @@ def main():
             print(f"FAIL: tracker header {fieldnames} != expected {COLS} — refusing to write")
             return 2
 
-        idx = -1 if force_append else find_match(rows, url, company, role)
+        idx, how = (-1, None) if force_append else find_match_typed(rows, url, company, role)
+
+        # H.3 collision guard: we fell back to a (company, role) match even though a URL was
+        # supplied that does NOT canonicalise to that row's URL — this is exactly the
+        # same-role-title/different-posting merge that silently overwrites a real row. Refuse
+        # to merge blind; tell the caller to confirm or force a new row with --append-new.
+        if idx >= 0 and how == "pair" and url:
+            row_ids = canon_ids(rows[idx].get("URL") or "")
+            if canon_ids(url) and not (canon_ids(url) & row_ids):
+                print(f"FAIL: matched an existing row by Company+Role ({company} | {role}) but "
+                      f"its URL ({rows[idx].get('URL')!r}) does NOT match the URL you passed "
+                      f"({url!r}) — this is the DEDUP-COLLISION case (a different posting with "
+                      f"the same role title). Merging would overwrite that row. If this really "
+                      f"is a NEW, distinct application, re-run with --append-new; if it is the "
+                      f"same posting, pass its existing URL.")
+                return 2
 
         if idx < 0:
             # APPEND — O_APPEND write, no rewrite of existing content.

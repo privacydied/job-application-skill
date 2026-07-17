@@ -131,3 +131,22 @@ captcha-type-memory.csv
 captcha-solve-pending.json
 /tmp/recaptcha-challenge-*.png
 .csjtab
+
+# --- feature-roadmap generated run-state (H/N/M/X tiers) --------------------
+accounts-needed.csv
+.accounts-postings.csv
+blockers.jsonl
+verdicts.jsonl
+revalidate.jsonl
+outcome-stats.csv
+canary-status.json
+status.json
+state-backups/
+sentinel.log
+autodrain.log
+snapshot.log
+notify.sh
+state.db
+state.db-wal
+state.db-shm
+*.lock

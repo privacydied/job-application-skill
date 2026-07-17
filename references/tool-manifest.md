@@ -59,6 +59,34 @@ lists reappear outside `check_title.py`.
 | Atomic + locked write to a shared CSV/JSONL | `fsutil.file_lock(path)` + `fsutil.atomic_write(...)` | bare `open(,"w")` on shared state |
 | Solve reCAPTCHA v2 (sanctioned) | `recaptcha.py` | — (any other CAPTCHA = hard stop) |
 
+## feature-roadmap tools (H/N/M/X tiers — hardening, async, matching, context)
+
+| I need to… | Use (single source of truth) | Never do instead |
+|---|---|---|
+| Report the tracker's Applied count | `tracker_stats.py [--count\|--today\|--json]` | `grep -c ',Applied,'` (inflates via Applied?) |
+| Audit that every Applied row has real proof | `scripts/audit_proofs.py` (`--fix` cites-missing; `--fix-all` also no-evidence) | eyeball the tracker |
+| Record which downstream ACCOUNT wall blocks most volume | `accounts.py record <ats> [--posting id --est N]` / `ranked` | leave the wall as prose |
+| Stamp a terminal negative (exhausted/no-apply/wedge) so a degraded-backend false verdict is quarantined | `verdicts.py stamp <kind> <target> "<reason>"` (+ `pending`/`resolve`) | trust a "blocked/exhausted" call made during a degraded window |
+| A cheap read-only backend-liveness check | `cfx.py health-fingerprint` / `cfx.health_fingerprint()` | assume `/health` alone proves render health |
+| Navigate + VERIFY the page rendered (kills the open-tab-nav blank trap) | `cfx.py goto <url>` / `cfx.goto(url)` | `open_tab("<url>")` (auto-nav silently fails) |
+| Persist CFX_KEY+CFX_TAB without clobbering the key | `cfx.py persist-env [file]` | `echo CFX_TAB=… > .jobenv.persist` (destroys CFX_KEY) |
+| Record per-posting apply progress (crash-resume, double-submit guard) | `journal.py record <slug> <event>` / `journal.is_submitted_unconfirmed(slug)` | rely on the model remembering what it did |
+| Queue a human blocker + push-notify + enable resume | `blockers.py record <kind> <site> …` / `resolve` / `resumable` | a prose "held" message with no resume path |
+| Source keyless HTTP boards browser-free, on a cron | `scripts/sentinel.py [--boards …]` | drive the apply tab for API feeds |
+| Drain code-only queue rows unattended (Reed + covered-EA) | `scripts/autodrain.py` (dry-run default; `--go`) | a bespoke apply orchestrator |
+| Coalesce unanswered screeners into one worksheet | `screener.py triage <drain.log…> [--worksheet f.csv]` → `teach-batch` | re-derive per session; teach an eligibility gate |
+| Rank the queue by JD FIT, not just ATS ease | `fit_score.py --queue queue.jsonl` (auto in pipeline order) | order by apply_rank alone |
+| Turn inbound email into sourcing rows / outcome events | `scripts/email_ingest.py alerts\|responses` | scrape a board's hostile search UI |
+| Update tracker Status + conversion stats from responses | `outcomes.py apply <events> \| aggregate \| rates` | hand-update post-Applied statuses |
+| Compile a per-task ~2k-token briefing (tools+quirks+live state) | `scripts/brief.py "<intent>"` | re-read SKILL.md + the whole ref corpus |
+| Glance-able session dashboard | `scripts/status_dashboard.py` (writes status.json) | a dozen ad-hoc probes at session start |
+| A board's quirks as structured, staleness-dated data | `quirks.py get <board>` / `add` / `stale` | bury the quirk in a NOTES.md paragraph |
+| Lint docs/config drift (paths, feeds, searches.csv, captcha mirror, examples, quirks) | `scripts/doctor.py` | trust that a moved script's docs were updated |
+| Nightly browser+fill smoke test before a live run | `scripts/canary.py [--full]` (writes canary-status.json) | discover backend/selector rot mid-run |
+| Snapshot fragile run-state (searches.csv/tracker/…) | `scripts/snapshot_state.py` (cron) | hope the untracked searches.csv survives |
+| One SQLite mirror for cross-table state queries | `statedb.py import-csvs` / `query "SELECT …"` / `export <table>` | join CSVs by hand |
+| Keyless remote boards (Remotive/Jobicy/HN Who-is-hiring) | `pipeline.py --boards remotive,jobicy,hn` (or their `feed.py`) | scrape them ad-hoc |
+
 **Before writing a probe/helper**: also check `references/scratch-probes-and-capability-index.md`
 — the shipped tool almost always exists. New capability that genuinely doesn't exist yet
 → add it to a shared module AND add a row here, so the next run finds it in one lookup.

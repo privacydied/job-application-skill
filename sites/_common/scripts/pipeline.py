@@ -45,6 +45,7 @@ import board_cooldown as bc     # noqa: E402
 import merge_sources            # noqa: E402
 import precheck as pc           # noqa: E402
 import fsutil                   # noqa: E402  (atomic + locked queue write, A.1)
+import fit_score                # noqa: E402  (M.1 fit-score ranking)
 import cfx                      # noqa: E402  (tab-death self-heal in run_feed)
 
 _ROOT = sp._ROOT
@@ -110,6 +111,12 @@ FEEDS = {
     "bbc":       ("careers.bbc.co.uk",   lambda nav: []),   # POST API — a nav URL is meaningless here
     # ── aggregator APIs ─────────────────────────────────────────────────────
     "himalayas": ("himalayas.app",       lambda nav: ["--pages", "5"]),  # keyless JSON; no keyword search upstream, volume comes from --pages
+    # keyless remote-board JSON APIs (feature-roadmap P.1/P.2/P.3) — browser-free, so the
+    # N.1 sentinel can poll them off the apply tab. --what carries the family keyword.
+    "remotive":  ("remotive.com",        lambda nav, query: (["--what", query] if query else [])),  # keyless; search= narrows server-side
+    "jobicy":    ("jobicy.com",          lambda nav, query: (["--what", query] if query else [])),  # keyless; tag= narrows server-side
+    "hn":        ("news.ycombinator.com", lambda nav, query: (["--what", query] if query else [])),  # monthly Who-is-hiring thread; discovery-only
+    "wellfound": ("wellfound.com",       lambda nav: []),  # ⚠️ account wall (P.4): feed records to accounts.py + exits 2 until a wellfound.com creds row exists
     "talent":    ("talent.com",          lambda nav: (["--nav", nav, "--pages", "2"] if nav else ["--pages", "2"])),
     # Key-gated (feed exits 2 naming the exact ats-credentials.csv row + free signup URL):
     "reedapi":   ("reed.co.uk",          lambda nav: ["--nav", nav] if nav else [], "feed_api.py"),  # official API; distinct from the `reed` scraper
@@ -367,7 +374,9 @@ def run(target=None, no_screen=False, screen_limit=40, force=False,
     # and can route a tracked-Blocked posting to `review` (retry-if-cleared) instead of
     # it being silently dropped here first (the regression this restores).
     n_sourced = len(all_posts)
-    merged, mstats = merge_sources.merge_lists(all_posts, drop_tracked=False)
+    # cross_board=True (M.2): collapse the same vacancy sourced from >1 board by fuzzy
+    # fingerprint (company+title+location bucket) so it isn't applied to twice.
+    merged, mstats = merge_sources.merge_lists(all_posts, drop_tracked=False, cross_board=True)
     del all_posts  # C.2: free the raw-card blob before the minutes-long screen phase
 
     # ── 3) precheck (title/location/salary/dedup) ────────────────────────────
@@ -436,15 +445,23 @@ def run(target=None, no_screen=False, screen_limit=40, force=False,
             "desired_salary": c.get("desired_salary"),
             "jd": c.get("jd"),
             "jd_error": c.get("jd_error"),
+            "dup_urls": c.get("_dup_urls"),          # M.2: same vacancy's other-board URLs
+            "fit_score": None,                        # M.1: filled just below
             # not silently dropped: a row past --screen-limit is queued UNSCREENED (jd=None);
             # mark it so the applier knows to `jd.py --nav` it before applying, not that it's
             # a jd_error or a real 0-field funnel.
             "screen_skipped": c.get("_screen_skipped"),
         }
+        row["fit_score"] = fit_score.fit_row(row)   # M.1
         queue.append(row)
-    # apply-success order: easiest ATS first, then higher tier, then family grouping
+    # apply-VALUE order (M.1): a composite of ATS ease (apply_rank, lower=better) and JD fit
+    # (fit_score, higher=better). A great fit can float a row up to ~2 apply_rank steps, so a
+    # time-boxed run spends its budget on best-fit-reachable roles, not merely easiest-ATS.
+    # Ties broken by tier then family (stable grouping for per-family tailoring batches).
     tier_ord = {"A": 0, "B": 1, "C": 2, None: 3}
-    queue.sort(key=lambda x: (x["apply_rank"], tier_ord.get(x["tier"], 3), x["family"]))
+    FIT_WEIGHT = 2.0
+    queue.sort(key=lambda x: (x["apply_rank"] - FIT_WEIGHT * (x.get("fit_score") or 0.5),
+                              tier_ord.get(x["tier"], 3), x["family"]))
 
     # A.1: atomic + locked write so a concurrent firing (or the warm-queue daemon)
     # can never read a truncated/half-streamed queue.jsonl and conclude "no work".

@@ -14,7 +14,17 @@ form, no board account required**. Wired in `pipeline.py FEEDS` as `guardian`.
   via `[class*=recruiter|salary|location]`. Canonical URL: `/job/<digits>/<slug>/`.
 - **Listing pages are bot-walled to plain curl** (0 bytes) — source via camofox.
 
+## ⚠️ Apply section STALE — read references/guardian-board-reality.md instead
+The direct on-page `#application-form` flow described below was the Guardian apply path at
+the time this NOTES.md was written, but as of 2026-07-17 the **guest** path no longer shows
+that form: "Apply on website" redirects to the employer's own ATS (account-gated). The
+logged-in Madgex "quick apply" path is *untested and untestable from the agent* (login is
+email-OTP gated on `you@example.com`, which the agent can't read). Treat the section below as
+historical; the current, authoritative apply-path reality is in
+`references/guardian-board-reality.md`.
+
 ## ✅ Apply — direct on-page form (`ats_hint: guardian-direct`)
+>This section is STALE (see banner above). Left for historical reference only.
 "Apply now" is an in-page anchor to `#application-form`. Fields: `firstName`, `lastName`,
 `email`, `cv` (file upload — use `atsform.upload("Your CV", "<file>.pdf")`), optional
 `coverLetter` (textarea), plus **optional** opt-ins (`cvDatabaseOptIn`, `sendCvForReview`,

@@ -16,9 +16,9 @@ junior-mid UX/Service/Product Designer (drop Lead/Senior/UI Architect/UI-UX Deve
 financial/graphic-non-UX). On-profile junior-mid fits seen: UX Designer ×N, Trainee UX/UI
 Designer, Interactive UX/UI Designer, UX / Service Designer - Consumer Duty.
 
-## Apply (driver: `sites/reed.co.uk/scripts/reed_apply.py`)
+## Apply (driver: `scripts/reed_apply.py`)
 ```
-python3 sites/reed.co.uk/scripts/reed_apply.py 57108922 57096916 56992386 ...
+python3 scripts/reed_apply.py 57108922 57096916 56992386 ...
 ```
 Flow per posting: click "Apply now" → modal → screening question(s) (Yes/No + Continue) →
 "About you" prefilled summary + "Submit application". The driver answers screening "Yes"
