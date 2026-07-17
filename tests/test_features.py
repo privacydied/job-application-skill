@@ -395,5 +395,38 @@ class TestNewFeeds(unittest.TestCase):
         self.assertIsNone(drop)
 
 
+class TestScrubPII(unittest.TestCase):
+    """The PII-guard scrubber (wired into loop-preflight): replaces the applicant's real
+    tokens with placeholders in tracked files, and is itself PII-free."""
+    def setUp(self):
+        sys.path.insert(0, os.path.join(_ROOT, "scripts"))
+        import scrub_pii  # noqa: E402
+        self.m = scrub_pii
+        import json
+        self.fill = json.load(open(os.path.join(_ROOT, "sites", "_common", "apply-defaults.json"),
+                                   encoding="utf-8"))["fill"]
+
+    def test_replacements_placeholderize(self):
+        reps = self.m.build_replacements()
+        self.assertTrue(reps, "should derive replacements from the config")
+        real = f"{self.fill['Full name']} <{self.fill['Email']}> first {self.fill['First name']}"
+        out = real
+        for rx, ph in reps:
+            out = rx.sub(ph, out)
+        self.assertIn("Jane Doe", out)
+        self.assertIn("you@example.com", out)
+        self.assertNotIn(self.fill["Last name"], out, "real surname must be scrubbed")
+        self.assertNotIn(self.fill["Email"], out, "real email must be scrubbed")
+
+    def test_scrubber_source_is_pii_free(self):
+        """scrub_pii.py is TRACKED — it must hardcode only placeholders, never the real
+        values (it reads those from the gitignored config at runtime)."""
+        src = open(os.path.join(_ROOT, "scripts", "scrub_pii.py"), encoding="utf-8").read()
+        for key in ("First name", "Last name", "Email"):
+            val = self.fill.get(key, "")
+            if val:
+                self.assertNotIn(val, src, f"scrub_pii.py must not hardcode the real {key}")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

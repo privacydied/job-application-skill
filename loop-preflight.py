@@ -71,6 +71,27 @@ def assert_canonical_dir():
     return True
 
 
+def _scrub_pii_guard():
+    """Auto-scrub any leaked applicant PII from git-TRACKED files to the placeholder
+    convention, at the top of EVERY firing. The autonomous loop (and the concurrent Hermes
+    loop) keeps writing the applicant's real name/email into tracked notes as it documents
+    runs; prose PII rules don't reliably stop it, so this enforces the convention in code —
+    the leak is scrubbed before it can accumulate and block a commit. Best-effort: never
+    breaks the preflight. Prints a `note:` when it scrubs, so a recurring leak stays visible.
+    Only touches tracked files — gitignored files (profile/tracker/creds) keep real PII."""
+    try:
+        sys.path.insert(0, os.path.join(_here, "scripts"))
+        import scrub_pii
+        changed = scrub_pii.scrub()
+        if changed:
+            total = sum(changed.values())
+            print(f"note: PII-guard scrubbed {total} leaked applicant-PII occurrence(s) -> "
+                  f"placeholders in {len(changed)} tracked file(s) "
+                  f"({', '.join(sorted(changed))}). Keep applicant PII in gitignored files only.")
+    except Exception:  # noqa: BLE001 — a scrub hiccup must never block the loop
+        pass
+
+
 def _target(argv):
     if "--target" in argv:
         try:
@@ -90,6 +111,7 @@ def main():
     now = datetime.now()
     if not assert_canonical_dir():
         return 2
+    _scrub_pii_guard()   # enforce the placeholder convention on tracked files, every firing
     try:
         searches = sp.read_searches()
     except FileNotFoundError:
