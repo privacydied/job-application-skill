@@ -1264,6 +1264,49 @@ class TestGuardianFeed(unittest.TestCase):
         self.assertEqual(pipeline.FEEDS["guardian"][0], "jobs.theguardian.com")
 
 
+class TestCharityJobFeed(unittest.TestCase):
+    """CharityJob scraper pure logic — article.job-card-wrapper + /jobs/<charity>/<role>/<id>,
+    `.organisation` = "<charity>, <location>" (verified live 2026-07-17)."""
+    def _load(self):
+        import importlib.util
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        spec = importlib.util.spec_from_file_location(
+            "charityjob_feed", os.path.join(root, "sites", "charityjob.co.uk", "scripts", "feed.py"))
+        m = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(m)
+        return m
+
+    def test_helpers(self):
+        m = self._load()
+        self.assertEqual(m._job_id("/jobs/anna-freud/website-and-digital-marketing-officer/1076288"), "1076288")
+        self.assertEqual(m._job_id("/jobs/foo/bar"), "")
+        self.assertEqual(m._split_org("Anna Freud, London (Hybrid)"), ("Anna Freud", "London (Hybrid)"))
+        self.assertEqual(m._split_org("Foxglove"), ("Foxglove", ""))
+        self.assertEqual(m._canonical_url("/jobs/x/y/1076288?tsId=6"),
+                         "https://www.charityjob.co.uk/jobs/x/y/1076288")
+        self.assertIn("Keywords=digital", m._search_url("digital"))
+        import board_cooldown as bc
+        self.assertEqual(m._query_from_nav("https://www.charityjob.co.uk/jobs/?Keywords=digital"), "digital")
+        self.assertEqual(bc.norm(m._query_from_nav("https://www.charityjob.co.uk/digital-jobs")), bc.norm("digital"))
+
+    def test_normalize_real_card(self):
+        m = self._load()
+        raw = {"href": "/jobs/anna-freud/website-and-digital-marketing-officer/1076288?tsId=6",
+               "title": "Website and Digital Marketing Officer", "org": "Anna Freud, London (Hybrid)", "salary": ""}
+        n = m._normalize(raw)
+        self.assertEqual(n["id"], "1076288")
+        self.assertEqual(n["url"], "https://www.charityjob.co.uk/jobs/anna-freud/website-and-digital-marketing-officer/1076288")
+        self.assertEqual(n["company"], "Anna Freud")
+        self.assertEqual(n["location"], "London (Hybrid)")
+        self.assertEqual(n["source"], "charityjob")
+        self.assertIsNone(m._normalize({"href": "/jobs/no/id"}))
+
+    def test_wired_into_pipeline_feeds(self):
+        import pipeline
+        self.assertIn("charityjob", pipeline.FEEDS)
+        self.assertEqual(pipeline.FEEDS["charityjob"][0], "charityjob.co.uk")
+
+
 class TestTheDotsFeed(unittest.TestCase):
     """The Dots JSON:API feed — pure _parse resolves sideloaded org/location (verified live
     2026-07-15: org is included type 'pages' with the name under 'title', not 'name')."""
