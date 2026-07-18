@@ -42,7 +42,6 @@ Usage:
 Exit: 0 submitted / already-applied (skip) / --no-submit ready · 3 external/account-wall or
       reCAPTCHA-handoff · 2 error/blocked.
 """
-import csv
 import json
 import os
 import re
@@ -124,24 +123,18 @@ def _job_id(url):
 def _already_in_tracker(url):
     """PRE-CHECK (the primary duplicate guard): is this posting ALREADY logged Applied?
     Guardian only reveals "you have already applied" AFTER you solve the Send reCAPTCHA — far
-    too late for an autonomous run (it can't solve the captcha). So the real defence is to
-    never drive a posting the tracker already shows Applied. Matches by Guardian job-id (robust
-    to slug/#fragment/query differences), falling back to an exact-URL match. Returns a short
-    "row N: <Status>" string if found, else ''."""
-    jid = _job_id(url)
-    tracker = os.path.join(_ROOT, "application-tracker.csv")
-    if not os.path.exists(tracker):
-        return ""
+    too late for an autonomous run (it can't solve the captcha). So the real defence is to never
+    drive a posting the tracker already shows Applied. Delegates to the ONE canonical apply-time
+    guard (precheck.already_applied — board-agnostic canon_ids match, reused by every driver) so
+    this logic is not re-implemented per board. Returns "<Status> (<matched_by>)" or ''."""
     try:
-        with open(tracker, newline="", encoding="utf-8") as f:
-            for i, row in enumerate(csv.DictReader(f), start=2):  # row 1 = header
-                u = (row.get("URL") or "")
-                status = (row.get("Status") or "").strip()
-                same = (jid and jid in u) or (url and u.strip() == url.strip())
-                if same and status.lower().startswith("applied"):
-                    return f"row {i}: {status}"
-    except (OSError, ValueError):
-        return ""
+        sys.path.insert(0, os.path.join(_here, "..", "..", "_common", "scripts"))
+        import precheck  # noqa: E402
+        hit = precheck.already_applied(url=url, company="REVIVA SOFTWORKS", role="Product Designer")
+        if hit and precheck.is_applied(hit[0]):
+            return f"{hit[0]} ({hit[1]})"
+    except Exception:
+        pass
     return ""
 
 

@@ -81,7 +81,8 @@ def canon_ids(url):
                 # same numeric id or re-sources report ~100% "fresh" (false-exhaustion).
                 r"reed\.co\.uk/jobs/(?:[^/]+/)?(\d{5,8})",
                 r"greenhouse\.io/[^/]+/jobs/(\d+)", r"jobs\.lever\.co/[^/]+/([0-9a-f-]{8,})",
-                r"ashbyhq\.com/[^/]+/([0-9a-f-]{8,})", r"myworkdayjobs\.com/.*/job/[^/]+/([^/?]+)"):
+                r"ashbyhq\.com/[^/]+/([0-9a-f-]{8,})", r"myworkdayjobs\.com/.*/job/[^/]+/([^/?]+)",
+                r"jobs\.theguardian\.com/job/(\d+)"):
         m = re.search(pat, u)
         if m:
             ids.add(m.group(1))
@@ -116,6 +117,35 @@ def load_tracker():
     except (OSError, csv.Error):
         pass
     return by_id, by_pair
+
+
+def already_applied(url=None, company=None, role=None):
+    """APPLY-TIME duplicate guard for DRIVERS that take a URL directly and thus BYPASS the
+    sourcing precheck (e.g. jobs.theguardian.com/apply.py, reed_apply.py, a hand-driven URL).
+    The sourcing funnel already drops tracked rows (merge_sources), but a driver invoked on an
+    explicit URL never saw that screen — so it can re-drive an Applied posting and burn a real
+    submit/CAPTCHA on a duplicate (the REVIVA 10126456 re-attempt). This is the ONE canonical
+    check for that: it reuses canon_ids (board-agnostic id match, robust to slug/#fragment/query)
+    then Company+Role, against the live tracker.
+
+    Returns (status, matched_by) if a tracker row matches, else None. `matched_by` is
+    "id:<canon>" or "company+role". Callers decide: `is_applied(status)` => skip the drive;
+    a "Blocked" status => re-drive only if the blocker is known cleared. Never raises."""
+    by_id, by_pair = load_tracker()
+    for i in canon_ids(url):
+        if i in by_id:
+            return (by_id[i], f"id:{i}")
+    if company and role:
+        pair = (_norm(company), _norm(role))
+        if pair in by_pair:
+            return (by_pair[pair], "company+role")
+    return None
+
+
+def is_applied(status):
+    """True if a tracker status means 'already submitted — do not re-drive' (Applied / Applied?).
+    Blocked/Saved/Unverified are deliberately NOT applied (a driver may legitimately proceed)."""
+    return (status or "").strip().lower().startswith("applied")
 
 
 def load_seen(pattern, tracker=None):

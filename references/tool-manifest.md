@@ -38,6 +38,7 @@ lists reappear outside `check_title.py`.
 | Source Adzuna (JSON API, no browser) | `sites/adzuna.co.uk/scripts/feed.py --what "<q>"` (needs `ADZUNA_APP_ID`/`_KEY`, free at developer.adzuna.com) | scrape adzuna pages |
 | Screen a title against target-roles tiers | `check_title.check_title(title)` | inline SENIOR/OFF/ONPROFILE word lists |
 | Pre-filter a feed (title+location+salary+dedup) | `precheck.py -` (stdin) / `precheck.precheck(list)` | per-card `check_title` + tracker greps |
+| Guard a URL-driven apply DRIVER against re-applying to a tracked posting (it bypassed the sourcing precheck) | `precheck.already_applied(url=…, company=…, role=…)` → `(status, matched_by)` + `precheck.is_applied(status)` | re-drive an Applied job (burns a real submit/CAPTCHA on a duplicate — the REVIVA 10126456 re-attempt); a per-board tracker grep |
 | Merge several feed passes | `merge_sources.merge_lists(posts)` / `merge(paths)` | hand-rolled dedup loop |
 | Screen+extract a JD (nav+requirements+funnel+traps) | `jd.py --nav <url>` / `jd.screen_one(url)` | full-page `snap` of a JD |
 | Tailor resume+cover+PDF for the work list | `tailor.py apply <spec> --render` | re-emit the whole resume HTML per posting |
