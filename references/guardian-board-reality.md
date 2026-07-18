@@ -32,20 +32,41 @@ A `jobs.theguardian.com` (Madgex) credential row **exists** in `ats-credentials.
 (saved profile + CV) to *logged-in* candidates while sending *guests* out to the employer
 ATS. So the guest-path redirect does NOT prove the logged-in path also redirects.
 
-BUT the login itself is **email-OTP gated**: `profile.theguardian.com/signin` →
-"Continue with email" → `profile.theguardian.com/passcode` → *"We've sent a temporary
-verification code to you@example.com"*. There is NO password field — it's email + one-time
-code. The agent cannot read that inbox, so it **cannot complete Guardian login** and
-therefore **cannot test whether logged-in flips any role back to an in-platform apply**.
+LOGIN — ✅ PASSWORD LOGIN WORKS (CORRECTED 2026-07-18; the OLD "OTP-only, agent can't log in"
+claim was WRONG). `profile.theguardian.com/signin` DEFAULTS to email-OTP ("Continue with
+email" → `/passcode` → a one-time code the agent can't read), **but a "Sign in with a password
+instead" link on the signin page goes to `profile.theguardian.com/signin/password` (email +
+PASSWORD fields — verified present).** The reason the agent kept "defaulting to OTP" is that
+the link is a plain `<a>` that camofox's **a11y SNAPSHOT does not surface** — a DOM query
+finds it instantly. So:
+- **Log in with the SHIPPED driver — `python3 sites/jobs.theguardian.com/scripts/login.py`.**
+  It goes DIRECT to `/signin/password` (bypassing OTP + the snapshot-invisible link), fills the
+  `jobs.theguardian.com (Madgex)` creds, submits, and hands the reCAPTCHA to noVNC (exit 3).
+  Manual equivalent if you must: navigate to
+  `https://profile.theguardian.com/signin/password?signInEmail=<email>`, or native-click the
+  link via DOM (NOT the snapshot):
+  `[...document.querySelectorAll('a')].find(e=>/password instead/i.test(e.innerText)).click()`.
+- Once logged in, THE in-platform-apply hypothesis is finally testable by the agent: re-open
+  2–3 sample job URLs and check whether "Apply" stays on `jobs.theguardian.com` (in-platform)
+  or still bounces to a non-guardian.com employer ATS.
 
-Consequences for the loop:
-- The "Guardian = account wall" conclusion is **guest-path-verified only**. Do NOT treat it
-  as a settled wall for logged-in candidates — it is *untested*, not *proven*.
-- It is also **not** an unblock the agent can realise: login needs the OTP from
-  `you@example.com`, which the agent cannot read.
-- To actually test the logged-in hypothesis, a human must log in (via noVNC / real browser
-  using the inbox OTP) and then re-open 2–3 sample job URLs to check whether "Apply" stays on
-  `jobs.theguardian.com` (in-platform) or still bounces to a non-guardian.com domain.
+⛔ BUT the password-login SUBMIT is gated by a **reCAPTCHA** (`[data-sitekey]` on
+`/signin/password`). Verified 2026-07-18: with valid Madgex creds filled and "Sign in"
+clicked, the page stayed on `/signin/password` with NO error message and NO visible challenge
+— the reCAPTCHA **silently blocked** the submit (the same camofox-fingerprint-distrust wall
+documented for Guardian's apply-submit reCAPTCHA — the widget won't issue a token for this
+client). So the LINK problem is solved (reach the password page via the direct URL / DOM
+click) and the creds are accepted, but programmatic sign-in still can't clear the reCAPTCHA.
+
+Real unblock (single, human): **log in ONCE via noVNC** (`http://nasirjones:6080/vnc.html`)
+on the `/signin/password` page — a real pointer passes the reCAPTCHA behavioural score — then
+the session persists in the camofox PROFILE, and the agent can finally test/drive the
+logged-in in-platform apply. (The sanctioned `recaptcha.py` v2 solve is worth ONE attempt, but
+this widget has historically distrusted the fingerprint and looped without a token, so don't
+grind it — hand to noVNC.)
+
+Consequence for the loop: Guardian login is reachable (password page, not OTP), but the final
+reCAPTCHA needs a human noVNC pass once; after that the logged-in apply path is testable.
 - Until that human test is done, Guardian yields ~0 confirmable submissions through the agent.
   Do not re-conclude "wall" every firing, and do not assume a logged-in unblock exists.
 
