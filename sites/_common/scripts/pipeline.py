@@ -283,8 +283,12 @@ def _build_args(argb, nav, query):
     return argb(nav, query) if n >= 2 else argb(nav)
 
 
-def run_feed(board, nav, force, timeout=420, query=""):
+def run_feed(board, nav, force, timeout=420, query="", extra=None):
     """Run one board's feed.py as a subprocess; return (postings, err_or_None).
+
+    `extra` is appended to the feed argv verbatim (e.g. ["--all"] for an AUDIT that wants the
+    already-tracked rows the feed normally dedups out). Optional + defaulted so existing callers
+    are untouched.
 
     Tab-death self-heal: a dead camofox tab (410/500 'Tab not found') makes the feed exit
     non-zero and silently zeroes the board. Sourcing is an idempotent READ, so on such an
@@ -302,7 +306,8 @@ def run_feed(board, nav, force, timeout=420, query=""):
     feed = os.path.join(_ROOT, "sites", subdir, "scripts", script)
     if not os.path.isfile(feed):
         return [], f"feed not found: {feed}"
-    cmd = [sys.executable, feed] + _build_args(argb, nav, query) + (["--force"] if force else [])
+    cmd = [sys.executable, feed] + _build_args(argb, nav, query) + (["--force"] if force else []) \
+        + (list(extra) if extra else [])
     posts, err = _run_feed_once(cmd, board, timeout)
     if err and _tab_dead():                       # dead tab → reopen + retry ONCE (read-only)
         try:

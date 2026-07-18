@@ -39,6 +39,7 @@ lists reappear outside `check_title.py`.
 | Screen a title against target-roles tiers | `check_title.check_title(title)` | inline SENIOR/OFF/ONPROFILE word lists |
 | Pre-filter a feed (title+location+salary+dedup) | `precheck.py -` (stdin) / `precheck.precheck(list)` | per-card `check_title` + tracker greps |
 | Guard a URL-driven apply DRIVER against re-applying to a tracked posting (it bypassed the sourcing precheck) | `precheck.already_applied(url=…, company=…, role=…)` → `(status, matched_by)` + `precheck.is_applied(status)` | re-drive an Applied job (burns a real submit/CAPTCHA on a duplicate — the REVIVA 10126456 re-attempt); a per-board tracker grep |
+| Audit a WHOLE board — every searches.csv family, FRESH vs already-tracked, in one command | `scripts/audit_board.py <board> [--json\|--fresh-only\|--verbose]` (reads searches.csv → `pipeline.run_feed … --all` → `merge_sources` → `precheck.precheck`, all in-process) | a `/tmp/<board>_audit.py` that loops families over `feed.py` and greps `[…]` from stdout (FORBIDDEN — breaks on the feed's summary line; `queue.jsonl`/`apply_queue --refresh` can't show tracked rows) |
 | Merge several feed passes | `merge_sources.merge_lists(posts)` / `merge(paths)` | hand-rolled dedup loop |
 | Screen+extract a JD (nav+requirements+funnel+traps) | `jd.py --nav <url>` / `jd.screen_one(url)` | full-page `snap` of a JD |
 | Tailor resume+cover+PDF for the work list | `tailor.py apply <spec> --render` | re-emit the whole resume HTML per posting |

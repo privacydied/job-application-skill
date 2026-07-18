@@ -13,6 +13,21 @@ import cfx
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
+
+def _solve_altcha():
+    """Run the CSJ feed's sanctioned ALTCHA auto-solver (CSJ-only) WITHOUT registering it under
+    the bare module name `feed`. A plain `from feed import solve_altcha` caches the CSJ feed as
+    sys.modules['feed'], which then shadows every other board's feed.py and breaks their imports
+    (lgjobs/jobsgopublic AttributeError). Load it lazily under a unique key instead."""
+    import importlib.util
+    p = os.path.join(ROOT, "sites", "civilservicejobs", "scripts", "feed.py")
+    spec = importlib.util.spec_from_file_location("csj_feed", p)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules.setdefault("csj_feed", mod)
+    spec.loader.exec_module(mod)
+    return mod.solve_altcha()
+
+
 def ev(expr, tries=5):
     for _ in range(tries):
         try:
@@ -38,6 +53,12 @@ def main():
     time.sleep(2)
     cfx.navigate("https://www.civilservicejobs.service.gov.uk/csr/login.cgi")
     time.sleep(5)
+    # The login page fronts a fresh session with an ALTCHA "Quick check needed"
+    # interstitial (sanctioned auto-solve, CSJ-only). Clear it before filling creds.
+    try:
+        _solve_altcha()
+    except Exception as e:
+        print("altcha_solve_err:", repr(e))
 
     SET = """(name,val)=>{const e=document.querySelector('input[name="'+name+'"]');if(!e)return 'NO:'+name;const s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;s.call(e,val);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));return 'OK:'+name;}"""
     # pass args as a single JSON array to avoid % formatting collisions
