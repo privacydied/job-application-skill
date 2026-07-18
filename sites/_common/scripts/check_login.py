@@ -20,11 +20,21 @@ classifies:
 
 Usage:
     CFX_KEY=... CFX_TAB=... python3 check_login.py [board ...]
-      boards: linkedin | wttj | indeed | seek | all   (default with no args: ALL FOUR —
-              login status for every board). Pass specific boards for a faster subset,
-              e.g. `check_login.py linkedin wttj` for just the session-gated pre-source
-              check. ⚠️ NAVIGATES the tab once per board (like feed.py --nav) — run it
-              BEFORE sourcing / point CFX_TAB at a scratch step, not mid-application.
+      pre-source boards (in the default sweep): linkedin | wttj | indeed | seek
+      apply-session boards (on-demand — NOT in the default sweep): reed | csj | guardian |
+              totaljobs | cvlibrary | amazon | nhs   — check these before an APPLY batch on
+              that board (a dead session reads as `wall`). `all` runs every board.
+      Default (no args) = the four pre-source boards only, so an apply-board's logged-out
+              state never blocks a sourcing run. Pass specific boards for a subset,
+              e.g. `check_login.py reed` before a reed_apply.py batch, or
+              `check_login.py linkedin wttj` for the session-gated pre-source check.
+      ⚠️ For GUARDIAN, `sites/jobs.theguardian.com/scripts/login.py --check` is authoritative
+              (it handles the OAuth "signed in — Continue" half-state this probe can misread).
+      ⚠️ reed/csj/guardian probe the ACCOUNT page (their homepage headers cache a stale
+              "Sign out" and lie); totaljobs/cvlibrary/amazon/nhs signals are PENDING first-live
+              validation (conservative — a miss degrades to `unknown`, never a false logged_in).
+      ⚠️ NAVIGATES the tab once per board (like feed.py --nav) — run it BEFORE sourcing /
+              point CFX_TAB at a scratch step, not mid-application.
 
     Login-REQUIRED boards (linkedin, wttj): a wall is a hard stop (exit 11).
     Guest-browsable boards (indeed, seek): login not needed to source, so a logged-out
@@ -92,6 +102,108 @@ BOARDS = {
           wall: !!(document.querySelector('[data-automation="sign in"], [data-automation="signInLink"], [data-automation="register"], a[href*="/oauth/login"]')
                  || /\bsign in\b/i.test((document.querySelector('header,[data-automation*="header" i]')||{}).innerText||''))
                  && !document.querySelector('[data-automation="account name"], [data-automation="signOutLink"]')
+        }""",
+    },
+    "reed": {
+        # Reed APPLY needs a live session (sourcing via feed.py is guest-ok). ⚠️ CHECK THE
+        # ACCOUNT PAGE, NOT the homepage: reed.co.uk's header caches a "Sign out" link that stays
+        # visible AFTER the apply session dies, so the homepage FALSELY looks logged-in (this is
+        # why a firing wrote _reed_probe.py — the homepage lied). /account/jobs/applications shows
+        # the TRUE state — a live session renders your applications + a logout link; a dead one
+        # shows "Session expired" + logged-out CTAs ("Register your CV"). required=True so a dead
+        # session reads as `wall` (re-login before a reed_apply.py batch). NOT in DEFAULT_BOARDS —
+        # run on demand: `check_login.py reed`.
+        "url": "https://www.reed.co.uk/account/jobs/applications",
+        "required": True,
+        "signals": r"""{
+          logged_in: !/session expired|register your cv|create your reed account/i.test(document.body.innerText.slice(0,2500))
+                     && !!([...document.querySelectorAll('a')].some(a=>/sign out|log ?out/i.test(a.innerText||''))
+                        || document.querySelector('a[href*="/logout" i], a[href*="/signout" i]')),
+          wall: /session expired/i.test(document.body.innerText.slice(0,3000))
+                || /\/(signin|login)/i.test(location.href)
+                || (/register your cv/i.test(document.body.innerText.slice(0,1500))
+                    && ![...document.querySelectorAll('a')].some(a=>/sign out/i.test(a.innerText||'')))
+                || ([...document.querySelectorAll('a,button')].some(e=>/^\s*sign in\s*$/i.test((e.innerText||'').trim()))
+                    && ![...document.querySelectorAll('a')].some(a=>/sign out/i.test(a.innerText||'')))
+        }""",
+    },
+    "csj": {
+        # CSJ apply/candidate state lives in the TAL layer (cshr.tal.net), NOT the
+        # civilservicejobs.service.gov.uk front (whose header shows "Sign in to your account" even
+        # when TAL is live — same header-lies trap as Reed). A live session renders the candidate
+        # applications list; a dead one bounces to .../csr/oidc/... "You must sign in to your Civil
+        # Service Jobs account". (VALIDATED: logged-out state observed 2026-07-18.)
+        "url": "https://cshr.tal.net/vx/lang-en-GB/candidate/application",
+        "required": True,
+        "signals": r"""{
+          logged_in: /cshr\.tal\.net\/.*\/candidate/i.test(location.href)
+                     && !/you must sign in/i.test(document.body.innerText.slice(0,800))
+                     && (/application/i.test((document.querySelector('h1,h2')||{}).innerText||'')
+                         || [...document.querySelectorAll('a')].some(a=>/sign out/i.test(a.innerText||''))),
+          wall: /\/oidc\/|\/signin|\/login/i.test(location.href)
+                || /you must sign in to your civil service jobs/i.test(document.body.innerText.slice(0,600))
+                || /^\s*sign in\s*$/i.test((document.querySelector('h1,h2')||{}).innerText||'')
+        }""",
+    },
+    "guardian": {
+        # Guardian Jobs (Madgex). Login is OAuth via profile.theguardian.com; the dedicated
+        # sites/jobs.theguardian.com/scripts/login.py --check is AUTHORITATIVE (it handles the
+        # "You are signed in with <email> — Continue" half-state that a plain probe misreads). This
+        # native probe is a lightweight cross-board sweep only: signed-in shows the Madgex account
+        # menu; a redirect to profile.theguardian.com/signin is the wall. Prefer login.py --check
+        # before acting.
+        "url": "https://jobs.theguardian.com/account/",
+        "required": True,
+        "signals": r"""{
+          logged_in: !/profile\.theguardian\.com\/signin/i.test(location.href)
+                     && [...document.querySelectorAll('a')].some(a=>/sign out|your applications|saved jobs/i.test(a.innerText||'')),
+          wall: /profile\.theguardian\.com\/signin/i.test(location.href)
+                || [...document.querySelectorAll('a,button')].some(e=>/^\s*sign in\s*$/i.test((e.innerText||'').trim()))
+        }""",
+    },
+    # ── PENDING first-live validation: cred rows exist but the logged-in markers below are
+    #    conservative best-guesses (a strong positive signal required, so a miss degrades to
+    #    `unknown`/screenshot, never a false `logged_in`). Refine each on its next real session. ──
+    "totaljobs": {
+        "url": "https://www.totaljobs.com/profile",
+        "required": True,
+        "signals": r"""{
+          logged_in: [...document.querySelectorAll('a')].some(a=>/sign out|log out|my profile|your applications/i.test(a.innerText||'')),
+          wall: [...document.querySelectorAll('a,button')].some(e=>/^\s*(sign in|log in|register)\s*$/i.test((e.innerText||'').trim()))
+                && ![...document.querySelectorAll('a')].some(a=>/sign out|log out/i.test(a.innerText||''))
+        }""",
+    },
+    "cvlibrary": {
+        "url": "https://www.cv-library.co.uk/my-cv-library",
+        "required": True,
+        "signals": r"""{
+          logged_in: !/\/login|\/register/i.test(location.href)
+                     && [...document.querySelectorAll('a')].some(a=>/sign out|log out|my cv-library|applications/i.test(a.innerText||'')),
+          wall: /\/login|\/register/i.test(location.href)
+                || [...document.querySelectorAll('a,button')].some(e=>/^\s*(sign in|log in)\s*$/i.test((e.innerText||'').trim()))
+                   && ![...document.querySelectorAll('a')].some(a=>/sign out|log out/i.test(a.innerText||''))
+        }""",
+    },
+    "amazon": {
+        "url": "https://www.amazon.jobs/en/applicant/dashboard",
+        "required": True,
+        "signals": r"""{
+          logged_in: !/\/signin|\/login|ap\/signin/i.test(location.href)
+                     && [...document.querySelectorAll('a')].some(a=>/sign out|log out|my applications|dashboard/i.test(a.innerText||'')),
+          wall: /\/signin|\/login|ap\/signin/i.test(location.href)
+                || [...document.querySelectorAll('a,button')].some(e=>/^\s*sign in\s*$/i.test((e.innerText||'').trim()))
+                   && ![...document.querySelectorAll('a')].some(a=>/sign out|log out/i.test(a.innerText||''))
+        }""",
+    },
+    "nhs": {
+        "url": "https://www.jobs.nhs.uk/candidate/applications",
+        "required": True,
+        "signals": r"""{
+          logged_in: !/\/login|\/signin/i.test(location.href)
+                     && [...document.querySelectorAll('a')].some(a=>/sign out|log out|my applications|your applications/i.test(a.innerText||'')),
+          wall: /\/login|\/signin/i.test(location.href)
+                || [...document.querySelectorAll('a,button')].some(e=>/^\s*(sign in|log in)\s*$/i.test((e.innerText||'').trim()))
+                   && ![...document.querySelectorAll('a')].some(a=>/sign out|log out/i.test(a.innerText||''))
         }""",
     },
 }
