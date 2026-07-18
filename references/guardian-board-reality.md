@@ -26,11 +26,34 @@ do NOT attempt to drive the employer ATS.
 3. Only if the form renders ON `jobs.theguardian.com` as a guest (name/email/CV +
    reCAPTCHA) is it drivable. As of 2026-07-17 no such guest form was observed.
 
-## ⚠️ LOGGED-IN MADGEX PATH — UNTESTED AND UNTESTABLE FROM THE AGENT (2026-07-17)
-A `jobs.theguardian.com` (Madgex) credential row **exists** in `ats-credentials.csv`
-(email + password present). Madgex boards commonly offer an in-platform "quick apply"
-(saved profile + CV) to *logged-in* candidates while sending *guests* out to the employer
-ATS. So the guest-path redirect does NOT prove the logged-in path also redirects.
+## ✅ LOGGED-IN MADGEX PATH — NOW TESTED END-TO-END (2026-07-18): IN-PLATFORM APPLY IS REAL, BUT THE SEND reCAPTCHA IS A HUMAN GATE
+**SETTLED.** The logged-in in-platform apply path EXISTS and is **fully drivable headlessly UP TO
+the Send** — but the Send fires a reCAPTCHA v2 that this camofox fingerprint cannot pass. Measured
+on **REVIVA SOFTWORKS — Product Designer (10126456)**, a genuine on-profile London role, logged in:
+- `apply.py --classify` → `in-platform` (on-page `#application-form`, `input[name=cv]`). NOT the
+  guest external-redirect wall — the logged-in path really does keep you on `jobs.theguardian.com`.
+- `apply.py` filled firstName/lastName/email from config, **uploaded the tailored CV** (bound to
+  `input[name=cv]` — the `uploads/<file>.pdf` basename resolves against the shared upload dir),
+  added the 171-word tailored cover, and unchecked all three marketing opt-ins. **All autonomous.**
+- Clicking **"Send application"** fires an **INVISIBLE reCAPTCHA v2** which, for this fingerprint,
+  escalated to an **image-grid challenge ("Select all images with crosswalks")**. The sanctioned
+  two-phase `recaptcha.py solve-grid` ran (capture → VL tile read → click → verify) across **3
+  verify rounds** — and reCAPTCHA **recycled the pixel-identical 9-tile set every round and never
+  accepted, regardless of correct answers**. That is the classic **low-trust-fingerprint loop**:
+  it is not testing the answer, it is refusing the client. Per CAPTCHA policy we do NOT grind it.
+
+**CONSEQUENCE (this is the operational rule now):** in-platform Guardian = **STAGE-AND-HALT**. The
+loop can fill+upload+cover+opt-out a Guardian in-platform job fully autonomously, then it MUST hand
+the final **Send + reCAPTCHA to a one-time human noVNC pass** (`http://nasirjones:6080/vnc.html` —
+a real pointer/trusted fingerprint clears the grid). Never log `Applied` off an un-confirmed Send;
+`apply.py` returns exit 3 and records a resumable `blockers.py` entry + a `verdicts.py` terminal
+negative so a degraded-window false "submitted" can't sneak in. `recaptcha.py check-type
+jobs.theguardian.com` → `grid` (so future runs expect the challenge, not a silent pass).
+
+Old note (pre-2026-07-18, kept for context): *Madgex boards commonly offer an in-platform "quick
+apply" to logged-in candidates while sending guests to the employer ATS — so the guest-path
+redirect does NOT prove the logged-in path also redirects.* ✅ Confirmed true: logged-in IS
+in-platform. The only surprise was the Send reCAPTCHA being an unpassable loop for this fingerprint.
 
 LOGIN — ✅ PASSWORD LOGIN WORKS (CORRECTED 2026-07-18; the OLD "OTP-only, agent can't log in"
 claim was WRONG). `profile.theguardian.com/signin` DEFAULTS to email-OTP ("Continue with
@@ -76,8 +99,11 @@ candidate pool but yields ~0 confirmable submissions without employer-account cr
 
 ## Honest ceiling (strategic, confirmed 2026-07-17)
 Across the four reachable hard boards (CSJ / Guardian / NHS / MI5-MI6), the only multi-page
-board the agent can FULLY drive to a confirmed submission is **CSJ TAL** (S1+S2). Guardian →
-employer-ATS wall; NHS feed returns only clinical roles (0 on-profile for a design/research CV);
+board the agent can FULLY drive to a *confirmed* submission is **CSJ TAL** (S1+S2). Guardian
+(logged-in) is drivable to a *staged* in-platform application but **not to a confirmed Send** — the
+Send reCAPTCHA v2 loops for this fingerprint (see the tested finding above), so its final step is a
+human noVNC gate, same halt class as CSJ's occasional challenge; NHS feed returns only clinical
+roles (0 on-profile for a design/research CV);
 MI5/MI6 applicationtrack autofill never submits (human-only final vetting page). Realistic
 confirmed submissions from in-scope boards ≈ **4** (all CSJ). Reaching a 477 target needs accounts
 for the 4 account-gated boards (GCHQ / Parliament / TfL / BBC) — that unblock is the user's to

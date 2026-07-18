@@ -16,9 +16,10 @@ login.py for the session):
   3. reach the form (#application-form), fill firstName/lastName/email from apply-defaults.json,
      upload the CV (a plain visible <input type=file> — atsform.upload binds it directly),
      add the cover message, and OPT OUT of the marketing checkboxes.
-  4. reCAPTCHA v2 (sanctioned) → recaptcha.py; verify by screenshot.
-  5. atsform.review (email gate / empty-required) → "Send application".
-  6. capture proof + report.
+  4. "Send application" → the INVISIBLE reCAPTCHA v2 fires. SETTLED 2026-07-18 (REVIVA 10126456):
+     for the camofox fingerprint it escalates to an image-grid that LOOPS the same tiles forever
+     and never accepts — so this is a STAGE-AND-HALT: everything is filled, but the final Send is a
+     one-time human noVNC gate (exit 3 + a resumable blockers.py entry). Not an autonomous submit.
 
 ⛔ Never fabricates, never submits an off-profile role (screen the title with check_title
 first — this driver assumes the caller already did). CAPTCHA policy: only the sanctioned
@@ -176,42 +177,55 @@ def main():
         atsform.fill("cover message", cover)
     _opt_out()
 
-    # reCAPTCHA v2 (sanctioned) — solve + verify by screenshot
-    if _ev("!!document.querySelector('[data-sitekey],iframe[src*=recaptcha],.g-recaptcha')"):
-        print("reCAPTCHA present — attempting the sanctioned recaptcha.py v2 solve...")
-        subprocess.run([sys.executable, RECAPTCHA, "click"], cwd=_ROOT, env=os.environ,
-                       timeout=90, capture_output=True)
-        subprocess.run([sys.executable, RECAPTCHA, "wait-token"], cwd=_ROOT, env=os.environ,
-                       timeout=120, capture_output=True)
-        has_token = _ev("(function(){var t=document.querySelector('textarea[name=g-recaptcha-response]');"
-                        "return t&&t.value&&t.value.length>20?1:0;})()")
-        print("reCAPTCHA token issued:" , bool(has_token))
-        if not has_token:
-            print("⛔ reCAPTCHA did not issue a token for this fingerprint. Everything else is "
-                  "filled — hand the final reCAPTCHA + Send to noVNC "
-                  "(http://nasirjones:6080/vnc.html). Do NOT grind it.", file=sys.stderr)
-            return 3
-
     if no_submit:
-        print("✓ --no-submit: all fields filled, CV bound, reCAPTCHA handled. NOT sending. "
-              "Remove --no-submit to submit.")
+        print("✓ --no-submit: fields filled, CV bound, opt-outs set. NOT sending. (The Send "
+              "reCAPTCHA is INVISIBLE — it only fires when Send is clicked, so it cannot be "
+              "tested without actually submitting; remove --no-submit for a real apply.)")
         return 0
 
-    # Send application + capture proof
+    def _confirmed():
+        return bool(_ev("(function(){var b=document.body?document.body.innerText:'';"
+                        "return /application (sent|submitted|received)|thank you for (your )?appl|"
+                        "we have received your appl/i.test(b)?1:0;})()"))
+
+    # ── Send → the INVISIBLE reCAPTCHA fires HERE (not before). Outcomes:
+    #    (a) passes silently → confirmation;
+    #    (b) escalates to an IMAGE-GRID challenge → hand to noVNC (see the SETTLED finding below);
+    #    (c) silently blocks (no challenge, no confirmation) → hand to noVNC (policy: don't grind).
     _ev("(function(){var b=[].slice.call(document.querySelectorAll('button,input[type=submit]'))"
         ".find(function(e){return /send application/i.test((e.innerText||e.value||''));});"
         "if(b)b.click();return 1;})()")
     time.sleep(5)
-    ok = _ev("(function(){var b=document.body?document.body.innerText:'';"
-             "return /application (sent|submitted|received)|thank you|we have received/i.test(b)?1:0;})()")
-    if ok:
-        print("✓ application sent (confirmation detected). Capture proof + log via "
-              "log-application.py --proof.")
+    if _confirmed():
+        print("✓ application sent (reCAPTCHA passed silently). Capture proof + log.")
         return 0
-    print("⚠️ Send clicked but no confirmation detected — verify on the account dashboard "
-          "(app.welcometothejungle... no: jobs.theguardian.com account/applications) before "
-          "logging Applied.", file=sys.stderr)
-    return 2
+    # SETTLED 2026-07-18 (REVIVA 10126456): when Send escalates to a v2 image-grid, that grid
+    # RECYCLES THE SAME TILES across unlimited verify rounds and never accepts for this camofox
+    # fingerprint — the sanctioned two-phase recaptcha.py solve-grid works mechanically but cannot
+    # satisfy a low-trust-fingerprint loop, and headless Hermes has no interactive VL tile-read
+    # loop anyway. So we do NOT fire solve-grid here (it would only spin Phase-A captures): we
+    # record the challenge type and HAND OFF to noVNC. (An INTERACTIVE agent session may still run
+    # `recaptcha.py solve-grid` by hand to re-confirm the loop — but expect it to loop, not pass.)
+    grid = _ev("(function(){var f=document.querySelector('iframe[src*=\"api2/bframe\"]');"
+               "return f&&f.offsetParent!==null?1:0;})()")
+    try:
+        sys.path.insert(0, os.path.join(_here, "..", "..", "_common", "scripts"))
+        import recaptcha as _rc  # noqa: E402
+        _rc._record_captcha_type("jobs.theguardian.com", "grid" if grid else "invisible")
+    except Exception:
+        pass
+    what = ("in-platform form fully staged (name/email/CV/cover/opt-outs); Send fired a reCAPTCHA "
+            "v2 " + ("image-grid" if grid else "invisible") + " challenge that this fingerprint "
+            "can't clear — needs a one-time human noVNC pass to solve + Send.")
+    subprocess.run([sys.executable, os.path.join(_here, "..", "..", "_common", "scripts",
+                    "blockers.py"), "record", "captcha", "jobs.theguardian.com", "--url", url,
+                    "--what", what], cwd=_ROOT, env=os.environ, capture_output=True)
+    print("⛔ Send did not confirm; the reCAPTCHA " + ("grid " if grid else "")
+          + "won't clear for this fingerprint (recycles/loops — do NOT grind, policy). Everything "
+          "is filled — hand the final Send/reCAPTCHA to noVNC (http://nasirjones:6080/vnc.html). "
+          "Verify on jobs.theguardian.com account applications before logging Applied.",
+          file=sys.stderr)
+    return 3
 
 
 if __name__ == "__main__":
