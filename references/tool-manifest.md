@@ -48,6 +48,7 @@ lists reappear outside `check_title.py`.
 | Drive LinkedIn Easy Apply | `sites/linkedin/scripts/apply_ea.py` | atsform (shadow-DOM modal) |
 | Drive an applicationtrack (MI5/MI6/GCHQ VacancyFiller) eform | `sites/applicationtrack.com/scripts/diagnose.py` (read section status) → `autofill.py` (tracker-driven, per-section-verify, dependent-select handling, config-routed birth fields) | a `/tmp/*drive*.py` bulk driver (blind, no per-section verify — caused the 3790 stall) |
 | Log into Guardian Jobs (Madgex) — PASSWORD, not OTP | `sites/jobs.theguardian.com/scripts/login.py` (goes DIRECT to `/signin/password`; the "password instead" link is a11y-snapshot-invisible; hands the reCAPTCHA to noVNC) | clicking "Continue with email" (→ OTP you can't read) or hunting the snapshot for the link |
+| Apply to a Guardian IN-PLATFORM job (classify + fill + CV upload) | `sites/jobs.theguardian.com/scripts/apply.py <url> --cv <resume.pdf>` (`--classify` = in-platform vs external; `--no-submit` = fill without sending) | driving "Apply on website" (external ATS) or assuming the feed's guardian-direct hint |
 | Headlessly apply the whole queue (Easy Apply) | `scripts/apply_queue.py` | a bespoke sourcing+apply orchestrator |
 | Answer a gating screener (RTW/sponsorship/notice/…) | `screener.py ask "<q>"` (+`learn`) | re-derive per posting |
 | Reuse a company research hook | `company_cache.py get/put "<Company>"` | re-research each time |
