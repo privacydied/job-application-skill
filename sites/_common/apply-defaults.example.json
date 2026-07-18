@@ -29,6 +29,14 @@
     "_note": "Demographic + education facts read at runtime by drivers (e.g. scripts/amazon_apply.py) so your REAL answers go into applications while this repo stays PII-free. Fill YOUR values in the gitignored apply-defaults.json copy.",
     "gender": "[your gender, e.g. Male / Female / Prefer not to answer]",
     "school": "[your university / school name]",
-    "area_of_study": "[your degree subject]"
+    "area_of_study": "[your degree subject]",
+    "country_of_birth": "United Kingdom",
+    "county_of_birth": "[your county of birth]",
+    "town_of_birth": "[your town/city of birth]",
+    "nationality_at_birth": "[your nationality at birth]",
+    "holds_british_nationality": "Yes",
+    "dual_nationality": "No",
+    "other_nationality": "",
+    "resided_outside_uk_10yrs": "No"
   }
 }

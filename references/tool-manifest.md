@@ -46,6 +46,7 @@ lists reappear outside `check_title.py`.
 | Fill a whole ATS form in one process | `atsform.py apply <config>` (`"defaults": true`) | per-field `fill`/`select`/`radio` calls |
 | Drive an Ashby form | `sites/ashbyhq/scripts/ashby.py apply` | atsform (misses Ashby toggle quirks) |
 | Drive LinkedIn Easy Apply | `sites/linkedin/scripts/apply_ea.py` | atsform (shadow-DOM modal) |
+| Drive an applicationtrack (MI5/MI6/GCHQ VacancyFiller) eform | `sites/applicationtrack.com/scripts/diagnose.py` (read section status) → `autofill.py` (tracker-driven, per-section-verify, dependent-select handling, config-routed birth fields) | a `/tmp/*drive*.py` bulk driver (blind, no per-section verify — caused the 3790 stall) |
 | Headlessly apply the whole queue (Easy Apply) | `scripts/apply_queue.py` | a bespoke sourcing+apply orchestrator |
 | Answer a gating screener (RTW/sponsorship/notice/…) | `screener.py ask "<q>"` (+`learn`) | re-derive per posting |
 | Reuse a company research hook | `company_cache.py get/put "<Company>"` | re-research each time |

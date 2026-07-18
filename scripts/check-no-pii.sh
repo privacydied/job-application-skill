@@ -86,7 +86,24 @@ if os.path.exists(prof):
     for m in re.findall(r"\b\d{2}/\d{2}/(?:19|20)\d{2}\b", body):         # DOB dd/mm/yyyy
         add(m)
 
-print("\n".join(sorted(toks)))
+# CREDENTIAL SECRETS from ats-credentials.csv (passwords / API keys / memorable words) must
+# NEVER appear in a tracked file. Checked here, but each is emitted with a `SECRET::` marker so
+# the bash side can print a REDACTED label — a guard must never re-leak the secret it checks.
+secret_lines = []
+try:
+    import csv as _csv
+    with open("ats-credentials.csv", newline="", encoding="utf-8") as f:
+        for r in _csv.DictReader(f):
+            for col, val in (r or {}).items():
+                cl = (col or "").lower()
+                if val and len(val.strip()) >= 5 and any(
+                        k in cl for k in ("password", "secret", "token", "key",
+                                          "pass", "pw", "memorable", "app_key", "apikey")):
+                    secret_lines.append("SECRET::" + val.strip())
+except (OSError, ValueError):
+    pass
+
+print("\n".join(sorted(toks) + secret_lines))
 PY
 )"
 
@@ -96,21 +113,35 @@ if [ -z "${TOKENS//[[:space:]]/}" ]; then
 fi
 
 found=0
+secret_found=0
 while IFS= read -r tok; do
   [ -z "$tok" ] && continue
+  is_secret=0
+  case "$tok" in
+    "SECRET::"*) is_secret=1; tok="${tok#SECRET::}";;   # a credential value — never echo it
+  esac
   hits="$(git ls-files -z 2>/dev/null | xargs -0 grep -ilF -- "$tok" 2>/dev/null)"
   if [ -n "$hits" ]; then
-    echo "✗ personal token '$tok' appears in tracked file(s):"
+    if [ "$is_secret" -eq 1 ]; then
+      echo "🚨 a CREDENTIAL/secret value from ats-credentials.csv appears in tracked file(s):"
+      secret_found=1
+    else
+      echo "✗ personal token '$tok' appears in tracked file(s):"
+    fi
     echo "$hits" | sed 's/^/    /'
     found=1
   fi
 done <<< "$TOKENS"
 
 if [ "$found" -eq 0 ]; then
-  echo "✓ check-no-pii: no personal tokens from your config appear in any tracked file."
+  echo "✓ check-no-pii: no personal tokens or credential secrets appear in any tracked file."
   exit 0
 fi
 echo ""
-echo "Above tokens are your PII and are git-TRACKED. Move that content to a gitignored file"
-echo "(or replace with a placeholder) before committing/pushing. See README '.gitignore'."
+if [ "$secret_found" -eq 1 ]; then
+  echo "🚨 A CREDENTIAL SECRET IS TRACKED. Scrub it (scripts/scrub_pii.py) AND rotate the"
+  echo "credential — it is in git history/remote, which a working-tree scrub does not fix."
+fi
+echo "Above values are PII/secrets and are git-TRACKED. Move to a gitignored file or"
+echo "placeholder before committing/pushing. See README '.gitignore'."
 exit 1

@@ -18,7 +18,7 @@ on-profile junior-mid UX/Service/Product Designer + UR + BA roles across the who
 in one pass — far beyond the per-board scarcity that stalls CSJ/Reed.
 
 ## The credential trap (verified 2026-07-15)
-- `ats-credentials.csv` row `adzuna.co.uk` = `you@example.com` / `[REDACTED-CREDENTIAL]`.
+- `ats-credentials.csv` row `adzuna.co.uk` = `you@example.com` / `[REDACTED — see ats-credentials.csv]`.
   **This is the Adzuna WEBSITE login password, NOT the API key.** It is documented as
   "current, working" for the website ApplyIQ flow in `sites/adzuna.co.uk/NOTES.md`.
 - `feed.py` needs **TWO distinct env vars**: `ADZUNA_APP_ID` + `ADZUNA_APP_KEY`, obtained

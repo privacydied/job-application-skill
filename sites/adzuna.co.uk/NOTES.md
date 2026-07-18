@@ -13,7 +13,7 @@ against whatever account is logged in, and **refuses any value that doesn't matc
 ("This doesn't match your log in email address"). Logging in via Google OAuth signs
 the session in as `you@example.com`, which then blocks the real applicant email
 (`you@example.com`) from ever being entered. **Always use the email/password account**:
-`you@example.com` / `[REDACTED-CREDENTIAL]` (current, working, in `ats-credentials.csv` row
+`you@example.com` / `[REDACTED — see ats-credentials.csv]` (current, working, in `ats-credentials.csv` row
 `adzuna.co.uk` — an earlier password on that row was wrong and has been replaced; if
 login fails, the credential itself is the first thing to check, not OAuth as a
 fallback). If already logged in via Google from a prior session, click **Logout**

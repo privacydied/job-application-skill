@@ -127,29 +127,56 @@ def build_replacements():
         if len(digits) >= 7:
             reps.append((re.compile(re.escape(phone)), "+44 7700 900000"))
             reps.append((re.compile(re.escape(digits)), "447700900000"))
+    # 8) ⛔ CREDENTIAL SECRETS from ats-credentials.csv → a redacting placeholder. Passwords /
+    # API keys / memorable words must NEVER appear in a tracked file (a real leak found a
+    # committed Adzuna password). Read at runtime from the gitignored CSV; the script itself
+    # hardcodes no secret. Most-specific-first (they're long) so they win over any overlap.
+    creds = os.path.join(_ROOT, "ats-credentials.csv")
+    if os.path.exists(creds):
+        try:
+            import csv as _csv
+            secret_vals = set()
+            with open(creds, newline="", encoding="utf-8") as f:
+                for row in _csv.DictReader(f):
+                    for col, val in row.items():
+                        cl = (col or "").lower()
+                        if val and len(val.strip()) >= 5 and any(
+                                k in cl for k in ("password", "secret", "token", "key",
+                                                  "pass", "pw", "memorable", "app_key", "apikey")):
+                            secret_vals.add(val.strip())
+            for v in sorted(secret_vals, key=len, reverse=True):
+                reps.insert(0, (re.compile(re.escape(v)), "[REDACTED — see ats-credentials.csv]"))
+        except (OSError, ValueError):
+            pass
     return reps
 
 
 def tracked_text_files():
-    try:
-        out = subprocess.run(["git", "ls-files", "-z"], cwd=_ROOT, capture_output=True,
-                             text=True, timeout=30).stdout
-    except (OSError, subprocess.SubprocessError):
-        return []
-    files = []
-    for rel in out.split("\0"):
-        rel = rel.strip()
-        if not rel:
-            continue
-        if os.path.splitext(rel)[1].lower() in _SKIP_EXT:
-            continue
-        p = os.path.join(_ROOT, rel)
+    """Every file destined for git: TRACKED + UNTRACKED-not-ignored. Including untracked-not-
+    ignored closes a real leak path — the loop/Hermes creates a NEW note/field-map file with
+    PII (name/DOB/NINO/…), and until it's git-added the tracked-only scan misses it. Gitignored
+    files (profile/tracker/creds) are correctly excluded (they legitimately hold real PII)."""
+    files, seen = [], set()
+    for cmd in (["git", "ls-files", "-z"],                              # tracked
+                ["git", "ls-files", "--others", "--exclude-standard", "-z"]):  # untracked-not-ignored
         try:
-            if os.path.getsize(p) > 2_000_000:
-                continue
-        except OSError:
+            out = subprocess.run(cmd, cwd=_ROOT, capture_output=True, text=True, timeout=30).stdout
+        except (OSError, subprocess.SubprocessError):
             continue
-        files.append(rel)
+        for rel in out.split("\0"):
+            rel = rel.strip()
+            if not rel or rel in seen:
+                continue
+            if os.path.splitext(rel)[1].lower() in _SKIP_EXT:
+                continue
+            p = os.path.join(_ROOT, rel)
+            try:
+                if os.path.getsize(p) > 2_000_000:
+                    continue
+            except OSError:
+                continue
+            seen.add(rel)
+            files.append(rel)
     return files
 
 

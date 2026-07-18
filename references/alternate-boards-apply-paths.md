@@ -94,7 +94,7 @@ on-profile inventory is near-zero. Pivot sequence that was actually tried 2026-0
   `references/adzuna-sourcing-unblock.md`.
 - In one line: `feed.py` needs `ADZUNA_APP_ID` + `ADZUNA_APP_KEY` (free at developer.adzuna.com).
   The `ats-credentials.csv` `adzuna.co.uk` row is WEBSITE login only (`you@example.com` /
-  `[REDACTED-CREDENTIAL]`) — does NOT auth the API. Adzuna's website is anti-bot (search-URL nav
+  `[REDACTED — see ats-credentials.csv]`) — does NOT auth the API. Adzuna's website is anti-bot (search-URL nav
   bounces to homepage), so the JSON API is the only reliable path.
 - **This is the single board with enough aggregated UK inventory to approach a 100-target
   without LinkedIn.** When stalled on CSJ+Reed exhaustion, ask the user for the Adzuna API

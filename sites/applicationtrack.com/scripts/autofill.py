@@ -26,10 +26,15 @@ Usage:
 Exit codes: 0 = all content sections complete (ready for the user's final page);
             1 = stopped with unresolved `needs_human` culprits (reported); 2 = setup error.
 
-The ruleset intentionally covers ONLY high-confidence factual eligibility/screener gates
-(citizenship, age, UK residency, apprenticeship, jobshare, bankruptcy, willingness to be
-vetted). Everything else is `needs_human` on purpose — never fabricated. Extend RULES only
-with facts that are verifiably true from the applicant profile.
+The ruleset covers high-confidence factual eligibility/screener gates (citizenship, age, UK
+residency, apprenticeship, jobshare, bankruptcy, willingness to be vetted) PLUS config-routed
+APPLICANT birth/nationality values (Country / County / Town of birth, nationality at birth,
+dual nationality) read from the gitignored apply-defaults.json `applicant` block — the
+applicant's OWN Personal-Details fields ONLY. A hard family-field guard NEVER fills a
+Father's/Mother's/parent field with the applicant's value (the vetting-form correctness
+invariant), and family free-text + the final page stay `needs_human`. Everything else is
+`needs_human` — never fabricated. Extend RULES/VALUE_RULES only with verifiably-true facts;
+add new applicant values to the config `applicant` block (+ the .example), never to the driver.
 """
 import json
 import os
@@ -56,11 +61,57 @@ RULES = [
     (r"british citizen|are you a british|hold british citizenship", "Yes"),
     (r"\bover (16|17|18)\b|are you over|(16|17|18) years of age|aged 18 or over", "Yes"),
     (r"lived in the uk|resided in the uk|residenc|7 (of|out of) the last 10|uk for \d+ of", "Yes"),
+    (r"free to (remain|take up employment)|free to remain and take", "Yes"),
+    (r"correspondence address.*different|is your correspondence address (the same|different)", "No"),
     (r"agree to the terms|security vetting.*(agree|terms)|i agree to (the|these)", "agree"),
     (r"undischarged bankrupt|are you bankrupt", "No"),
     (r"completed an apprenticeship|since 2010.*apprenticeship|apprenticeship\?", "No"),
     (r"jobshare|job share|applying as a job", "No"),
 ]
+
+# --- Config-routed APPLICANT values (birth/nationality Personal-Details fields) -----------
+# The applicant's OWN birth/nationality facts live in the gitignored apply-defaults.json
+# `applicant` block (AGENTS.md config-routing — the tracked driver holds NO personal values).
+# VALUE_RULES map a culprit question to an `applicant`-block KEY; an absent value ⇒ needs_human
+# (never fabricated). ⛔ A hard family-field guard means a Father's/Mother's/parent field is
+# NEVER filled with the APPLICANT's value (the vetting-form correctness invariant).
+_FAMILY_Q = re.compile(r"father|mother|parent|spouse|partner|guardian|next of kin|sibling|"
+                       r"child|dependant|dependent", re.I)
+VALUE_RULES = [
+    (r"country (where|in which) you (were|was) born|country of birth", "country_of_birth"),
+    (r"county (in which )?you (were|was) born|county of birth", "county_of_birth"),
+    (r"town.*(where|in which) you (were|was) born|town/?\s*city of birth", "town_of_birth"),
+    (r"nationality at birth", "nationality_at_birth"),
+    (r"do you (currently )?(have|hold) british nationality", "holds_british_nationality"),
+    (r"do you hold dual nationality|any other nationality or citizenship( other)?", "dual_nationality"),
+    (r"please give\b.*dual nationality|which.*dual national", "other_nationality"),
+    (r"resided outside.*uk.*(10|ten)|lived outside the uk.*(10|ten)|outside of the uk over the past 10", "resided_outside_uk_10yrs"),
+]
+
+
+def _applicant():
+    """The gitignored applicant config block (birth/nationality/demographics), or {}."""
+    try:
+        cfg = os.path.join(_here, "..", "..", "_common", "apply-defaults.json")
+        return json.load(open(cfg, encoding="utf-8")).get("applicant", {}) or {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def resolve_value(question):
+    """Config-routed VALUE for the applicant's OWN birth/nationality Personal-Details fields.
+    Returns the config value string, or None (⇒ needs_human) when the question is a FAMILY
+    field, is user-only free-text, is unmatched, or the value is absent from the config.
+    Never fabricates; never fills a parent's field with the applicant's data."""
+    q = (question or "").strip()
+    if not q or _FAMILY_Q.search(q) or USER_ONLY.search(q):
+        return None
+    app = _applicant()
+    for pat, key in VALUE_RULES:
+        if re.search(pat, q, re.I):
+            v = str(app.get(key) or "").strip()
+            return v or None
+    return None
 
 # Guardrails: questions we must NEVER auto-answer (personal secret / legal declaration /
 # free-text competency). These are user-only even if a rule pattern grazes them.
@@ -116,6 +167,26 @@ def _fill_select(name, token):
     return cfx.evaluate(js)
 
 
+def _fill_text(name, value):
+    """Set a text INPUT via the native value-setter (VacancyFiller reads the model on change).
+    Used ONLY for config-resolved structured fields (e.g. town of birth) — never arbitrary
+    free-text. Returns 'OK' / 'SET_NOEFFECT' / 'NO_FIELD'."""
+    js = (
+        "(function(){var e=document.querySelector(\"input[name='%s']\");if(!e)return 'NO_FIELD';"
+        "var set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;"
+        "set.call(e,%s);e.dispatchEvent(new Event('input',{bubbles:true}));"
+        "e.dispatchEvent(new Event('change',{bubbles:true}));"
+        "return e.value===%s?'OK':'SET_NOEFFECT';})()"
+    ) % (name, json.dumps(value), json.dumps(value))
+    return cfx.evaluate(js)
+
+
+def _resolve(question):
+    """Unified answer resolution: an eligibility-gate token (Yes/No/agree) OR a config-routed
+    APPLICANT birth/nationality value, or None (⇒ needs_human). Gates take precedence."""
+    return resolve_answer(question) or resolve_value(question)
+
+
 def _save_and_continue():
     js = (
         "(function(){var b=[...document.querySelectorAll('input[type=submit],button[type=submit],button')]"
@@ -155,12 +226,29 @@ def _submit_ready():
     return bool(_read("!!document.querySelector('button[name=submit_button],input[name=submit_button]')"))
 
 
+# Settle between intra-section fill rounds: lets a DEPENDENT select's options populate after
+# its parent is set (e.g. County only lists options once Country is chosen), and lets a
+# reverted value re-surface as a culprit so the next round re-fills it.
+_SETTLE = 1.5
+
+
 # --- One section: classify + (optionally) fill its named culprits ------------------------
 
-def process_section(section, dry=False):
+def process_section(section, dry=False, rounds=3):
     """Navigate to a section, fill the resolvable non-hidden culprits, and return a report.
     Records — filled / skipped_hidden / needs_human — but never touches a hidden field and
-    never fabricates an answer."""
+    never fabricates an answer.
+
+    PER-SECTION VERIFY + DEPENDENT-SELECT HARDENING (2026-07-18): instead of filling each
+    culprit ONCE and advancing, it re-reads the SITE's culprit list up to `rounds` times,
+    re-filling any resolvable culprit the site still flags. This fixes two real MI5/GCHQ
+    stalls: (a) a DEPENDENT select (County depends on Country) whose options aren't populated
+    until its parent is set — round 1 sets Country, the settle lets County populate, round 2
+    sets County; and (b) a value that reverts on the framework's re-render — it re-appears as
+    a culprit and gets re-filled. A field that DROPS OFF the culprit list is confirmed
+    committed (the site's own completeness check), so we advance only when no resolvable
+    culprit remains. An intra-section no-progress guard (same pending set two rounds running)
+    prevents any loop, in addition to the outer pass cap."""
     rep = {"section": section["section"], "filled": [], "skipped_hidden": [], "needs_human": []}
     if section.get("href"):
         try:
@@ -170,36 +258,70 @@ def process_section(section, dry=False):
             rep["needs_human"].append({"field": "?", "why": f"could not open section: {e}"})
             return rep
 
+    filled_fields, recorded_hidden, last_fail = set(), set(), {}
+    prev_pending = None
+    for rnd in range(max(1, rounds)):
+        pending = []
+        for c in _culprits():
+            field = c.get("field", "?")
+            if c.get("hidden"):
+                # Skip-by-construction: a display:none field is never the blocker.
+                if field not in recorded_hidden:
+                    rep["skipped_hidden"].append({"field": field, "question": c.get("question", "")})
+                    recorded_hidden.add(field)
+                continue
+            if _resolve(c.get("question", "")) is None:
+                continue  # unresolvable → needs_human, handled after the rounds
+            pending.append(c)          # site STILL flags it as incomplete this round
+        pend_fields = sorted(c.get("field") for c in pending)
+        if not pending:
+            break                       # every resolvable culprit is committed
+        if rnd > 0 and pend_fields == prev_pending:
+            break                       # intra-section no-progress guard — stop retrying
+        prev_pending = pend_fields
+        for c in pending:
+            field, typ, q = c.get("field"), c.get("type"), c.get("question", "")
+            token = _resolve(q)
+            if dry:
+                if field not in filled_fields:
+                    rep["filled"].append({"field": field, "answer": token, "type": typ, "dry": True})
+                    filled_fields.add(field)
+                continue
+            if typ == "radio":
+                r = _fill_radio(field, token)
+            elif c.get("tag") == "SELECT" or typ in ("select-one", "select"):
+                r = _fill_select(field, token)
+            elif typ == "text" and resolve_value(q) is not None and resolve_answer(q) is None:
+                # A config-resolved STRUCTURED text field (e.g. town of birth) — never an
+                # arbitrary free-text culprit (those stay user-only below).
+                r = _fill_text(field, token)
+            else:
+                r = "NON_RADIO_SELECT"   # free-text / textarea / checkbox — user-only
+            if r == "OK":
+                if field not in filled_fields:
+                    rep["filled"].append({"field": field, "answer": token, "type": typ})
+                    filled_fields.add(field)
+            else:
+                last_fail[field] = r     # NO_OPTION on a select ⇒ likely dependent; retry next round
+        if dry:
+            break
+        time.sleep(_SETTLE)              # dependent selects populate / reverts re-surface
+
+    # After the rounds, anything the site STILL flags (visible) is unresolved → needs_human,
+    # with a hint when it looks like a dependent-select ordering problem.
     for c in _culprits():
         field = c.get("field", "?")
-        q = c.get("question", "")
-        if c.get("hidden"):
-            # Skip-by-construction. A display:none field is never the blocker and no human
-            # could fill it either; recording + ignoring is the whole point of this driver.
-            rep["skipped_hidden"].append({"field": field, "question": q})
+        if c.get("hidden") or field in filled_fields:
             continue
-        token = resolve_answer(q)
-        if token is None:
-            rep["needs_human"].append({"field": field, "question": q, "type": c.get("type")})
-            continue
-        if dry:
-            rep["filled"].append({"field": field, "answer": token, "type": c.get("type"), "dry": True})
-            continue
-        typ = c.get("type")
-        if typ == "radio":
-            r = _fill_radio(field, token)
-        elif c.get("tag") == "SELECT" or typ in ("select-one", "select"):
-            r = _fill_select(field, token)
+        q, typ = c.get("question", ""), c.get("type")
+        if _resolve(q) is None:
+            rep["needs_human"].append({"field": field, "question": q, "type": typ})
         else:
-            # We only auto-fill radios/selects (Yes/No/agree gates). Text/checkbox culprits
-            # (free-text, declaration) are deliberately user-only here.
-            rep["needs_human"].append({"field": field, "question": q, "type": typ,
-                                        "why": "non radio/select culprit — user-only in v1"})
-            continue
-        if r == "OK":
-            rep["filled"].append({"field": field, "answer": token, "type": typ})
-        else:
-            rep["needs_human"].append({"field": field, "question": q, "type": typ, "why": f"fill={r}"})
+            lf = last_fail.get(field, "?")
+            why = f"fill={lf}"
+            if lf == "NO_OPTION":
+                why += " — dependent select? set its PARENT first (e.g. Country before County), let its options populate, then retry"
+            rep["needs_human"].append({"field": field, "question": q, "type": typ, "why": why})
 
     if not dry and rep["filled"]:
         _save_and_continue()
@@ -353,6 +475,55 @@ def selftest():
         except Exception:  # noqa: BLE001
             pass
 
+    # (D) DEPENDENT SELECT: County only lists options once Country is set. Proves the
+    # round-retry hardening — fill Country, settle (its onchange populates County), then County.
+    tab2 = cfx.open_tab("about:blank")
+    cfx.set_tab(tab2)
+    time.sleep(1)
+    dep_html = (
+        "<select name='ctry'><option value=''>Select</option>"
+        "<option value='uk'>United Kingdom</option></select>"
+        "<select name='cnty'><option value=''>Select</option></select>"
+    )
+    cfx.evaluate(
+        "(function(){document.body.innerHTML=" + _json.dumps(dep_html) + ";"
+        "document.querySelector(\"select[name='ctry']\").addEventListener('change',function(){"
+        "var c=document.querySelector(\"select[name='cnty']\");"
+        "if(this.value==='uk'&&c.options.length<2){var o=document.createElement('option');"
+        "o.value='gl';o.text='Greater London';c.add(o);}});return 1;})()")
+    time.sleep(0.3)
+    try:
+        if _fill_select("cnty", "greater london") != "NO_OPTION":
+            fails.append("dependent County should be NO_OPTION before Country is set")
+        if _fill_select("ctry", "united kingdom") != "OK":
+            fails.append("Country select did not set OK")
+        time.sleep(0.4)   # settle: Country's onchange populates County's options
+        if _fill_select("cnty", "greater london") != "OK":
+            fails.append("dependent County did not set OK after Country populated it (round-retry broken)")
+    except Exception as e:  # noqa: BLE001
+        fails.append(f"dependent-select mock raised: {e}")
+    finally:
+        try:
+            cfx.close_tab(tab2)
+        except Exception:  # noqa: BLE001
+            pass
+
+    # (E) Config-routed APPLICANT values + the ⛔ FAMILY-FIELD GUARD (pure). The vetting-form
+    # correctness invariant: a Father's/Mother's/parent field is NEVER filled with the
+    # applicant's own value, and user-only free-text never auto-resolves.
+    if resolve_value("Father's Nationality at Birth") is not None:
+        fails.append("FAMILY GUARD BROKEN — a Father's field resolved to an applicant value")
+    if resolve_value("Mother's Place of Birth (Town and Country)") is not None:
+        fails.append("FAMILY GUARD BROKEN — a Mother's field resolved to an applicant value")
+    if resolve_value("Please provide a memorable word") is not None:
+        fails.append("user-only guard broken — memorable word resolved to a value")
+    if resolve_value("What is your favourite colour?") is not None:
+        fails.append("unrelated question wrongly resolved to a config value")
+    _app = _applicant()
+    if _app.get("country_of_birth") and \
+            resolve_value("Country where you were born") != str(_app["country_of_birth"]).strip():
+        fails.append("applicant country-of-birth did not resolve from the config")
+
     # (C) Progress guard is a pure decision: identical incomplete set + 0 filled ⇒ STOP.
     def would_stop(inc_names, prev, filled_this_pass):
         return inc_names == prev and filled_this_pass == 0
@@ -372,6 +543,8 @@ def selftest():
     print("  answer resolution: 10/10 (facts resolve, personal+unknown -> needs_human)")
     print("  hidden field: flagged + never filled (skip-by-construction)")
     print("  visible resolvable field: filled OK")
+    print("  dependent select: NO_OPTION before parent set, OK after parent populates it")
+    print("  config values: applicant birth fields resolve; FAMILY/parent fields never do")
     print("  progress guard: stops on no-progress, continues on progress")
     return 0
 
