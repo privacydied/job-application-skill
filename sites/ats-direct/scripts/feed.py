@@ -79,7 +79,7 @@ def load_companies(path=COMPANIES):
     out = []
     try:
         with open(path, newline="", encoding="utf-8") as f:
-            for row in csv.DictReader(l for l in f if l.strip() and not l.startswith("#")):
+            for row in csv.DictReader(ln for ln in f if ln.strip() and not ln.startswith("#")):
                 slug = (row.get("slug") or "").strip()
                 ats = (row.get("ats") or "").strip().lower()
                 if not slug or not ats:

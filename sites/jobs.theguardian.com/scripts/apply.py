@@ -53,7 +53,6 @@ _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, "..", "..", "_common", "scripts"))
 import cfx        # noqa: E402
 import atsform    # noqa: E402
-import httpfeed   # noqa: E402
 
 LOGIN = os.path.join(_here, "login.py")
 RECAPTCHA = os.path.join(_here, "..", "..", "_common", "scripts", "recaptcha.py")

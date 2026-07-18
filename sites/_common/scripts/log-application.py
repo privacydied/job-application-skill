@@ -48,7 +48,6 @@ Exit codes: 0 wrote/updated · 2 bad input/IO.
 """
 import csv
 import os
-import re
 import sys
 import tempfile
 import time

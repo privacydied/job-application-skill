@@ -8,7 +8,10 @@ resulting index.cgi?SID= URL that feed.py needs.
 Usage: csj_search.py "<keyword>" [pages]
   prints the SID nav URL to stdout (the value to put in searches.csv csj row / pass to feed.py --nav)
 """
-import sys, time, json, re, os
+import sys
+import time
+import json
+import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "sites", "_common", "scripts"))
 import cfx
 

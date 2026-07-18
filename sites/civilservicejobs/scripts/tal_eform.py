@@ -26,11 +26,15 @@ Usage:
       stopAtPage: N   (don't Continue past this page; e.g. 5 = Declaration, then submit)
 The driver auto-discovers pages by walking 'Continue' until the final submit.
 """
-import sys, os, json, time, argparse
+import sys
+import os
+import json
+import time
+import argparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "_common", "scripts"))
-import cfx
+import cfx  # noqa: E402
 
 POST = cfx.post  # noqa
 _EOFORM_BASE = None  # set in main()

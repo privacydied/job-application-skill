@@ -28,7 +28,7 @@ CLI:
 import json
 import os
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from fsutil import locked_append  # noqa: E402

@@ -50,7 +50,6 @@ reading, since it locks scroll and hides cards.
 """
 import json
 import os
-import re
 import sys
 import time
 from urllib.parse import urlencode, urlparse, urlunparse, parse_qsl

@@ -27,10 +27,12 @@ CRITICAL Reed wedge (cost real time this session):
 Usage: python3 reed_apply.py <job_id> [<job_id> ...] [--dry]
   (job_id = the trailing digits in the Reed URL, e.g. 57108922)
 """
-import sys, os, time, json
+import sys
+import os
+import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "sites", "_common", "scripts"))
-import cfx
+import cfx  # noqa: E402
 
 
 def ev(expr, tries=8):

@@ -25,18 +25,26 @@ import unittest
 # The functions under test print status lines to stdout ("OK= fill …", "REVIEW …").
 # Silence stdout for the run so the output is just the unittest summary — failures
 # still surface (unittest writes results to stderr). Restored after the module.
+# Under pytest, do NOT reassign sys.stdout — pytest already captures output, and swapping it
+# fights pytest's fd-capture, raising "I/O operation on closed file" at capture teardown. The
+# swap here would also leak into other test modules in the same session (they share sys.stdout).
 _REAL_STDOUT = sys.stdout
+_UNDER_PYTEST = "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ
 
 
 def setUpModule():
-    sys.stdout = open(os.devnull, "w")
+    global _REAL_STDOUT
+    if not _UNDER_PYTEST:
+        _REAL_STDOUT = sys.stdout
+        sys.stdout = open(os.devnull, "w")
 
 
 def tearDownModule():
-    try:
-        sys.stdout.close()
-    finally:
-        sys.stdout = _REAL_STDOUT
+    if not _UNDER_PYTEST:
+        try:
+            sys.stdout.close()
+        finally:
+            sys.stdout = _REAL_STDOUT
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _SCRIPTS = os.path.join(_HERE, "..", "sites", "_common", "scripts")
@@ -831,7 +839,8 @@ class TestDataIntegrity(unittest.TestCase):
         # (and was permanently red on a concurrent track's malformed-CSV rows). Verify the real
         # invariant behaviorally: plan() passes the nav keyword, and falls back to the column
         # only when the nav has none (the fixed-QUERY boards csj/hackney/wttj).
-        import board_cooldown as bc2, search_plan
+        import board_cooldown as bc2
+        import search_plan
         orig = (bc2.remaining_hours, bc2.expected_yield, search_plan.applied_today)
 
         def run_key(search):
@@ -860,7 +869,9 @@ class TestApplyQueueExit(unittest.TestCase):
     """Contract: apply_queue exits 9 when the run stops on a dead tab (docstring says '9
     no-tab' — previously it fell through to return 0)."""
     def test_tab_dead_exits_9(self):
-        import tempfile, importlib.util, json as _json
+        import tempfile
+        import importlib.util
+        import json as _json
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         spec = importlib.util.spec_from_file_location(
             "apply_queue", os.path.join(root, "scripts", "apply_queue.py"))
@@ -924,8 +935,9 @@ class TestLinkedinRateLimit(unittest.TestCase):
         self.assertFalse(rl.detect(fake_err))   # flaky read never blocks the loop
 
     def test_cooldown_roundtrip_isolated(self):
-        import board_cooldown as bc, tempfile
-        rl = self._rl()
+        import board_cooldown as bc
+        import tempfile
+        self._rl()
         saved_log = bc.LOG
         bc.LOG = os.path.join(tempfile.mkdtemp(), "board-cooldown.csv")
         try:
@@ -937,7 +949,8 @@ class TestLinkedinRateLimit(unittest.TestCase):
             bc.LOG = saved_log
 
     def test_plan_excludes_rate_limited_board(self):
-        import search_plan as sp, board_cooldown as bc
+        import search_plan as sp
+        import board_cooldown as bc
         saved = (bc.daily_limit_active, bc.remaining_hours, bc.expected_yield,
                  bc._read_rows, bc._read_yield_rows)
         bc.daily_limit_active = lambda board, **k: bc.norm(board) == "linkedin"
@@ -977,7 +990,9 @@ class TestLinkedinRateLimit(unittest.TestCase):
             rl.DEFERRED = saved
 
     def test_apply_queue_trips_and_defers_on_detected_limit(self):
-        import importlib.util, tempfile, json as _json
+        import importlib.util
+        import tempfile
+        import json as _json
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         spec = importlib.util.spec_from_file_location(
             "apply_queue", os.path.join(root, "scripts", "apply_queue.py"))
@@ -1008,7 +1023,7 @@ class TestLinkedinRateLimit(unittest.TestCase):
         orig_argv = sys.argv
         sys.argv = ["apply_queue.py"]
         try:
-            code = aq.main()
+            aq.main()
         finally:
             sys.argv = orig_argv
             aq.subprocess.run = orig_run
@@ -1021,7 +1036,9 @@ class TestLinkedinRateLimit(unittest.TestCase):
     def test_apply_queue_trips_on_rc8_even_if_detect_misses(self):
         """apply_ea rc==8 (limit detected at source) must trip+save+stop even when the
         queue's own banner scan misses (modal already dismissed)."""
-        import importlib.util, tempfile, json as _json
+        import importlib.util
+        import tempfile
+        import json as _json
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         spec = importlib.util.spec_from_file_location(
             "apply_queue3", os.path.join(root, "scripts", "apply_queue.py"))
@@ -1058,7 +1075,9 @@ class TestLinkedinRateLimit(unittest.TestCase):
         self.assertEqual(len(deferred), 1)
 
     def test_apply_queue_skips_drain_when_limit_active(self):
-        import importlib.util, tempfile, json as _json
+        import importlib.util
+        import tempfile
+        import json as _json
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         spec = importlib.util.spec_from_file_location(
             "apply_queue2", os.path.join(root, "scripts", "apply_queue.py"))
@@ -1280,7 +1299,6 @@ class TestGuardianFeed(unittest.TestCase):
         self.assertEqual(m._canonical_url(" \n\t/job/10126456/product-designer/?q=1"),
                          "https://jobs.theguardian.com/job/10126456/product-designer/")
         # free-text search is the Keywords param, not a path segment
-        from urllib.parse import urlparse, parse_qs
         u = m._search_url("user experience")
         self.assertIn("Keywords=user+experience", u)
         # cooldown key: Keywords param (case-insensitive) matches searches.csv 'query' after norm()
@@ -1550,7 +1568,6 @@ class TestTheDotsFeed(unittest.TestCase):
         self.assertEqual(m._query_from_nav("https://the-dots.com/jobs/search?q=UX+Designer"), "UX Designer")
         self.assertEqual(m._query_from_nav(""), "")
         # search body: keyword → data.query + relevance; empty → latest
-        import json as _j
         captured = {}
         m._req = lambda url, method="GET", body=None, token=None, timeout=30: captured.update(body=body) or {"data": []}
         m._search_page("tok", 1, "UX Designer")
@@ -1608,7 +1625,8 @@ class TestGenQueries(unittest.TestCase):
                              "bundles must be mutually distinct cooldown lanes")
 
     def test_board_filter(self):
-        import io, contextlib
+        import io
+        import contextlib
         m = self._load()
         orig = sys.argv
         try:
@@ -1686,7 +1704,9 @@ class TestPipelineScreenCap(unittest.TestCase):
     """Silent-cap fix: survivors past --screen-limit are queued UNSCREENED, and the count is
     surfaced (counts.screen_capped) + marked on the row (screen_skipped), not silently dropped."""
     def test_screen_cap_surfaced(self):
-        import pipeline, tempfile, types
+        import pipeline
+        import tempfile
+        import types
         survivors = [{"url": f"u{i}", "title": "Product Designer", "company": "C",
                       "verdict": "keep", "eligibility": {"tier": "A"}} for i in range(45)]
         saved = (pipeline.sp.plan, pipeline.run_feed,
@@ -1724,7 +1744,8 @@ class TestPipelineScreenCap(unittest.TestCase):
 class TestJdLocationSignal(unittest.TestCase):
     """jd.extract's london signal must be word-bounded (Londonderry/New London != London)."""
     def _extract_with_text(self, jd_text):
-        import json as _json, jd
+        import json as _json
+        import jd
         payload = _json.dumps({"jd_text": jd_text, "title": "Data Analyst", "requirements": [],
                                "h1": "", "meta": {}, "form": {}, "hidden_raw": []})
         orig = _cfx.evaluate
@@ -1743,7 +1764,8 @@ class TestJdLocationSignal(unittest.TestCase):
 class TestSearchPlanPerf(unittest.TestCase):
     """G.3: plan() parses each cooldown CSV ONCE for the whole pass, not once per search."""
     def test_plan_reads_cooldown_csvs_once_not_per_search(self):
-        import board_cooldown as bc, search_plan
+        import board_cooldown as bc
+        import search_plan
         counts = {"r": 0, "y": 0}
         orig_r, orig_y = bc._read_rows, bc._read_yield_rows
         bc._read_rows = lambda *a, **k: (counts.__setitem__("r", counts["r"] + 1) or orig_r(*a, **k))
@@ -1761,7 +1783,8 @@ class TestSearchPlanPerf(unittest.TestCase):
 class TestScreenerMemo(unittest.TestCase):
     """G.2: _rows memoized on mtime + _compiled caches; record() (bumps mtime) invalidates."""
     def setUp(self):
-        import screener, tempfile
+        import screener
+        import tempfile
         self.s = screener
         self._orig = screener.CSV
         self._dir = tempfile.mkdtemp()
@@ -1790,7 +1813,8 @@ class TestScreenerMemo(unittest.TestCase):
 class TestCompanyCache(unittest.TestCase):
     """G.1: put() is a locked, atomic read-modify-write (no lost rows / torn reads)."""
     def setUp(self):
-        import company_cache, tempfile
+        import company_cache
+        import tempfile
         self.cc = company_cache
         self._orig = company_cache.CSV
         self._dir = tempfile.mkdtemp()
@@ -1816,7 +1840,8 @@ class TestLoadSeen(unittest.TestCase):
     Regex over RAW lines so a malformed/quoted tracker row can't break dedup (which would
     resurface an already-applied posting → duplicate application)."""
     def test_extract_and_quote_proof_and_missing(self):
-        import precheck, tempfile
+        import precheck
+        import tempfile
         d = tempfile.mkdtemp()
         t = os.path.join(d, "tracker.csv")
         with open(t, "w", encoding="utf-8") as f:
@@ -1941,7 +1966,8 @@ class TestSearchPlan(unittest.TestCase):
     def test_done_reports_available_inventory_not_exhaustion(self):
         """Footgun fix: when the target is met but searches are still CLEAR, DONE must say so
         (clear_available>0 + a 'raise APPLY_TARGET' note) instead of looking like exhaustion."""
-        import search_plan as sp2, board_cooldown as bc2
+        import search_plan as sp2
+        import board_cooldown as bc2
         saved = (bc2.remaining_hours, bc2.daily_limit_active, bc2.expected_yield,
                  bc2._read_rows, bc2._read_yield_rows, sp2.applied_today)
         bc2.remaining_hours = lambda *a, **k: 0            # nothing cooling
@@ -2735,7 +2761,8 @@ class TestAuditRecipe(unittest.TestCase):
     def test_precheck_flags_tracked_rows_with_a_readable_reason(self):
         """The recipe reads `drop` + verdict_reason to find already-applied rows. If the
         wording or the bucket changes, the documented audit silently stops working."""
-        import importlib.util, tempfile, json as _json
+        import importlib.util
+        import tempfile
         root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         spec = importlib.util.spec_from_file_location(
             "precheck_audit_t", os.path.join(root, "sites", "_common", "scripts", "precheck.py"))
@@ -2748,10 +2775,10 @@ class TestAuditRecipe(unittest.TestCase):
                      "Applied,,\n")
             tracker = fh.name
         try:
-            tracked = m.load_tracker(tracker) if "tracker" in m.load_tracker.__code__.co_varnames \
+            m.load_tracker(tracker) if "tracker" in m.load_tracker.__code__.co_varnames \
                 else None
         except Exception:
-            tracked = None
+            pass
         # canon_ids must fold the CSJ jcode URL to its stable id — that is what the audit
         # matches "already tracked" on.
         ids = m.canon_ids("https://www.civilservicejobs.service.gov.uk/csr/jobs.cgi?jcode=1234567")

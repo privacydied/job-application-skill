@@ -3,7 +3,11 @@
 Opens a FRESH tab, navigates to login.cgi, fills creds from ats-credentials.csv,
 clicks Sign in, verifies the logged-in state ("Sign out" present).
 """
-import sys, time, csv, json, os
+import sys
+import time
+import csv
+import json
+import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "sites", "_common", "scripts"))
 import cfx
 

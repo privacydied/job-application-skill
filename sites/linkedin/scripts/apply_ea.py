@@ -255,7 +255,7 @@ def run(job, company, role, resume, source, notes, max_attempts, dry_run):
                 ea("next")
                 time.sleep(2)
                 continue
-            if "additional" in low or any("?" in l for l in labels):
+            if "additional" in low or any("?" in lbl for lbl in labels):
                 # Answer every label we CAN (known or bank). A label we can't answer
                 # yet isn't a hard stop — `next` will tell us exactly which required
                 # fields are still empty (BLOCKED_UNANSWERED_REQUIRED carries the full

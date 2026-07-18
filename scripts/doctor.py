@@ -175,7 +175,7 @@ def check_examples():
                     tw = json.load(open(twin, encoding="utf-8"))
                     if isinstance(exdata, dict) and isinstance(tw, dict):
                         missing = set(exdata) - set(tw)
-                        extra = set(tw) - set(exdata)
+                        set(tw) - set(exdata)
                         # extra real keys are fine (real config can hold more); MISSING keys in
                         # the real twin that the example documents is the drift worth flagging.
                         if missing:
@@ -225,7 +225,7 @@ def main():
             mark = {"PASS": "✓", "WARN": "⚠", "FAIL": "✗"}[lvl]
             print(f"  {mark} {msg}")
     print(f"\ndoctor: {fails} FAIL, {warns} WARN, "
-          f"{sum(1 for l,_ in _RESULTS if l=='PASS')} PASS")
+          f"{sum(1 for lvl,_ in _RESULTS if lvl=='PASS')} PASS")
     return 1 if fails else 0
 
 

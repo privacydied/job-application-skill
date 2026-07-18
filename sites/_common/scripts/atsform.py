@@ -178,7 +178,8 @@ def fill(label, value, quiet_notfound=False):
         print(f"FAIL fill: no text field for label ~{label!r}")
         return 1
     _read = f"(()=>{{const e=document.querySelector({_js(sel)});return e?e.value:null;}})()"
-    alnum = lambda s: re.sub(r"[^a-z0-9]", "", (s or "").lower())
+    def alnum(s):
+        return re.sub(r"[^a-z0-9]", "", (s or "").lower())
     # IDEMPOTENCY: if the field ALREADY holds this value, don't re-type it. Re-running
     # `apply <config>` to fix ONE missed field would otherwise re-type EVERY field from
     # scratch — slow, and on controlled React inputs a blind re-type can DOUBLE the

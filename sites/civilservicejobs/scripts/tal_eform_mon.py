@@ -3,13 +3,17 @@
 fills fields, clicks Continue, and after each advance prints URL + any
 validation problem so we can see exactly where it sticks. Reuses tal_eform's
 field setters (native .click() for radios/checkboxes, setter+events for text)."""
-import sys, os, json, time, argparse
+import sys
+import os
+import json
+import time
+import argparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "_common", "scripts"))
-import cfx
+import cfx  # noqa: E402
 sys.path.insert(0, HERE)
-import tal_eform as T
+import tal_eform as T  # noqa: E402
 
 _EOFORM = None
 LOG = []

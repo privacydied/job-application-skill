@@ -32,7 +32,7 @@ import os
 import re
 import sys
 import time
-from urllib.parse import urlencode, urlparse, parse_qs
+from urllib.parse import urlencode
 
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, "..", "..", "_common", "scripts"))

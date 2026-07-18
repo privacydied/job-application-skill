@@ -102,9 +102,9 @@ def _board_quirks(board):
     notes = os.path.join(d, "NOTES.md")
     if os.path.isfile(notes):
         try:
-            head = [l.rstrip() for l in open(notes, encoding="utf-8").read().splitlines()
-                    if l.strip()][:18]
-            return "NOTES.md (head):\n" + "\n".join("  " + l for l in head)
+            head = [ln.rstrip() for ln in open(notes, encoding="utf-8").read().splitlines()
+                    if ln.strip()][:18]
+            return "NOTES.md (head):\n" + "\n".join("  " + ln for ln in head)
         except OSError:
             pass
     return "(no board notes found)"

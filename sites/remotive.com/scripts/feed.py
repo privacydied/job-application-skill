@@ -35,7 +35,6 @@ as `description`); reaching the ATS to APPLY may need the account/driver for tha
 Usage:
     python3 feed.py [--what designer] [--limit 50] [--europe] [--all] [--force]
 """
-import datetime
 import json
 import os
 import sys

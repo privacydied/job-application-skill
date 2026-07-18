@@ -103,7 +103,7 @@ def fit(jd_text, title="", family=""):
         return 0.5
     uniq = set(toks)
     matched = sum(weights.get(t, 0.0) for t in uniq)
-    possible = sum(weights.get(t, 0.0) for t in uniq) + 1e-9
+    sum(weights.get(t, 0.0) for t in uniq) + 1e-9
     # coverage: fraction of the JD's *distinct informative* tokens the profile knows about,
     # weighted. Anchored so a totally-unknown JD ~0, a heavily-overlapping one ~1.
     known = sum(1 for t in uniq if t in weights)

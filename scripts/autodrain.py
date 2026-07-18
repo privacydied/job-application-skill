@@ -173,7 +173,7 @@ def main():
     cap = int(opt("--max", default_cap))
 
     if not go:
-        print(f"\nDRY-RUN (no applications submitted). --go to drain.")
+        print("\nDRY-RUN (no applications submitted). --go to drain.")
         print(f"  code-only drivable now: {n_reed} Reed + {n_ea} Easy-Apply "
               f"(cap would be {cap}; APPLY_TARGET={target}, applied_today={applied_today})")
         print(f"  needs model judgment (left in queue): {n_needs} "

@@ -180,7 +180,8 @@ def salary_for(title, location, cache):
     tl, ll = (title or "").lower(), (location or "").lower()
     # Same word-boundary+new-lookbehind guard as screen_location: a bare `"london" in ll`
     # would attach a London salary median to "Londonderry"/"New London" (naive-match class).
-    london = lambda s: bool(re.search(r"(?<!new )\blondon\b", s))
+    def london(s):
+        return bool(re.search(r"(?<!new )\blondon\b", s))
     for row in cache:
         role = (row.get("Role") or "").lower()
         loc = (row.get("Location") or "").lower()
@@ -279,8 +280,8 @@ def precheck(cands):
         entry["eligibility"] = elig
         if not elig.get("eligible"):
             if elig.get("discipline_flag"):
-                reason = (f"off-profile discipline — industrial 'design engineer' "
-                          f"(electrical/ICT/mechanical/CAD/…), not a UX/creative role")
+                reason = ("off-profile discipline — industrial 'design engineer' "
+                          "(electrical/ICT/mechanical/CAD/…), not a UX/creative role")
             elif elig.get("seniority_flag"):
                 reason = "title carries a seniority word — off-profile"
             else:

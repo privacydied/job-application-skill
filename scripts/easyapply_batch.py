@@ -33,12 +33,17 @@ Queue line:  EA|Product Designer|Acme|https://www.linkedin.com/jobs/view/1234567
 The script updates the ambient tab via cfx.set_tab() after any self-heal (no file
 write needed within one run).
 """
-import sys, os, time, json, subprocess, re
+import sys
+import os
+import time
+import json
+import subprocess
+import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)                       # skill root (sites/..)
 sys.path.insert(0, os.path.join(ROOT, "_common", "scripts"))
-import cfx
+import cfx  # noqa: E402
 
 QUEUE = sys.argv[1] if len(sys.argv) > 1 else "/tmp/ea_queue.txt"
 RESUME = "/uploads/base-resume.pdf"
@@ -92,13 +97,13 @@ def heal_and_nav(url, tries=3):
     """Open (or reuse) a live tab and navigate, self-healing 404/500 by reopening."""
     for _ in range(tries):
         if not alive_tab():
-            t = cfx.set_tab(cfx.ensure_tab(persist=False))
+            cfx.set_tab(cfx.ensure_tab(persist=False))
         try:
             cfx.navigate(url)
             return True
         except Exception as e:
             if "404" in str(e) or "500" in str(e):
-                t = cfx.set_tab(cfx.ensure_tab(persist=False))
+                cfx.set_tab(cfx.ensure_tab(persist=False))
                 time.sleep(3)
                 continue
             raise

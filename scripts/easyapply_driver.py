@@ -27,12 +27,17 @@ Queue line:  EA|Product Designer|Acme|https://www.linkedin.com/jobs/view/1234567
 Usage:
   source .jobenv.run && python3 scripts/easyapply_driver.py <queue.txt>
 """
-import sys, os, time, json, subprocess, re
+import sys
+import os
+import time
+import json
+import subprocess
+import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)                       # skill root
 sys.path.insert(0, os.path.join(ROOT, "_common", "scripts"))
-import cfx
+import cfx  # noqa: E402
 
 QUEUE = sys.argv[1] if len(sys.argv) > 1 else "/tmp/ea_queue.txt"
 RESUME = "/uploads/base-resume.pdf"
@@ -152,7 +157,7 @@ def drive(job_id, company, role):
             r = ea("next")
             # If still blocked on an unanswered required question, bail — don't loop.
             if "BLOCKED_UNANSWERED_REQUIRED" in r:
-                q = st.get("errors") or [l for l in labels if l not in KNOWN]
+                q = st.get("errors") or [lbl for lbl in labels if lbl not in KNOWN]
                 print(f"  BLOCKED_REQUIRED: {q}")
                 return "human"
             time.sleep(2)

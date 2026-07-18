@@ -23,6 +23,7 @@ is a substring test; wrap in /…/ for a regex. kind: text|radio|select|number|b
 SPECIFIC before the GENERIC ('require sponsorship' before bare 'sponsorship').
 """
 import csv
+import json
 import os
 import re
 import sys

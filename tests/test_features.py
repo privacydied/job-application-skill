@@ -17,17 +17,26 @@ import types
 import unittest
 
 _REAL_STDOUT = sys.stdout
+# Silence noisy CLI prints when run via `python -m unittest` (which doesn't capture stdout).
+# Under pytest, do NOT reassign sys.stdout — pytest already captures output, and swapping it
+# fights pytest's fd-capture, raising "I/O operation on closed file" at every test's capture
+# teardown (the 61 spurious errors). pytest's own capture keeps the tests quiet.
+_UNDER_PYTEST = "pytest" in sys.modules or "PYTEST_CURRENT_TEST" in os.environ
 
 
 def setUpModule():
-    sys.stdout = open(os.devnull, "w")
+    global _REAL_STDOUT
+    if not _UNDER_PYTEST:
+        _REAL_STDOUT = sys.stdout
+        sys.stdout = open(os.devnull, "w")
 
 
 def tearDownModule():
-    try:
-        sys.stdout.close()
-    finally:
-        sys.stdout = _REAL_STDOUT
+    if not _UNDER_PYTEST:
+        try:
+            sys.stdout.close()
+        finally:
+            sys.stdout = _REAL_STDOUT
 
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -402,7 +411,6 @@ class TestScrubPII(unittest.TestCase):
         sys.path.insert(0, os.path.join(_ROOT, "scripts"))
         import scrub_pii  # noqa: E402
         self.m = scrub_pii
-        import json
         self.fill = json.load(open(os.path.join(_ROOT, "sites", "_common", "apply-defaults.json"),
                                    encoding="utf-8"))["fill"]
 

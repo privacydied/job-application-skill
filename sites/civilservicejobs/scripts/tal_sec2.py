@@ -21,11 +21,15 @@ Spec shape (spec_ofgem_s2.json / spec_ukef_s2.json):
 Usage:
   python3 tal_sec2.py <eform_base_no_slash> <spec.json>
 """
-import sys, os, json, time, argparse
+import sys
+import os
+import json
+import time
+import argparse
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "_common", "scripts"))
-import cfx
+import cfx  # noqa: E402
 
 _EOFORM = None
 APP = os.path.join(HERE, "..", "..", "..", "applications")

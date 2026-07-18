@@ -1,0 +1,15 @@
+# Ruff config for the job-application skill.
+#
+# Ruleset = ruff's default (E4/E7/E9 pycodestyle-errors + F pyflakes), with two pycodestyle
+# rules disabled because they flag a DELIBERATE house style, not defects:
+#   E701 (multiple statements on one line, colon)     — terse guards like `if not x: return`
+#   E702 (multiple statements on one line, semicolon)  — sequenced browser steps on one line,
+#         e.g. `cfx.press("Escape"); time.sleep(0.3)` — pervasive and intentional in the
+#         camofox driver code where the sequence reads as one action.
+# Everything else in the default set stays ON (E402 import-placement, E741 ambiguous names,
+# F-series correctness incl. undefined-name / unused-import), so real bugs still fail the check.
+
+target-version = "py38"
+
+[lint]
+ignore = ["E701", "E702"]

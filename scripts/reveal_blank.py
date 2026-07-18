@@ -34,7 +34,7 @@ def reveal(jid):
         "(()=>{const m=document.querySelector('main, .jobs-details, article'); "
         "return m ? m.innerText : '';})()"
     ) or ""
-    lines = [l.strip() for l in txt.split("\n") if l.strip()]
+    lines = [ln.strip() for ln in txt.split("\n") if ln.strip()]
     company = lines[0] if len(lines) > 0 else "(unknown)"
     title = lines[1] if len(lines) > 1 else "(unknown)"
     return company, title

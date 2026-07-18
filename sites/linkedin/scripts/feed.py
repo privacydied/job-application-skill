@@ -174,7 +174,7 @@ def hide_batch(job_ids, nav_url=None):
             time.sleep(3)
         except cfx.CfxError as e:
             print(f"hide-batch nav ERROR: {e}")
-    hidden = notfound = other = 0
+    hidden = other = 0
     for jid in job_ids:
         try:
             rc = hide_job(jid)

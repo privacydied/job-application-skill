@@ -53,7 +53,6 @@ import cfx  # noqa: E402
 
 
 def _set_text(name, value):
-    sel = f'select[name="{name}"], input[name="{name}"], textarea[name="{name}"]'
     # prefer the input/textarea (text), not a select
     res = cfx.evaluate(f"""(() => {{
       const e = document.querySelector('input[name="{name}"], textarea[name="{name}"]');
@@ -161,7 +160,6 @@ def review(company):
     wrong-company scan across free text. Returns (rc, findings). Hidden fields
     (e.g. a conditional "work permit type" that only shows when permit=Yes) are
     skipped — they are not actually required for this applicant."""
-    import re as _re
     data = json.loads(cfx.evaluate(r"""(() => {
       const out = { texts: [], emptyRequired: [] };
       for (const i of document.querySelectorAll('input[type=text],input[type=email],input[type=url],textarea')) {
@@ -211,11 +209,11 @@ def apply(form_url, spec, do_submit=False):
     if spec.get("accept_dps", True):
         results.append(("accept DPS", _accept_dps()))
     rc, _ = review(spec.get("company", "Unknown"))
-    failed = [(l, r) for l, r in results if not str(r).startswith("OK")]
+    failed = [(lbl, r) for lbl, r in results if not str(r).startswith("OK")]
     print("---- talentlink apply summary ----")
     if failed:
-        for l, r in failed:
-            print(f"  FAIL {l}: {r}")
+        for lbl, r in failed:
+            print(f"  FAIL {lbl}: {r}")
     else:
         print(f"  OK   {len(results)} field(s) set; review clean")
     if failed or rc != 0:

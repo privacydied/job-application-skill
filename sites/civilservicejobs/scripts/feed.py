@@ -63,7 +63,6 @@ The board+query cooldown is enforced here like the other feeds (BOARD="csj", fix
 QUERY key — the saved search context isn't keyword-parameterized, same pattern as
 WTTJ's "home"). Zero fresh candidates on a real pass auto-marks a 12h cooldown.
 """
-import base64
 import json
 import os
 import re
