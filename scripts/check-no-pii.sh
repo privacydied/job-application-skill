@@ -96,11 +96,16 @@ try:
         for r in _csv.DictReader(f):
             for col, val in (r or {}).items():
                 cl = (col or "").lower()
-                if val and len(val.strip()) >= 5 and any(
-                        k in cl for k in ("password", "secret", "token", "key",
-                                          "pass", "pw", "memorable", "app_key", "apikey")):
-                    secret_lines.append("SECRET::" + val.strip())
-except (OSError, ValueError):
+                # A row with MORE commas than the header (e.g. an un-quoted comma in a value) makes
+                # DictReader return a LIST under the restkey — `.strip()` on that raised an
+                # AttributeError that ESCAPED the narrow except below and silently disabled the WHOLE
+                # PII guard. Normalise to strings so a malformed creds row can never do that again.
+                for v in (val if isinstance(val, list) else [val]):
+                    if isinstance(v, str) and len(v.strip()) >= 5 and any(
+                            k in cl for k in ("password", "secret", "token", "key",
+                                              "pass", "pw", "memorable", "app_key", "apikey")):
+                        secret_lines.append("SECRET::" + v.strip())
+except Exception:   # a broken creds file must NEVER silently disable the name/email/PII checks
     pass
 
 print("\n".join(sorted(toks) + secret_lines))

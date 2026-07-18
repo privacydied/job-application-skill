@@ -140,13 +140,18 @@ def build_replacements():
                 for row in _csv.DictReader(f):
                     for col, val in row.items():
                         cl = (col or "").lower()
-                        if val and len(val.strip()) >= 5 and any(
-                                k in cl for k in ("password", "secret", "token", "key",
-                                                  "pass", "pw", "memorable", "app_key", "apikey")):
-                            secret_vals.add(val.strip())
+                        # A malformed row (more commas than the header) makes DictReader return a
+                        # LIST under the restkey; `.strip()` on it raised an AttributeError that
+                        # ESCAPED the narrow except and crashed the whole scrubber (which runs every
+                        # firing via loop-preflight). Normalise to strings so it can't happen again.
+                        for v in (val if isinstance(val, list) else [val]):
+                            if isinstance(v, str) and len(v.strip()) >= 5 and any(
+                                    k in cl for k in ("password", "secret", "token", "key",
+                                                      "pass", "pw", "memorable", "app_key", "apikey")):
+                                secret_vals.add(v.strip())
             for v in sorted(secret_vals, key=len, reverse=True):
                 reps.insert(0, (re.compile(re.escape(v)), "[REDACTED — see ats-credentials.csv]"))
-        except (OSError, ValueError):
+        except Exception:   # a broken creds file must NEVER crash the scrubber
             pass
     return reps
 
