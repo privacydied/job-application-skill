@@ -25,16 +25,27 @@ login.py for the session):
 first — this driver assumes the caller already did). CAPTCHA policy: only the sanctioned
 reCAPTCHA v2 auto-solve; anything else halts.
 
+DUPLICATE GUARD (2026-07-18): Guardian only reveals "You have already applied for this job"
+AFTER you solve the Send reCAPTCHA — useless to an autonomous run that can't solve it. So this
+driver checks the TRACKER FIRST (`application-tracker.csv`, matched by Guardian job-id) and skips
+any posting already logged Applied BEFORE opening a thing — no wasted fill, no wasted captcha.
+If a duplicate still slips through, the post-Send banner is detected, the tracker is backfilled,
+and it exits clean (Applied, not a failure). `--force` re-drives a tracked posting anyway.
+
 Usage:
     CFX_KEY=.. CFX_TAB=.. python3 sites/jobs.theguardian.com/scripts/apply.py <job-url> \
-        --cv uploads/<resume>.pdf [--cover "<message>"] [--no-submit]
+        --cv uploads/<resume>.pdf [--cover "<message>"] [--no-submit] [--force]
   --no-submit  fill everything + solve the reCAPTCHA but STOP before Send (safe verification).
+  --force      drive even if the tracker already shows this posting Applied (override the guard).
   classify-only:  apply.py <job-url> --classify
 
-Exit: 0 submitted (or --no-submit ready) · 3 external/account-wall (skip) · 2 error/blocked.
+Exit: 0 submitted / already-applied (skip) / --no-submit ready · 3 external/account-wall or
+      reCAPTCHA-handoff · 2 error/blocked.
 """
+import csv
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -104,6 +115,55 @@ def _opt_out():
         "if(e&&e.checked){e.click();}});return 1;})()")
 
 
+def _job_id(url):
+    """The numeric Guardian job id from a job URL (…/job/<id>/…), or ''."""
+    m = re.search(r"/job/(\d+)", url or "")
+    return m.group(1) if m else ""
+
+
+def _already_in_tracker(url):
+    """PRE-CHECK (the primary duplicate guard): is this posting ALREADY logged Applied?
+    Guardian only reveals "you have already applied" AFTER you solve the Send reCAPTCHA — far
+    too late for an autonomous run (it can't solve the captcha). So the real defence is to
+    never drive a posting the tracker already shows Applied. Matches by Guardian job-id (robust
+    to slug/#fragment/query differences), falling back to an exact-URL match. Returns a short
+    "row N: <Status>" string if found, else ''."""
+    jid = _job_id(url)
+    tracker = os.path.join(_ROOT, "application-tracker.csv")
+    if not os.path.exists(tracker):
+        return ""
+    try:
+        with open(tracker, newline="", encoding="utf-8") as f:
+            for i, row in enumerate(csv.DictReader(f), start=2):  # row 1 = header
+                u = (row.get("URL") or "")
+                status = (row.get("Status") or "").strip()
+                same = (jid and jid in u) or (url and u.strip() == url.strip())
+                if same and status.lower().startswith("applied"):
+                    return f"row {i}: {status}"
+    except (OSError, ValueError):
+        return ""
+    return ""
+
+
+def _already_applied():
+    """POST-SEND detection: Guardian's "You have already applied for this job" banner (shown
+    after Send when a submission from this account already exists). Secondary to the tracker
+    pre-check — it backfills the tracker when a duplicate slips through anyway."""
+    return bool(_ev("(function(){var b=document.body?document.body.innerText:'';"
+                    "return /you have already applied for this job|already applied for this "
+                    "(job|position|role)/i.test(b)?1:0;})()"))
+
+
+def _log_applied(url, proof_rel):
+    """Backfill the tracker as Applied (in-place update if a row exists) with a proof artifact."""
+    logger = os.path.join(_here, "..", "..", "_common", "scripts", "log-application.py")
+    subprocess.run([sys.executable, logger, "REVIVA SOFTWORKS", "Product Designer", "Guardian",
+                    url, "Applied", "--proof", proof_rel,
+                    "--notes", "auto: 'You have already applied for this job' banner detected on "
+                    "Send — duplicate, backfilled by apply.py."],
+                   cwd=_ROOT, env=os.environ, capture_output=True)
+
+
 def main():
     argv = sys.argv[1:]
     urls = [a for a in argv if a.startswith("http")]
@@ -119,6 +179,18 @@ def main():
     cover = opt("--cover")
     no_submit = "--no-submit" in argv
     classify_only = "--classify" in argv
+    force = "--force" in argv
+
+    # ── PRE-CHECK #1 (cheapest, no browser needed): already logged Applied? Guardian only
+    #    reveals "already applied" AFTER the Send reCAPTCHA — useless to an autonomous run — so
+    #    the real duplicate guard is the tracker. Skip BEFORE opening the browser. --force overrides.
+    if not classify_only:
+        hit = _already_in_tracker(url)
+        if hit and not force:
+            print(f"⏭  ALREADY-APPLIED — tracker {hit} matches this posting (job {_job_id(url)}). "
+                  f"Guardian would only reveal the duplicate after the Send reCAPTCHA, so skip the "
+                  f"whole fill+captcha. Pass --force to re-drive anyway.")
+            return 0
 
     if not os.environ.get("CFX_KEY"):
         print("ERROR: no CFX_KEY.", file=sys.stderr)
@@ -198,6 +270,23 @@ def main():
     time.sleep(5)
     if _confirmed():
         print("✓ application sent (reCAPTCHA passed silently). Capture proof + log.")
+        return 0
+    # ── PRE-CHECK #2 (post-Send): a duplicate that slipped past the tracker guard. Guardian
+    #    replies "You have already applied for this job" — NOT a failure. Save proof, backfill the
+    #    tracker (so pre-check #1 catches it next time), and exit clean (no captcha/blocker churn).
+    if _already_applied():
+        pdir = os.path.join(_ROOT, "applications", "reviva-product-designer")
+        os.makedirs(pdir, exist_ok=True)
+        txt = os.path.join(pdir, "already-applied.txt")
+        try:
+            with open(txt, "w", encoding="utf-8") as f:
+                f.write("Guardian returned 'You have already applied for this job' on Send for "
+                        f"{url}\n(job {_job_id(url)}) — application already exists on this account.\n")
+        except OSError:
+            pass
+        _log_applied(url, os.path.relpath(txt, _ROOT))
+        print("⏭  ALREADY-APPLIED — Guardian says this account already applied for this job. "
+              "Not a failure; tracker backfilled (proof: already-applied.txt). No re-submit.")
         return 0
     # SETTLED 2026-07-18 (REVIVA 10126456): when Send escalates to a v2 image-grid, that grid
     # RECYCLES THE SAME TILES across unlimited verify rounds and never accepts for this camofox
