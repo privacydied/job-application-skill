@@ -188,7 +188,20 @@ def extract(max_chars=7000):
             r"(?<!new )\byork\b" if c == "york" else r"\b" + re.escape(c) + r"\b", low)}),
         "sponsorship_mentioned": "sponsor" in low,
     }
-    title_for_check = data.get("h1") or data.get("meta", {}).get("og_title") or data.get("title", "")
+    # Title for the screen: the JD body's first <h1> is USUALLY the job title, but some sites
+    # (LinkedIn) hijack it with a UI string like "Use AI to assess how you fit" — check_title then
+    # screens THAT as ineligible and wrongly drops a good role. og:title and a suffix-cleaned
+    # document.title ("<job> | <company> | LinkedIn") are reliable job-title carriers. So try all
+    # of them (they all describe the SAME posting) and keep the one check_title finds eligible;
+    # fall back to the h1 (original behaviour) when none match — so an off-profile role still reads
+    # ineligible.
+    _og = (data.get("meta") or {}).get("og_title") or ""
+    _doc = re.split(r"\s+[|–—\-]\s+", data.get("title", ""))[0].strip()
+    title_for_check = data.get("h1") or _og or data.get("title", "")
+    for _src in (data.get("h1"), _og, _doc):
+        if _src and check_title(_src).get("eligible"):
+            title_for_check = _src
+            break
     data["title_eligibility"] = dict(check_title(title_for_check), checked_title=title_for_check)
 
     form = data.get("form", {})
