@@ -75,6 +75,33 @@ STRIP_EXPR = f"""
 }})()
 """
 
+# Cloudflare-SAFE generic fallback: when a blocking overlay is NOT one of the known Indeed modal
+# zones above (a "STILL BLOCKED" survivor — an aria-modal dialog or a full-screen high-z backdrop),
+# hide it. NEVER touch a CAPTCHA / Cloudflare challenge (that is a wall, not a dismissable modal —
+# report it, don't grind it). Never hide an overlay that CONTAINS job cards (that's the results).
+GENERIC_STRIP_EXPR = r"""
+(() => {
+  const b = (document.body.innerText || '').slice(0, 400);
+  if (/just a moment|checking your browser|verify you are human|cf-challenge|are you a robot|hcaptcha|recaptcha/i.test(b))
+    return 'challenge';
+  let hid = 0;
+  document.querySelectorAll('[role=dialog][aria-modal=true],[aria-modal=true]').forEach(d => {
+    if (!d.querySelector('[data-jk]')) { d.style.display = 'none'; hid++; }
+  });
+  [...document.querySelectorAll('div,section')].forEach(e => {
+    const s = getComputedStyle(e), r = e.getBoundingClientRect();
+    if ((s.position === 'fixed' || s.position === 'absolute')
+        && r.width > innerWidth * 0.6 && r.height > innerHeight * 0.5
+        && parseInt(s.zIndex || 0) >= 1000 && !e.querySelector('[data-jk]')) {
+      e.style.display = 'none'; hid++;
+    }
+  });
+  document.body.style.overflow = '';
+  document.documentElement.style.overflow = '';
+  return 'generic-hid-' + hid;
+})()
+"""
+
 
 def _open():
     import json
@@ -112,14 +139,31 @@ def main():
                 print(f"dismissed via close control ({clicked!r}).")
                 return 0
 
-        # 4) last resort: strip + unlock
+        # 4) strip the known Indeed modal zones + unlock
         cfx.evaluate(STRIP_EXPR)
         time.sleep(0.4)
         if not _open():
             print("dismissed via last-resort strip (overlay removed, scroll restored).")
             return 0
 
-        print("STILL BLOCKED: modal survived Escape + close-click + strip — screenshot the tab.")
+        # 5) generic Cloudflare-SAFE fallback for a survivor outside the known zones (a stray
+        #    aria-modal dialog / full-screen backdrop). A CAPTCHA/Cloudflare challenge is a WALL,
+        #    not a modal — report it, never grind it.
+        try:
+            r = cfx.evaluate(GENERIC_STRIP_EXPR)
+        except cfx.CfxError:
+            r = None
+        if r == "challenge":
+            print("BLOCKED: Indeed is showing a CAPTCHA/Cloudflare challenge — a wall, not a "
+                  "dismissable modal. Halt Indeed; do NOT grind it.")
+            return 2
+        time.sleep(0.4)
+        if not _open():
+            print(f"dismissed via generic overlay fallback ({r}).")
+            return 0
+
+        print("STILL BLOCKED: modal survived Escape + close-click + strip + generic fallback — "
+              "screenshot the tab.")
         return 1
     except cfx.CfxError as e:
         print(f"ERROR: {e}")
