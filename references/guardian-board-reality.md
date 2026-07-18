@@ -50,23 +50,22 @@ finds it instantly. So:
   2–3 sample job URLs and check whether "Apply" stays on `jobs.theguardian.com` (in-platform)
   or still bounces to a non-guardian.com employer ATS.
 
-⛔ BUT the password-login SUBMIT is gated by a **reCAPTCHA** (`[data-sitekey]` on
-`/signin/password`). Verified 2026-07-18: with valid Madgex creds filled and "Sign in"
-clicked, the page stayed on `/signin/password` with NO error message and NO visible challenge
-— the reCAPTCHA **silently blocked** the submit (the same camofox-fingerprint-distrust wall
-documented for Guardian's apply-submit reCAPTCHA — the widget won't issue a token for this
-client). So the LINK problem is solved (reach the password page via the direct URL / DOM
-click) and the creds are accepted, but programmatic sign-in still can't clear the reCAPTCHA.
+✅ PASSWORD LOGIN WORKS PROGRAMMATICALLY (verified end-to-end 2026-07-18, logged in). The page
+carries a `[data-sitekey]` reCAPTCHA, but it PASSED for the camofox fingerprint (login
+succeeded, no noVNC needed). It MAY intermittently present a challenge; if it ever silently
+blocks (stays on `/signin/password`, no error), one noVNC pass clears it — but that was NOT
+required here.
 
-Real unblock (single, human): **log in ONCE via noVNC** (`http://nasirjones:6080/vnc.html`)
-on the `/signin/password` page — a real pointer passes the reCAPTCHA behavioural score — then
-the session persists in the camofox PROFILE, and the agent can finally test/drive the
-logged-in in-platform apply. (The sanctioned `recaptcha.py` v2 solve is worth ONE attempt, but
-this widget has historically distrusted the fingerprint and looped without a token, so don't
-grind it — hand to noVNC.)
+THE REAL GOTCHA (why an earlier attempt "looked blocked"): after the credential auth, Guardian
+shows a **"You are signed in with <email>" + Continue** confirmation page. The **Continue is an
+`<a>` whose React handler does NOT fire on a synthetic DOM `.click()`** (same class as the
+apply-Send silent-click bug) — so a `.click()` no-ops and it looks stuck. `login.py` handles
+it by reading the Continue `<a>`'s href and NAVIGATING to it directly (→ `/signin/refresh` →
+`www.theguardian.com`, session established). `login.py --check` then reports `logged_in`.
 
-Consequence for the loop: Guardian login is reachable (password page, not OTP), but the final
-reCAPTCHA needs a human noVNC pass once; after that the logged-in apply path is testable.
+Consequence for the loop: **Guardian is LOGGED IN.** Run `login.py` (idempotent — it detects an
+active session and no-ops), then test the logged-in in-platform apply: re-open 2–3 sample job
+URLs and check whether "Apply" stays on `jobs.theguardian.com` or still bounces to an employer ATS.
 - Until that human test is done, Guardian yields ~0 confirmable submissions through the agent.
   Do not re-conclude "wall" every firing, and do not assume a logged-in unblock exists.
 

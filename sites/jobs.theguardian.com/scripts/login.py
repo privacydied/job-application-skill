@@ -47,6 +47,24 @@ def _ev(js, tries=6):
     return None
 
 
+def _handle_continue():
+    """Guardian's post-auth confirmation page — "You are signed in with <email>" + a
+    **Continue** control — appears when the credential auth succeeded (or a session already
+    exists). The Continue is an `<a>` whose React handler does NOT fire on a synthetic DOM
+    `.click()`, so we read its href and NAVIGATE to it directly (that IS what Continue does).
+    Returns True if we ended up OFF the auth host (i.e. signed in)."""
+    href = _ev("(function(){var a=[].slice.call(document.querySelectorAll('a')).filter("
+               "function(e){return (e.innerText||'').trim().toLowerCase()==='continue';})[0];"
+               "return a?a.href:'';})()")
+    if href and href.startswith("http"):
+        try:
+            cfx.goto(href)
+            time.sleep(2)
+        except cfx.CfxError:
+            pass
+    return _signed_in()
+
+
 def _signed_in():
     """Best-effort: is a Guardian session active? (redirected off the auth host, or a
     signed-in marker on the page.)"""
@@ -89,6 +107,11 @@ def main():
         "if(b){b.click();return 'consent';}return 'none';})()")
     time.sleep(1)
 
+    # already signed in? Guardian may show the "You are signed in — Continue" page straight away.
+    if _handle_continue():
+        print("✓ already logged into Guardian (session active; Continue completed).")
+        return 0
+
     # fill email + password (native setter → the framework reads on change), then Sign in
     filled = _ev(
         "(function(){function set(sel,val){var e=document.querySelector(sel);if(!e)return 0;"
@@ -104,7 +127,9 @@ def main():
         "if(b){b.click();return 'clicked';}return 'no-btn';})()")
     time.sleep(6)
 
-    if _signed_in():
+    # success path: the credential auth lands on the "You are signed in — Continue" page;
+    # _handle_continue navigates the Continue <a> (its React click doesn't fire) to finish.
+    if _handle_continue():
         print("✓ logged into Guardian via password (session persists in the camofox profile).")
         return 0
 
