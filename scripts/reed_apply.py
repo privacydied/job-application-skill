@@ -39,17 +39,16 @@ def ev(expr, tries=8):
     """Evaluate JS. camofox's python cfx.evaluate 500s intermittently on Reed's SPA
     even when the page rendered fine (SKILL.md: route through `cfx.sh eval`). Try the
     python module first, then fall back to the shell wrapper on failure."""
-    last = None
     for _ in range(tries):
         try:
             r = cfx.evaluate(expr)
             if r is not None:
                 return r
-        except Exception as e:  # noqa: BLE001
-            last = e
+        except Exception:  # noqa: BLE001
             # fall back to the shell wrapper (same REST endpoint, no python 500s)
             try:
-                import subprocess, json as _json
+                import subprocess
+                import json as _json
                 out = subprocess.run(
                     ["bash", os.path.join(HERE, "..", "sites", "_common", "scripts", "cfx.sh"),
                      "eval", expr], capture_output=True, text=True, timeout=60).stdout
