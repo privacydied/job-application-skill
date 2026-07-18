@@ -36,13 +36,29 @@ import cfx  # noqa: E402
 
 
 def ev(expr, tries=8):
+    """Evaluate JS. camofox's python cfx.evaluate 500s intermittently on Reed's SPA
+    even when the page rendered fine (SKILL.md: route through `cfx.sh eval`). Try the
+    python module first, then fall back to the shell wrapper on failure."""
+    last = None
     for _ in range(tries):
         try:
             r = cfx.evaluate(expr)
             if r is not None:
                 return r
-        except Exception:
-            time.sleep(1.5)
+        except Exception as e:  # noqa: BLE001
+            last = e
+            # fall back to the shell wrapper (same REST endpoint, no python 500s)
+            try:
+                import subprocess, json as _json
+                out = subprocess.run(
+                    ["bash", os.path.join(HERE, "..", "sites", "_common", "scripts", "cfx.sh"),
+                     "eval", expr], capture_output=True, text=True, timeout=60).stdout
+                j = _json.loads(out)
+                if isinstance(j, dict) and "result" in j and "error" not in j:
+                    return j["result"]
+            except Exception:
+                pass
+        time.sleep(1.5)
     return None
 
 
@@ -99,10 +115,16 @@ def apply(job_arg, dry=False):
     if dry:
         return "dry"
     cfx.navigate(url)
-    time.sleep(5)
+    # Reed's job page lazy-renders the "Apply now" button via JS; a 5s settle races it
+    # and click_apply_now() returns 'none' -> LOOP-END. Give the SPA time to paint.
+    time.sleep(9)
     r = click_apply_now()
     if not r or 'clicked' not in str(r):
-        time.sleep(3)
+        time.sleep(4)
+        r = click_apply_now()
+    if not r or 'clicked' not in str(r):
+        # one more settle+retry before giving up (camofox eval can 500 spuriously)
+        time.sleep(5)
         r = click_apply_now()
     if not r or 'clicked' not in str(r):
         return f"[{job_id}] NO APPLY BUTTON ({r})"
@@ -125,9 +147,9 @@ def apply(job_arg, dry=False):
 
 
 if __name__ == "__main__":
-    ids = sys.argv[1:]
+    args = sys.argv[1:]
+    dry = "--dry" in args           # BUGFIX: --dry was skipped, never passed to apply() —
+    ids = [a for a in args if a != "--dry"]   # so a "dry run" actually SUBMITTED. Now it's honored.
     for jid in ids:
-        if jid == '--dry':
-            continue
-        print(apply(jid.strip()))
+        print(apply(jid.strip(), dry=dry))
         time.sleep(3)
