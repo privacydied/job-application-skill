@@ -358,47 +358,59 @@ def select(label, option, quiet_notfound=False):
     if isinstance(opened, str) and opened.startswith("ALREADY"):
         print(f"OK= select {label!r} (already shows {option!r} — skipped re-open)")
         return 0
-    time.sleep(0.4)
-    # Primary: real ArrowDown opens the menu → read+click scoped to its listbox.
-    try:
-        cfx.press("ArrowDown")
-    except cfx.CfxError:
-        pass
-    listbox = cfx.poll(
-        "(()=>{const i=document.querySelector('[data-ats-target]');"
-        "return i&&i.getAttribute('aria-expanded')==='true'?(i.getAttribute('aria-controls')||''):'';})()",
-        predicate=lambda r: isinstance(r, str) and r != "", timeout=3.0)
-    if isinstance(listbox, str) and listbox:
-        clicked = cfx.evaluate(f"""
-        (() => {{
-          const m = document.getElementById({_js(listbox)}); if (!m) return 'NO_MENU';
-          const els = [...m.querySelectorAll('[role=option]')];
-          const t = {_js(option)}.toLowerCase();
-          const o = els.find(x => x.textContent.trim().toLowerCase() === t)
-                 || els.find(x => x.textContent.trim().toLowerCase().includes(t));
-          document.querySelectorAll('[data-ats-target]').forEach(e=>e.removeAttribute('data-ats-target'));
-          if (!o) return 'NO_OPTION:' + els.map(x=>x.textContent.trim()).slice(0,8).join('|');
-          o.scrollIntoView({{block:'center'}}); o.click(); return 'OK:' + o.textContent.trim().slice(0,40);
-        }})()
+    time.sleep(0.3)
+    # ── OPEN THE MENU via a real MOUSEDOWN on the react-select CONTROL (primary) ──
+    # WHY (the Greenhouse "remix" blindness this fixes, verified live on Vercel 2026-07-19):
+    #   * These widgets expose NO aria-controls, so the old aria-controls→listbox lookup
+    #     found nothing even when a menu WAS open, and
+    #   * JS-focus + ArrowDown does not reliably open them, while a *trusted* click on the
+    #     input HANGS ~30s on Greenhouse (React re-render Playwright waits on).
+    # react-select toggles its menu on the control's MOUSEDOWN (not click, not a synthetic
+    # value/'input' event) — dispatching pointerdown/mousedown/mouseup opens it instantly and
+    # never hangs. This is what made two comboboxes ("authorization", "where did you hear")
+    # look like a structural camofox limit when they were just never being opened.
+    def _dispatch_open():
+        return cfx.evaluate("""
+        (() => {
+          const inp = document.querySelector('[data-ats-target]');
+          if (!inp) return 'NO_INPUT';
+          let ctrl = inp.closest('[class*="control"]');
+          if (!ctrl) { let n=inp; for(let i=0;i<6&&n;i++,n=n.parentElement){
+            const c=n.querySelector&&n.querySelector('[class*="control"]'); if(c){ctrl=c;break;} } }
+          if (!ctrl) return 'NO_CONTROL';
+          ctrl.scrollIntoView({block:'center'});
+          ['pointerdown','mousedown','mouseup'].forEach(t =>
+            ctrl.dispatchEvent(new MouseEvent(t,{bubbles:true,cancelable:true,view:window})));
+          return 'OPENED';
+        })()
         """)
-        print(clicked if isinstance(clicked, str) else "FAIL")
-        return 0 if isinstance(clicked, str) and clicked.startswith("OK") else 1
-    # Fallback: trusted click + polled global option list (react-selects where ArrowDown
-    # didn't open a menu, e.g. some Ashby/Lever variants).
-    try:
-        cfx.click_selector('input[data-ats-target="1"]')
-    except cfx.CfxError:
-        cfx.evaluate("(()=>{const e=document.querySelector('[data-ats-target]');if(e)e.click();})()")
-    cfx.poll("[...document.querySelectorAll('[class*=option],[role=option]')].map(o=>o.textContent.trim())",
-             predicate=lambda r: isinstance(r, list) and len(r) > 0, timeout=3.0)
+    _opts_js = ('[...document.querySelectorAll(\'[class*="select__option"],'
+                '[class*="-option"],[role=option]\')].map(o=>o.textContent.trim())')
+    _dispatch_open()
+    # Wait for options to mount. aria-controls is null on these, so read the open menu
+    # globally — only one react-select menu is open at a time, so no cross-widget match.
+    got = cfx.poll(_opts_js, predicate=lambda r: isinstance(r, list) and len(r) > 0, timeout=4.0)
+    if not (isinstance(got, list) and got):
+        # Fallback for react-select variants that open on ArrowDown, not control-mousedown
+        # (some Ashby/Lever): focus is already on the marked input from the open dispatch.
+        try:
+            cfx.press("ArrowDown")
+        except cfx.CfxError:
+            pass
+        cfx.poll(_opts_js, predicate=lambda r: isinstance(r, list) and len(r) > 0, timeout=3.0)
+    # ── COMMIT the option via its MOUSEDOWN (react-select preventDefaults click) ──
     clicked = cfx.evaluate(f"""
     (() => {{
-      const els = [...document.querySelectorAll('[class*=option],[role=option]')];
-      const m = els.find(o => o.textContent.trim().toLowerCase() === {_js(option)}.toLowerCase())
-             || els.find(o => o.textContent.trim().toLowerCase().includes({_js(option)}.toLowerCase()));
+      const t = {_js(option)}.trim().toLowerCase();
+      const els = [...document.querySelectorAll('[class*="select__option"],[class*="-option"],[role=option]')];
+      const o = els.find(x => x.textContent.trim().toLowerCase() === t)
+             || els.find(x => x.textContent.trim().toLowerCase().includes(t));
       document.querySelectorAll('[data-ats-target]').forEach(e=>e.removeAttribute('data-ats-target'));
-      if (!m) return 'NO_OPTION';
-      m.click(); return 'OK:' + m.textContent.trim().slice(0,40);
+      if (!o) return 'NO_OPTION:' + els.map(x=>x.textContent.trim()).slice(0,10).join(' | ');
+      o.scrollIntoView({{block:'center'}});
+      ['pointerdown','mousedown','mouseup','click'].forEach(tp =>
+        o.dispatchEvent(new MouseEvent(tp,{{bubbles:true,cancelable:true,view:window}})));
+      return 'OK:' + o.textContent.trim().slice(0,40);
     }})()
     """)
     print(clicked if isinstance(clicked, str) else "FAIL")
