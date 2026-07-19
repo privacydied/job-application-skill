@@ -7,16 +7,23 @@ Single source of truth for Greenhouse submits in this skill. Reads a config JSON
    "select": {"<label>": "<option>"},         # native <select> / react-select
    "radios": {"<question>": "<option>"},      # radio groups
    "checkboxes": {"<label>": "on|off"},
+   "combo": {"<label>": "<option>"},          # required non-EEO react-select screeners
    "eeo": true|false,                          # fill EEO/diversity inputs (default true)
    "cover": "<base>.txt",                      # optional cover-letter file in uploads/
    "no_submit": true}                          # fill+review only, don't submit
+
+Every dropdown/combobox — native <select> AND every react-select variant — is driven by the
+ONE shared engine `atsform.combobox_pick` (interaction ladder: mousedown → ArrowDown →
+trusted-click → type-to-filter; menu read from aria-controls / .select__menu / global options;
+exact-then-word-boundary match so 'Man' != 'Isle of Man', 'No' != 'Monaco'). This file adds
+NO combobox logic of its own — a fix in combobox_pick fixes Greenhouse too.
 
 Hard rules enforced here (not left to the caller):
   * Anti-AI attestation clause on the page => REFUSE (prints REFUSE_ATTESTATION, exit 3).
     We must NOT submit a "use only my own words" form on the applicant's behalf.
   * Upload CV via container path /uploads/base-resume.pdf (host path 400s).
   * EEO answers come from apply-defaults.json -> applicant (gender/ethnicity/etc.) per the
-    user's 2026-07-19 instruction; age -> prefer not to say; religion untouched.
+    user's 2026-07-19 disclose instruction; age -> prefer not to say; religion untouched.
   * Logs via log-application.py with --proof ONLY on a captured confirmation.
 
 Proof artifact: applications/<slug>/confirmation.png + .txt, captured after submit.
@@ -32,8 +39,8 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.abspath(os.path.join(_HERE, "..", "..", ".."))
 sys.path.insert(0, os.path.join(_ROOT, "sites", "_common", "scripts"))
 
-import cfx
-import atsform
+import cfx        # noqa: E402
+import atsform    # noqa: E402
 
 UPLOADS = os.path.join(_ROOT, "uploads")
 APPS = os.path.join(_ROOT, "applications")
@@ -66,7 +73,7 @@ def _upload_and_verify(target, filename):
         "  const labs = [...document.querySelectorAll('label,span,div,p')]"
         "    .filter(e => e.childElementCount<=2 && e.textContent &&"
         "                e.textContent.toLowerCase().includes(tl) &&"
-        "                e.textContent.replace(/\s+/g,' ').trim().length < 80);"
+        "                e.textContent.replace(/\\s+/g,' ').trim().length < 80);"
         "  for (const lab of labs) {"
         "    const f = files.find(fi => lab.compareDocumentPosition(fi) & Node.DOCUMENT_POSITION_FOLLOWING);"
         "    if (f && f.id) return 'input[id=\"'+f.id+'\"]';"
@@ -87,114 +94,49 @@ def _upload_and_verify(target, filename):
     print(f"OK upload {target!r}: chip={want}")
 
 
-def _fill_remix_combo(label_sub, value):
-    """Fill a Greenhouse Remix combobox (select__input) by clicking the input (resolved via
-    its visible label OR enclosing fieldset/legend) and picking the best-matching
-    [role=option] from the live listbox. Matching prefers an EXACT (case-insensitive)
-    option, then a word-boundary substring, so 'Man' does NOT match 'Isle of Man'.
-    Presses Escape first to dismiss any STALE listbox left open by a prior field
-    (greenhouse-ats-quirks.md §4: a stray Country listbox masks the real options).
-    Returns 'OK' / 'NO_FIELD' / 'NO_OPTION' / 'ERR ...'."""
-    def _js_escape(s):
-        return json.dumps(s)
-    # Close any open listbox so we read THIS field's own options, not a stale one.
-    try:
-        cfx.press("Escape")
-        time.sleep(0.4)
-    except Exception:
-        pass
-    sel = cfx.evaluate(
-        "(function(){"
-        "  var lab=" + _js_escape(label_sub.lower()) + ";"
-        # 1) a <label> (incl. select__label) whose own text contains lab
-        "  var labs=[].slice.call(document.querySelectorAll('label'));"
-        "  for(var i=0;i<labs.length;i++){"
-        "    var lt=labs[i].innerText.trim().toLowerCase();"
-        "    if(lt.indexOf(lab)<0) continue;"
-        "    if(labs[i].id && /-label$/.test(labs[i].id)){"
-        "      var byId=document.getElementById(labs[i].id.replace(/-label$/,''));"
-        "      if(byId&&byId.id) return 'input[id=\"'+byId.id+'\"]';"
-        "    }"
-        "    var inp=labs[i].querySelector('input,select');"
-        "    if(inp&&inp.id) return 'input[id=\"'+inp.id+'\"]';"
-        "    var cont=labs[i].closest('.select__container,fieldset,div');"
-        "    if(cont){ var c2=cont.querySelector('input.select__input,input[type=text],select'); if(c2&&c2.id) return 'input[id=\"'+c2.id+'\"]'; }"
-        "  }"
-        # 2) fallback: any select__label by text (class-based)
-        "  var sl=[].slice.call(document.querySelectorAll('.select__label'));"
-        "  for(var k=0;k<sl.length;k++){"
-        "    if(sl[k].innerText.trim().toLowerCase().indexOf(lab)>=0){"
-        "      var c=sl[k].closest('.select__container');"
-        "      if(c){var ci=c.querySelector('input.select__input,input[type=text],select'); if(ci&&ci.id) return 'input[id=\"'+ci.id+'\"]';}"
-        "    }"
-        "  }"
-        # 3) fallback: aria-label / placeholder substring
-        "  var els=[].slice.call(document.querySelectorAll('input,select'));"
-        "  for(var j=0;j<els.length;j++){"
-        "    var al=(els[j].getAttribute('aria-label')||els[j].getAttribute('placeholder')||'').toLowerCase();"
-        "    if(al.indexOf(lab)>=0 && els[j].id) return 'input[id=\"'+els[j].id+'\"]';"
-        "  }"
-        "  return '';"
-        "})()")
-    if not sel:
-        return "NO_FIELD"
-    # Use a JS click (evaluate) rather than the paced REST click — the REST /click
-    # endpoint hangs (30s timeout) on Remix combobox inputs. A trusted .click() opens
-    # the listbox reliably.
-    try:
-        # The listbox opens on the .select__control WRAPPER, not the inner input.
-        cfx.evaluate(f"(()=>{{var e=document.querySelector({json.dumps(sel)});if(!e)return 'NOEL';"
-                     f"var ctrl=e.closest('.select__control')||e.parentElement||e;ctrl.click();return 'CLICKED';}})()")
-    except Exception as e:
-        return f"ERR click {e}"
-    # wait for the option listbox to appear (Remix renders it async)
-    time.sleep(1.0)
-    picked = cfx.evaluate(
-        "(function(){"
-        "  var opts=[].slice.call(document.querySelectorAll('[role=option], li[role=option]'));"
-        "  var want=" + _js_escape(value) + ";"
-        "  var wl=want.toLowerCase();"
-        "  function norm(s){return (s||'').trim().toLowerCase();}"
-        # Remix prepends a COUNTRY list; scan REVERSED so the specific real option (appended
-        # last) wins over a country substring (e.g. 'Man' vs 'Isle of Man'). Exact + word
-        # boundary only — NO loose substring (would match 'San Marino' on 'no').
-        "  for(var i=opts.length-1;i>=0;i--){if(norm(opts[i].innerText)===wl){opts[i].click();return 'OK(exact):'+opts[i].innerText.trim().slice(0,30);}}"
-        "  var re=new RegExp('(^|[^a-z])'+want.replace(/[-/\\\\^$*+?.()|[\\]{}]/g,'\\\\$&').toLowerCase()+'([^a-z]|$)');"
-        "  for(var k=opts.length-1;k>=0;k--){if(re.test(norm(opts[k].innerText))){opts[k].click();return 'OK(wb):'+opts[k].innerText.trim().slice(0,30);}}"
-        "  return 'NO_OPTION';"
-        "})()")
-    # close any open listbox before returning
-    try:
-        cfx.press("Escape")
-        time.sleep(0.3)
-    except Exception:
-        pass
-    return picked if isinstance(picked, str) else "ERR"
-
-
 def _fill_eeo():
-    """Fill OPTIONAL EEO/diversity Remix comboboxes. These are optional on most forms, so a
-    NO_FIELD (field absent) is fine. Uses the applicant facts from apply-defaults.json per the
-    user's 2026-07-19 instruction. Labels match the REAL visible text (not 'gender identity'
-    which collides with the 'is your gender identity the same as...' Yes/No question)."""
+    """Fill OPTIONAL EEO/diversity comboboxes via the ONE engine (atsform.combobox_pick),
+    which drives every react-select variant through the interaction ladder. Values come from
+    apply-defaults.json -> applicant (the user's 2026-07-19 disclose instruction). A field
+    that's absent returns NOTFOUND and is skipped — EEO is optional. Tries several label
+    phrasings per field because Greenhouse EEO wording varies by company. The gender /
+    orientation / ethnicity fields are usually "mark all that apply" multi-selects → driven
+    with multi=True + clear_first (replace any stale chip). Returns [(field, value, result)].
+
+    Label care: the gender phrasings are SPECIFIC ("how would you describe your gender" /
+    "which gender do you identify") so they do NOT collide with a "is your gender identity the
+    same as sex assigned at birth?" Yes/No question — matching that would put "Man" on the
+    wrong field. The transgender question uses the word "transgender" for the same reason."""
     defaults = json.load(open(os.path.join(_ROOT, "sites", "_common", "apply-defaults.json")))
     a = defaults.get("applicant", {})
-    mapping = [
-        ("which gender do you identify as", a.get("gender_identity")),
-        ("sexual orientation", a.get("sexual_orientation")),
-        ("race/ethnicity", a.get("ethnicity")),
-        ("consider yourself disabled", a.get("disability")),
-        ("neurodiverse", "No"),
+    if str(a.get("disclose_demographics", "")).strip().lower().startswith("no"):
+        return [("(disclose_demographics=No)", "", "SKIP")]
+    # (label alternates, value, multi/mark-all-that-apply)
+    plan = [
+        (["how would you describe your gender", "which gender do you identify"],
+         a.get("gender_identity"), True),
+        (["sexual orientation"], a.get("sexual_orientation"), True),
+        (["racial", "race/ethnicity", "ethnic background"], a.get("ethnicity"), True),
+        (["transgender"], a.get("transgender"), False),
+        (["disability", "chronic condition", "consider yourself disabled"], a.get("disability"), False),
+        (["veteran"], a.get("veteran"), False),
     ]
     done = []
-    for label_sub, val in mapping:
+    for labels, val, multi in plan:
         if not val:
             continue
-        rc = _fill_remix_combo(label_sub, val)
-        done.append((label_sub, val, rc))
+        rc = "NO_FIELD"
+        for lab in labels:
+            r = atsform.combobox_pick(lab, val, multi=multi, clear_first=multi, quiet_notfound=True)
+            if r == atsform.NOTFOUND:
+                continue           # this phrasing isn't on the form — try the next alternate
+            rc = "OK" if r == 0 else "FAIL"   # a FAIL surfaces a real gap (e.g. a US race list
+            break                              # with no "Mixed" option — handle via config)
+        done.append((labels[0], val, rc))
     try:
-        atsform.fill("pronouns", defaults.get("select", {}).get("Pronouns", "He/him"))
-    except Exception:
+        atsform.combobox_pick("pronoun", defaults.get("select", {}).get("Pronouns", "He/him"),
+                              quiet_notfound=True)
+    except Exception:  # noqa: BLE001
         pass
     return done
 
@@ -233,7 +175,7 @@ def main():
 
     try:
         _upload_and_verify("#resume", "/uploads/base-resume.pdf")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"RESUME_UPLOAD_FAIL {e}")
         return 4
 
@@ -241,7 +183,7 @@ def main():
     if cover:
         try:
             atsform.upload("#cover_letter", f"/uploads/{cover}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f"COVER_UPLOAD_WARN {e}")
 
     apply_cfg = {"defaults": True, "fill": cfg.get("fill", {}),
@@ -251,24 +193,24 @@ def main():
     json.dump(apply_cfg, open(tmp, "w"))
     try:
         atsform.apply(tmp, do_submit=False)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"FILL_WARN {e}")
 
     for frag in ("UK Right to Work", "right to work"):
         try:
-            atsform.radio(frag, "Yes")
-            break
-        except Exception:
+            if atsform.set_radio(frag, "Yes") == 0:
+                break
+        except Exception:  # noqa: BLE001
             pass
 
     if cfg.get("eeo", True):
-        eeo = _fill_eeo()
-        for lab, val, rc in eeo:
+        for lab, val, rc in _fill_eeo():
             print(f"  eeo {lab!r}={val!r} -> {rc}")
 
-    # Required non-EEO Remix comboboxes (per-company, from config "combo")
+    # Required non-EEO react-select screeners (per-company, from config "combo") — driven by
+    # the ONE engine, native <select> or react-select alike.
     for label_sub, val in cfg.get("combo", {}).items():
-        rc = _fill_remix_combo(label_sub, val)
+        rc = atsform.combobox_pick(label_sub, val)
         print(f"  combo {label_sub!r}={val!r} -> {rc}")
 
     if cfg.get("no_submit"):
@@ -277,25 +219,25 @@ def main():
 
     try:
         cfx.shot(os.path.join(appdir, "review.png"))
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"SHOT_WARN {e}")
 
     try:
         atsform.submit("Submit application",
                        "thank you for applying|application (received|sent)|we.?re rooting|successfully submitted")
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         print(f"SUBMIT_ERR {e}")
     txt = ""
     try:
         txt = cfx.evaluate("document.body?document.body.innerText:''") or ""
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
     if re.search(r"thank you for applying|application received|successfully submitted", txt, re.I):
         proof_png = os.path.join(appdir, "confirmation.png")
         proof_txt = os.path.join(appdir, "confirmation.txt")
         try:
             cfx.shot(proof_png)
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
         with open(proof_txt, "w") as f:
             f.write(txt[:2000])

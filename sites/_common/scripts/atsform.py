@@ -285,7 +285,13 @@ _COMBO_CLICK = r"""
   if (!els.length) { const m = document.querySelector('[class*="select__menu"],[class*="-menu"]'); if (m) els = [...m.querySelectorAll('[class*="option"],[role=option]')]; }
   if (!els.length) els = [...document.querySelectorAll('[class*="select__option"],[role=option]')];
   const norm = e => (e.textContent||'').replace(/\s+/g,' ').trim().toLowerCase();
-  const o = els.find(e => norm(e) === t) || els.find(e => norm(e).includes(t));
+  // exact first; else WORD-BOUNDARY substring (never mid-word — so "No" can't match
+  // "Monaco" and "Man" can't match a stray "…man…"), scanned REVERSED so a real appended
+  // option wins over a prefixed country-list entry (react-select Remix prepends countries).
+  const esc = t.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+  const wb = new RegExp('(^|[^a-z0-9])' + esc + '([^a-z0-9]|$)');
+  let o = els.find(e => norm(e) === t);
+  if (!o) for (let ix = els.length - 1; ix >= 0; ix--) { if (wb.test(norm(els[ix]))) { o = els[ix]; break; } }
   document.querySelectorAll('[data-ats-target]').forEach(e=>e.removeAttribute('data-ats-target'));
   if (!o) return 'NO_OPTION:'+els.map(e=>(e.textContent||'').replace(/\s+/g,' ').trim()).slice(0,10).join(' | ');
   o.scrollIntoView({block:'center'});
@@ -324,8 +330,10 @@ _COMBO_NATIVE_SET = r"""
   const s = document.querySelector('[data-ats-native]'); if (!s) return 'NO';
   const w = __OPT__.toLowerCase();
   const cur = s.options[s.selectedIndex];
-  if (cur && cur.value!=='' && cur.text.toLowerCase().includes(w)) return 'OK=already:'+cur.text.trim().slice(0,40);
-  const o = [...s.options].find(o=>o.text.trim().toLowerCase()===w) || [...s.options].find(o=>o.text.toLowerCase().includes(w));
+  const esc = w.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+  const wb = new RegExp('(^|[^a-z0-9])' + esc + '([^a-z0-9]|$)');
+  if (cur && cur.value!=='' && (cur.text.toLowerCase()===w || wb.test(cur.text.toLowerCase()))) return 'OK=already:'+cur.text.trim().slice(0,40);
+  const o = [...s.options].find(o=>o.text.trim().toLowerCase()===w) || [...s.options].find(o=>wb.test(o.text.toLowerCase()));
   if (!o) return 'NO_OPTION';
   const nv = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype,'value').set;
   nv.call(s,o.value); s.dispatchEvent(new Event('input',{bubbles:true})); s.dispatchEvent(new Event('change',{bubbles:true}));
@@ -377,9 +385,11 @@ def _combo_open_and_pick(option, multi=False):
     options from several fallbacks, and commit the match. THE engine every combobox caller
     shares (see the block header). Returns 0 on success, 1 otherwise."""
     want = str(option).strip().lower()
+    _wb = re.compile(r'(^|[^a-z0-9])' + re.escape(want) + r'([^a-z0-9]|$)') if want else None
 
     def _has_match(opts):
-        return any(o.strip().lower() == want or (want and want in o.strip().lower()) for o in opts)
+        # exact OR word-boundary substring — never a mid-word hit (mirrors _COMBO_CLICK).
+        return any(o.strip().lower() == want or (_wb and _wb.search(o.strip().lower())) for o in opts)
 
     _combo_focus()
     rungs = (lambda: cfx.evaluate(_COMBO_POINTER_OPEN),     # 1) synthetic pointer sequence

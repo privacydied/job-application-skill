@@ -706,6 +706,23 @@ class TestComboboxLadder(unittest.TestCase):
                            opts=['["Yes","No"]'], click="NO_OPTION:Yes | No"))
         self.assertEqual(self.atsform.combobox_pick("Visa", "Maybe"), 1)
 
+    def test_word_boundary_no_midword_match(self):
+        # "No" must NOT match "Norway"/"Monaco" (mid-word) — ladder finds nothing → fail,
+        # instead of the old `includes` matcher wrongly stopping on "Norway".
+        self._use(_FakeCfx(resolve='{"kind":"combo","current":[],"isMulti":false}',
+                           opts=['["Norway","Monaco"]', '["Norway","Monaco"]',
+                                 '["Norway","Monaco"]', '["Norway","Monaco"]'],
+                           click="NO_OPTION:Norway | Monaco"))
+        self.assertEqual(self.atsform.combobox_pick("Country", "No"), 1)
+
+    def test_word_boundary_phrase_match(self):
+        # exact fails but the whole phrase matches at a boundary → stop on rung 1, commit.
+        f = self._use(_FakeCfx(resolve='{"kind":"combo","current":[],"isMulti":false}',
+                               opts=['["United Kingdom +44","United States +1"]'],
+                               click="OK:United Kingdom +44"))
+        self.assertEqual(self.atsform.combobox_pick("Country", "United Kingdom"), 0)
+        self.assertNotIn("ArrowDown", f.presses, "phrase matched on rung 1 — no escalation")
+
     def test_multi_clear_first_removes_chips(self):
         f = self._use(_FakeCfx(resolve='{"kind":"combo","current":["i don\'t wish to answer"],"isMulti":true}',
                                opts=['["Man"]'], click="OK:Man"))
