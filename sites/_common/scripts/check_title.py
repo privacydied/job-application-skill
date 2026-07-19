@@ -69,21 +69,39 @@ _DESIGN_ENG_INDUSTRIAL = (
     "instrumentation", "telecoms", "telecommunication", "manufacturing", "process",
     "controls", "systems", "hydraulic", "piping", "geotechnical",
 )
-# If any of these UX/creative signals is present, keep it (a genuine hybrid role) —
-# the modifier alone doesn't condemn it.
-_DESIGN_ENG_UX_SIGNAL = (
+# Unambiguous UX/creative signals — if present alongside "design engineer", it's a
+# genuine hybrid (keep on-profile). These are the ONLY tokens that rescue an
+# industrial modifier; ambiguous tokens (frontend/web/digital/brand) do NOT, because
+# e.g. "Frontend ASIC Design Engineer" is an ASIC/FPGA hardware role, not frontend-web.
+_DESIGN_ENG_UX_STRONG = (
     "ux", "ui", "product", "creative", "technologist", "prototyp", "interaction",
-    "frontend", "front-end", "front end", "web", "digital", "brand", "graphic",
+    "graphic",
+)
+# Industrial modifiers that condemn a "design engineer" title to off-profile (CAD/MEP/
+# hardware). Word-boundary matched. Bare "Design Engineer" (no modifier) stays Tier A.
+_DESIGN_ENG_INDUSTRIAL = (
+    "electrical", "electronic", "electronics", "mechanical", "hardware", "civil",
+    "structural", "ict", "embedded", "cad", "rf", "hvac", "chemical", "aerospace",
+    "automotive", "mechatronic", "pcb", "firmware", "optical", "thermal", "acoustic",
+    "instrumentation", "telecoms", "telecommunication", "manufacturing", "process",
+    "controls", "systems", "hydraulic", "piping", "geotechnical", "asic", "fpga",
+    "building services", "renewable", "heat pump", "mep", "structural", "civil",
+    "project design", "project",
 )
 
 
 def _industrial_design_engineer(title_l):
     """True iff the title is an off-profile industrial 'design engineer' compound
-    (electrical/ICT/mechanical/CAD/...) with no UX/creative signal. Bare 'Design
-    Engineer' returns False (stays Tier A)."""
+    (electrical/ICT/mechanical/CAD/building-services/ASIC/...). Bare 'Design
+    Engineer' returns False (stays Tier A). A genuine UX/creative signal (ux/ui/
+    product/creative/graphic/...) keeps it on-profile; ambiguous tokens (frontend/
+    web/digital/brand) do NOT rescue an industrial modifier (2026-07-18 fix:
+    'Frontend ASIC Design Engineer' is hardware, and 'ui' substring matched inside
+    'building')."""
     if "design engineer" not in title_l:
         return False
-    if any(s in title_l for s in _DESIGN_ENG_UX_SIGNAL):
+    _ux_re = re.compile(r"\b(" + "|".join(re.escape(s) for s in _DESIGN_ENG_UX_STRONG) + r")\b")
+    if _ux_re.search(title_l):
         return False
     return any(re.search(r"\b" + re.escape(w) + r"\b", title_l)
                for w in _DESIGN_ENG_INDUSTRIAL)

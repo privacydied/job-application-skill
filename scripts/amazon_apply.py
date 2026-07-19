@@ -164,10 +164,18 @@ def run(job, resume="am-uxd.pdf", no_submit=False):
     url = f"https://www.amazon.jobs/en/jobs/{jid}"
     tab = cfx.ensure_tab(persist=True); cfx.set_tab(tab)
     cfx.navigate(url); time.sleep(11)   # amazon.jobs SPA is slow to paint the Apply CTA
-    if not (atsform.rclick("Apply now") or atsform.rclick("Apply")
-            or atsform.rclick("Continue application") or atsform.rclick("Continue")):
-        print("FAIL: no Apply/Continue button"); return 7
-    time.sleep(9)
+    # RESUME: a logged-in + already-started application redirects the job URL straight to
+    # `/applicant/jobs/<id>/apply` (the wizard). In that case there's no "Apply now" CTA to
+    # click — we're already on the form. Only click Apply when NOT already on the wizard.
+    cur_url = cfx.current_url() or ""
+    on_wizard = bool(re.search(r"/applicant/jobs/\d+/apply|/apply(\b|/)", cur_url))
+    if not on_wizard:
+        if not (atsform.rclick("Apply now") or atsform.rclick("Apply")
+                or atsform.rclick("Continue application") or atsform.rclick("Continue")):
+            print("FAIL: no Apply/Continue button"); return 7
+        time.sleep(9)
+    else:
+        print(f"resume: already on the apply wizard ({cur_url[-40:]}) — skipping Apply click.")
     for step in range(14):
         cur = atsform.active_step()
         print(f"step {step}: {cur!r}")

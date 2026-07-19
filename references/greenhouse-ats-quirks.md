@@ -66,14 +66,22 @@ and flip the OLIVER row from `Blocked` to `Applied` with proof.
   "Prefer not to say" where present — per the applicant-profile opt-out default. Never fabricate
   a demographic answer.
 
-## 5. camofox `/upload` "ghost attach" on non-Ashby ATSes (OLIVER/SWorkable/SR)
+## 5. ⚠️ CORRECTION (2026-07-19) — Greenhouse CV upload WORKS via atsform.upload
+The "ghost attach / hard stop" text below is **OUTDATED and was WRONG**. Verified live this
+session: `atsform.upload("#resume", "/uploads/base-resume.pdf")` BINDS the CV on Greenhouse — the
+filename ("base-resume.pdf") appears in the resume chip and the submit SUCCEEDS with a real
+"Thank you for applying" confirmation. Critical detail: pass the **container path `/uploads/<base>.pdf`**,
+NOT the host path (`/volume1/.../uploads/...`) — the host path returns HTTP 400. `input.files[0]`
+reads NONE after a successful upload because Greenhouse moves the file into a chip; verify by the
+**filename chip text**, not by `files.length`. This also works on Ashby (`_systemfield_resume` via
+`ashby.py upload_cv`). So: upload via `atsform.upload(target, "/uploads/<base>.pdf")` and trust the chip.
+(Workable/SmartRecruiters may still differ — re-verify per ATS if you hit a genuine ghost-attach.)
+
+### (OUTDATED, DO NOT ACT ON) original §5 text:
 `POST /tabs/{tab}/upload` with `selector:"input[type=file]"` + basename returns `{'ok':True,
 'uploaded':'/uploads/...pdf'}` but the React-controlled `<input type=file>.files.length` stays `0`
 on Greenhouse/Workable/SmartRecruiters — the file endpoint stages server-side but does NOT bind
-to the React input (no CDP `setFileInputFiles`). **Proof the upload REALLY took = the filename
-text appears in the form's DOM** (e.g. Greenhouse shows "jane-doe-resume-fefundinfo.pdf" near
-the Attach button, replacing the input). If the filename text is present, the attach bound
-(Ashby binds reliably; the others don't) — verify by DOM filename text, not by `files.length`
-(which reads 0 even when attached on Ashby-equivalent flows). Until the container-restart deploys
-`uploadViaChooser` (see `camofox-file-upload-endpoint.md`), CV upload on Greenhouse/Workable/SR
-is a hard stop.
+to the React input (no CDP `setFileInputFiles`). … Until the container-restart deploys
+`uploadViaChooser`, CV upload on Greenhouse/Workable/SR is a hard stop.
+→ **Wrong.** The shipped `atsform.upload`/`ashby.py upload_cv` call `/upload` correctly and it
+binds. Do not treat Greenhouse/Ashby CV upload as a wall.
