@@ -29,12 +29,26 @@ import json
 import os
 import random
 import socket
+import sys
 import time
 import urllib.error
 import urllib.request
 from urllib.parse import urlsplit
 
 U = os.environ.get("CFX_URL", "http://localhost:9377")
+
+# skill root = …/_common/scripts -> _common -> sites -> root (for the tab-pointer files).
+_ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
+
+# ── tab-budget guard (prevents the ~8-tab backend wedge) ─────────────────────
+# The camofox backend WEDGES above ~8 live tabs: POST /tabs starts 500ing and every
+# in-flight nav 410s, costing a ~90s restart + re-login (references/camofox-session-
+# stability.md, camofox-concurrent-tab-wedge.md). warm.py caps ITS OWN fan-out, but
+# nothing stopped STRAY tabs (a crashed warm pass, a background feed that opened its
+# own, a human-driven tab) from accumulating until the next open wedged unattended.
+# `ensure_tab` now self-throttles below this budget by reaping the oldest stale tabs
+# BEFORE opening — preventing the wedge is far cheaper than the restart that recovers it.
+TAB_BUDGET = int(os.environ.get("CFX_TAB_BUDGET") or 7)
 
 
 class CfxError(RuntimeError):
@@ -294,7 +308,7 @@ def goto(url: str, tab: str = None, verify: bool = True, tries: int = 2,
 
 
 def open_tab(url: str = "about:blank", session_key: str = None, timeout: int = 60,
-             before: set = None) -> str:
+             before: set = None, guard: bool = False) -> str:
     """Open a NEW managed tab for CFX_USER and return its tabId. Mirrors the
     hermes browser tool's `_ensure_tab` contract: POST /tabs with
     {userId, listItemId:<session_key>, url}. `session_key` defaults to
@@ -304,6 +318,15 @@ def open_tab(url: str = "about:blank", session_key: str = None, timeout: int = 6
     about:blank and then navigate(url, tab=...) so the load carries a referer
     chain instead of a bare deep-link open."""
     sk = session_key or os.environ.get("CFX_SESSION_KEY", "job-apply")
+    # Tab-budget self-throttle (guard=True only — ensure_tab's single-tab path). Reap
+    # stale tabs BEFORE creating so this open can't be the one that crosses the wedge
+    # threshold. warm.py's bounded fan-out calls open_tab with guard=False so its
+    # deliberately-concurrent tabs are never reaped out from under it.
+    if guard:
+        try:
+            prune_tabs()
+        except Exception:  # noqa: BLE001 — a prune hiccup must never block opening a tab
+            pass
     # Snapshot BEFORE the create so we can recover the id by diffing if the POST
     # returns a broken envelope — this backend intermittently answers a create
     # with `{"error":"Internal server error"}` while STILL creating the tab
@@ -363,14 +386,11 @@ def is_tab_alive(tab: str = None) -> bool:
     return True  # couldn't reach the list at all — don't churn; navigate() self-heals if truly dead
 
 
-def _persist_tab(tab_id: str) -> None:
-    """Write the (re)opened tab id back to the env file named by CFX_TAB_FILE, if
-    set — rewriting the standard CFX_* exports so a shell that re-sources it before
-    each call picks up the new tab. This is exactly what open_tab.sh's `.runtab`
-    writer did; folding it here means ONE implementation every script shares."""
-    path = os.environ.get("CFX_TAB_FILE")
-    if not path:
-        return
+def _write_tab_env(path: str, tab_id: str) -> bool:
+    """Atomically rewrite one env file with the standard CFX_* exports so a shell that
+    re-sources it picks up `tab_id`. Returns True on success. The ONE writer shared by
+    _persist_tab and sync_tab, so every pointer file gets an identical, complete block
+    (never a half-written one that drops CFX_KEY — the .jobenv.persist clobber scar)."""
     try:
         body = ('export CFX_KEY="%s"\nexport CFX_USER="%s"\nexport CFX_URL="%s"\n'
                 'export CFX_TAB="%s"\n' % (os.environ.get("CFX_KEY", ""), _uid(), U, tab_id))
@@ -378,8 +398,98 @@ def _persist_tab(tab_id: str) -> None:
         with open(tmp, "w") as f:
             f.write(body)
         os.replace(tmp, path)
+        return True
     except OSError:
-        pass
+        return False
+
+
+def _persist_tab(tab_id: str) -> None:
+    """Write the (re)opened tab id back to the env file named by CFX_TAB_FILE, if
+    set — rewriting the standard CFX_* exports so a shell that re-sources it before
+    each call picks up the new tab. This is exactly what open_tab.sh's `.runtab`
+    writer did; folding it here means ONE implementation every script shares."""
+    path = os.environ.get("CFX_TAB_FILE")
+    if path:
+        _write_tab_env(path, tab_id)
+
+
+# The scattered shell-sourced pointer files that scripts read to learn the live CFX_TAB.
+# They DRIFT — each written by a different code path at a different time — and a stale
+# pointer is the #1 "Session expired" cause (references/browser-session-reality.md,
+# camofox-session-stability.md found all six carrying DIFFERENT tab ids at once). These
+# all use the `export CFX_*` shell format; sync_tab() rewrites every one that exists in a
+# single call so `cfx.py sync-tab` reconciles the whole set to one live tab. (Bare-id,
+# board-specific pointers like `.reed_tab` are deliberately NOT touched — different format.)
+_TAB_POINTER_FILES = (".jobenv.run", ".jobenv.persist", ".jobenv.apply", ".runenv")
+
+
+def sync_tab(tab_id: str = None, extra_files=None) -> list:
+    """Reconcile every standard pointer file to ONE live tab in a single call — the fix
+    for the divergent-CFX_TAB hazard that silently kills unattended runs. `tab_id`
+    defaults to a freshly ENSURED live tab (so this both heals a dead tab AND propagates
+    it everywhere). Writes each `_TAB_POINTER_FILES` entry that already exists at the
+    skill root, plus CFX_TAB_FILE, any colon-separated CFX_TAB_FILES, and `extra_files`.
+    Returns the list of files written. Only ever writes the REAL live tab — never a guess."""
+    if tab_id is None:
+        tab_id = ensure_tab(persist=False)
+    os.environ["CFX_TAB"] = tab_id
+    targets = []
+    for name in _TAB_POINTER_FILES:
+        p = os.path.join(_ROOT, name)
+        if os.path.exists(p):
+            targets.append(p)
+    if os.environ.get("CFX_TAB_FILE"):
+        targets.append(os.environ["CFX_TAB_FILE"])
+    for p in (os.environ.get("CFX_TAB_FILES", "").split(":") if os.environ.get("CFX_TAB_FILES") else []):
+        if p.strip():
+            targets.append(p.strip())
+    if extra_files:
+        targets.extend(extra_files)
+    written = []
+    for p in dict.fromkeys(targets):  # de-dup, preserve order
+        if _write_tab_env(p, tab_id):
+            written.append(p)
+    return written
+
+
+def prune_tabs(budget: int = None, keep: str = None) -> list:
+    """Close the OLDEST stale managed tabs so a subsequent open won't cross `budget` and
+    wedge the backend. Never closes `keep` (defaults to the current CFX_TAB — the tab the
+    run is using) and never touches a tab it can't identify. Returns the closed ids.
+    Best-effort: any list/close hiccup is swallowed (a prune must never break the caller).
+    The backend lists tabs in creation order, so reaping from the front drops the stalest
+    (an abandoned warm/scratch tab) and keeps the freshest. Called by ensure_tab before it
+    opens a fresh tab; warm.py's deliberate bounded fan-out passes its own tabs and is not
+    affected (it calls open_tab directly, which only prunes when guard=True)."""
+    budget = TAB_BUDGET if budget is None else budget
+    if budget <= 0:
+        return []
+    keep = keep if keep is not None else os.environ.get("CFX_TAB")
+    try:
+        tabs = [t.get("tabId") for t in list_tabs()
+                if isinstance(t, dict) and t.get("tabId")]
+    except CfxError:
+        return []
+    # Reap enough that opening ONE more still lands at/under budget.
+    excess = len(tabs) - (budget - 1)
+    if excess <= 0:
+        return []
+    closed = []
+    for tid in tabs:                       # oldest first
+        if excess <= 0:
+            break
+        if tid == keep:
+            continue                        # never reap the active tab
+        try:
+            close_tab(tid)
+            closed.append(tid)
+            excess -= 1
+        except CfxError:
+            continue
+    if closed:
+        print(f"cfx: tab-budget guard reaped {len(closed)} stale tab(s) "
+              f"(had {len(tabs)}, budget {budget})", file=sys.stderr)
+    return closed
 
 
 def _browser_running() -> bool:
@@ -433,12 +543,12 @@ def ensure_tab(persist: bool = True) -> str:
         return cur
     before = {t.get("tabId") for t in tabs0 if isinstance(t, dict)} if tabs0 is not None else None
     try:
-        new = open_tab("about:blank", before=before)
+        new = open_tab("about:blank", before=before, guard=True)
     except CfxError:
         if _browser_running():
             raise  # browser is up — tab-create failed for some other reason; don't mask it
         restart_engine()          # browser is down — the only recovery
-        new = open_tab("about:blank")  # post-restart: tabs0 is stale, snapshot fresh
+        new = open_tab("about:blank", guard=True)  # post-restart: tabs0 is stale, snapshot fresh
     os.environ["CFX_TAB"] = new
     if persist:
         _persist_tab(new)
@@ -1089,8 +1199,9 @@ def shot(outfile: str = "/tmp/cfx-shot.png", selector: str = None,
 def _cli():
     import sys
     if len(sys.argv) < 2:
-        print("Usage: cfx.py <list-tabs|find-popup|open-tab|dismiss-cookies|click-follow|"
-              "shot|check-engine|restart-engine|eval-frame> [args...]", file=sys.stderr)
+        print("Usage: cfx.py <list-tabs|find-popup|open-tab|ensure-tab|sync-tab|prune-tabs|"
+              "dismiss-cookies|click-follow|shot|check-engine|restart-engine|eval-frame> "
+              "[args...]", file=sys.stderr)
         return 1
     cmd = sys.argv[1]
     try:
@@ -1107,6 +1218,22 @@ def _cli():
             # restarted and dropped it; prints the (possibly new) tabId and persists
             # it to CFX_TAB_FILE if set. Supersedes open_tab.sh — one implementation.
             print(ensure_tab())
+        elif cmd == "sync-tab":
+            # cfx.py sync-tab  -> ensure a live tab, then rewrite EVERY standard pointer
+            # file (.jobenv.run/.persist/.apply/.runenv + CFX_TAB_FILE[S]) to it in one
+            # call. Fixes the divergent-CFX_TAB "Session expired" trap where each env file
+            # carried a different (often stale) tab id. Prints the tab + the files written.
+            written = sync_tab()
+            print(json.dumps({"tab": os.environ.get("CFX_TAB"),
+                              "synced": written}, indent=2))
+        elif cmd == "prune-tabs":
+            # cfx.py prune-tabs [budget]  -> proactively close stale tabs down to headroom
+            # under the ~8-tab wedge threshold (never the active CFX_TAB). Preventive
+            # maintenance a cron/loop can run so background tabs never accumulate to a wedge.
+            b = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else None
+            closed = prune_tabs(budget=b)
+            print(json.dumps({"reaped": len(closed), "closed": closed,
+                              "budget": b if b is not None else TAB_BUDGET}, indent=2))
         elif cmd == "dismiss-cookies":
             # cfx.py dismiss-cookies  -> accept a cookie/consent overlay on CFX_TAB
             # if present. For hand-driving a site (Hackney etc.) before snapshotting;

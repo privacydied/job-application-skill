@@ -36,7 +36,9 @@ README.md, LICENSE, GOAL.md      public/meta docs
 scripts/                         CROSS-BOARD / skill-level scripts (apply drivers,
                                  queue, login, triage). e.g. amazon_apply.py,
                                  reed_apply.py, apply_queue.py, csj_login.py,
-                                 triage_blocked.py, warm_queue.py
+                                 triage_blocked.py, warm_queue.py, human_queue.py
+                                 (coalesced human-intervention worklist),
+                                 prerender_queue.py (async family-base PDF pre-render)
 sites/<board>/scripts/           BOARD-SPECIFIC scripts: feed.py (sourcing) + any
                                  board apply/diagnostic (e.g.
                                  applicationtrack.com/scripts/diagnose.py,

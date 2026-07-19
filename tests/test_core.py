@@ -1653,7 +1653,7 @@ class TestPipelineTabHeal(unittest.TestCase):
         calls = {"run": 0, "ensure": 0}
         seq = list(run_results)
 
-        def fake_once(cmd, board, timeout):
+        def fake_once(cmd, board, timeout, env=None):
             calls["run"] += 1
             return seq[min(calls["run"] - 1, len(seq) - 1)]
 

@@ -27,6 +27,14 @@ WHAT IT DOES (all in code, no model in the loop):
 USAGE (needs a live tab on the browser-driving path — CFX_KEY/CFX_TAB in env):
   CFX_KEY=… CFX_TAB=… python3 pipeline.py [--target N] [--no-screen]
       [--screen-limit N] [--force] [--boards linkedin,indeed] [-o queue.jsonl]
+      [--min-queue N] [--http-concurrent] [--http-workers N]
+
+  --min-queue N       demand-driven gate: skip sourcing entirely if queue.jsonl already
+                      holds >= N rows (don't over-source and burn the apply tab). --force
+                      bypasses it.
+  --http-concurrent   source the pure-HTTP boards off-tab, concurrently (CFX creds stripped
+                      so they can't touch the browser); browser-bound boards stay serial on
+                      the tab. Reclaims the scarce camofox tab for applying.
 
 Exit codes: 0 WORK (queue written; may be empty) · 10 SLEEP · 11 HOLD · 12 DONE · 2 ERROR.
 """
@@ -50,6 +58,23 @@ import cfx                      # noqa: E402  (tab-death self-heal in run_feed)
 
 _ROOT = sp._ROOT
 QUEUE_DEFAULT = os.path.join(_ROOT, "queue.jsonl")
+
+
+def queue_depth(path=None):
+    """How many rows are already pending in queue.jsonl — the demand signal for the
+    min-queue gate. A row is 'pending work' simply by being present (autodrain/apply_queue
+    remove rows as they're applied), so the line count is the drivable depth. Returns 0 if
+    the file is absent/unreadable (→ always source)."""
+    path = path or QUEUE_DEFAULT
+    n = 0
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    n += 1
+    except (FileNotFoundError, OSError):
+        pass
+    return n
 
 # board token (searches.csv) -> (feed dir under sites/, nav-arg builder)
 FEEDS = {
@@ -248,10 +273,10 @@ def _tab_dead():
         return True
 
 
-def _run_feed_once(cmd, board, timeout):
+def _run_feed_once(cmd, board, timeout, env=None):
     try:
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
-                           env=os.environ, cwd=_ROOT)
+                           env=env if env is not None else os.environ, cwd=_ROOT)
     except subprocess.TimeoutExpired:
         return [], f"{board} feed timed out after {timeout}s"
     posts = _parse_feed_stdout(p.stdout or "")
@@ -283,17 +308,24 @@ def _build_args(argb, nav, query):
     return argb(nav, query) if n >= 2 else argb(nav)
 
 
-def run_feed(board, nav, force, timeout=420, query="", extra=None):
+def run_feed(board, nav, force, timeout=420, query="", extra=None, env=None):
     """Run one board's feed.py as a subprocess; return (postings, err_or_None).
 
     `extra` is appended to the feed argv verbatim (e.g. ["--all"] for an AUDIT that wants the
     already-tracked rows the feed normally dedups out). Optional + defaulted so existing callers
     are untouched.
 
+    `env` overrides the subprocess environment (default: this process's os.environ). The
+    off-tab concurrent sourcing path (run(http_concurrent=True)) passes a CFX-STRIPPED env so
+    a pure-HTTP feed physically cannot open a camofox tab — the hard guarantee that concurrency
+    can never wedge the single-tab backend, regardless of any board-classification mistake.
+
     Tab-death self-heal: a dead camofox tab (410/500 'Tab not found') makes the feed exit
     non-zero and silently zeroes the board. Sourcing is an idempotent READ, so on such an
     error we reopen the tab via cfx.ensure_tab (which rewrites CFX_TAB in env for the retry
-    subprocess) and re-run ONCE. Never applied to a mutating POST (double-submit risk)."""
+    subprocess) and re-run ONCE. Never applied to a mutating POST (double-submit risk).
+    The self-heal is SKIPPED when a caller-supplied env has no CFX creds (the off-tab path):
+    there is no tab to heal and ensure_tab would pointlessly touch the shared browser."""
     spec = FEEDS.get(bc.norm(board))
     if not spec:
         return [], f"no feed adapter for board {board!r}"
@@ -308,30 +340,93 @@ def run_feed(board, nav, force, timeout=420, query="", extra=None):
         return [], f"feed not found: {feed}"
     cmd = [sys.executable, feed] + _build_args(argb, nav, query) + (["--force"] if force else []) \
         + (list(extra) if extra else [])
-    posts, err = _run_feed_once(cmd, board, timeout)
-    if err and _tab_dead():                       # dead tab → reopen + retry ONCE (read-only)
+    posts, err = _run_feed_once(cmd, board, timeout, env=env)
+    off_tab = env is not None and not env.get("CFX_KEY")
+    if err and not off_tab and _tab_dead():       # dead tab → reopen + retry ONCE (read-only)
         try:
             cfx.ensure_tab(persist=False)         # reopens + refreshes the CFX_TAB env var
-            posts, err = _run_feed_once(cmd, board, timeout)
+            posts, err = _run_feed_once(cmd, board, timeout, env=env)
         except Exception:
             pass
     return posts, err
 
 
+# ── off-tab concurrent sourcing (Tier: reclaim the scarce apply tab) ─────────
+# Pure-HTTP feeds need NO browser (httpfeed "http" mode: plain urllib). Running them on
+# the one serialized camofox tab makes them contend with — and steal wall-clock from —
+# APPLYING, the only thing that truly needs that anti-detection tab. This allowlist marks
+# boards whose feed provably sources over HTTP alone, so run(http_concurrent=True) fans
+# them out concurrently OFF the tab (with CFX creds stripped, so a misclassification can
+# never open a concurrent tab and wedge the backend — it just yields 0 for that pass).
+# Conservatively EXCLUDES: cfx-only boards (csj/linkedin/hackney/wttj/mi5/mi6), Cloudflare-
+# gated camofox boards (dezeen/gchq/parliament), and "auto"-fetch boards that fall back to
+# camofox (indeed/nhs/reed/guardian/totaljobs/charityjob/cvlibrary). Those keep sourcing
+# serially on the tab exactly as before.
+HTTP_ONLY_BOARDS = frozenset({
+    "adzuna", "atsdirect", "careerjet", "bbc", "creativepool", "cybersecjobsite",
+    "dribbble", "efinancial", "escapecity", "apprentice", "himalayas", "ifyoucould",
+    "jobicy", "jobsac", "jooble", "jgp", "lgjobs", "mbw", "hn", "remotive", "talent",
+    "thirdsector", "wellfound", "designweek", "reedapi",
+})
+
+
+def _scrubbed_env():
+    """A copy of os.environ with the camofox credentials removed — the environment the
+    off-tab concurrent feeds run under, so they cannot touch the shared browser tab."""
+    e = dict(os.environ)
+    e.pop("CFX_KEY", None)
+    e.pop("CFX_TAB", None)
+    return e
+
+
+def _source_one(s, force, env=None):
+    """Source one search with the C.7 transient-retry; return (board, posts, err, secs)."""
+    t0 = time.time()
+    posts, err = run_feed(s["board"], s.get("nav", ""), force, query=s.get("query", ""), env=env)
+    # C.7: one retry on a TRANSIENT feed error (never on a timeout — that would
+    # double the tab cost). Feeds self-cooldown, so a flaky nav/consent hiccup
+    # shouldn't zero a board's whole yield for the firing.
+    if err and not posts and "timed out" not in err:
+        posts, err2 = run_feed(s["board"], s.get("nav", ""), force, query=s.get("query", ""), env=env)
+        if posts:
+            err = None
+        elif err2:
+            err = err2
+    return s["board"], posts, err, time.time() - t0
+
+
 def run(target=None, no_screen=False, screen_limit=40, force=False,
-        only_boards=None, out_path=None, now=None):
+        only_boards=None, out_path=None, now=None, min_queue=0, http_concurrent=False,
+        http_workers=6):
     """Importable funnel (F.2): run the WHOLE sourcing→screening pipeline in code and
     return (result, exit_code). `result` is the machine summary dict (verdict/counts/
     queue path/review items) on WORK, or {"verdict": …} on SLEEP/HOLD/DONE. queue.jsonl
     is written as a side effect. apply_queue.py / warm_queue.py call this instead of
     re-implementing sourcing/screening — that parallel-orchestrator re-implementation is
     the exact driver of the check_title-divergence class of bug (perf-roadmap root cause).
-    `only_boards` is an iterable of board tokens (already split); None = all clear boards."""
+    `only_boards` is an iterable of board tokens (already split); None = all clear boards.
+
+    `min_queue` (demand-driven gate): if >0 and the existing queue already holds at least
+    that many rows, SKIP sourcing entirely and leave queue.jsonl untouched — the loop was
+    over-sourcing 100× what it applies to, burning the scarce camofox tab. `force` bypasses
+    the gate. `http_concurrent`: fan the pure-HTTP boards (HTTP_ONLY_BOARDS) out off-tab and
+    concurrently (CFX-stripped env), sourcing only the browser-bound boards serially on the
+    tab — so HTTP sourcing stops stealing wall-clock from applying."""
     if target is None:
         env = os.environ.get("APPLY_TARGET")
         target = int(env) if (env and env.isdigit()) else sp.DEFAULT_TARGET
     only = {bc.norm(b) for b in only_boards} if only_boards else None
     out_path = out_path or QUEUE_DEFAULT
+
+    # ── demand-driven gate (#2): don't source if the queue is already deep enough ──
+    if min_queue and not force:
+        depth = queue_depth(out_path)
+        if depth >= min_queue:
+            print(f"pipeline: queue already {depth} deep (>= min_queue {min_queue}) — "
+                  f"skipping sourcing to reserve the tab for applying.", file=sys.stderr)
+            return {"verdict": "WORK", "queue": out_path,
+                    "counts": {"queued": depth, "sourced": 0, "skipped_sourcing": True},
+                    "note": f"min-queue gate: {depth} >= {min_queue}"}, 0
 
     now = now or datetime.now()
     r = sp.plan(now=now, target=target)
@@ -352,25 +447,36 @@ def run(target=None, no_screen=False, screen_limit=40, force=False,
     # critical path). Cheap disk read; no concurrency risk on the read side.
     stats = _load_apply_stats()
 
-    # ── 1) source every clear search (serialized: one tab) ───────────────────
+    # ── 1) source every clear search ─────────────────────────────────────────
+    # Split off-tab HTTP boards (concurrent, CFX-stripped) from browser-bound boards
+    # (serial on the one tab). With http_concurrent=False everything runs serially, the
+    # original behaviour. Ordering within each bucket preserves the expected-yield order.
     all_posts, errors, per_board = [], [], {}
-    for s in clear:
-        t0 = time.time()
-        posts, err = run_feed(s["board"], s.get("nav", ""), force, query=s.get("query", ""))
-        # C.7: one retry on a TRANSIENT feed error (never on a timeout — that would
-        # double the tab cost). Feeds self-cooldown, so a flaky nav/consent hiccup
-        # shouldn't zero a board's whole yield for the firing.
-        if err and not posts and "timed out" not in err:
-            posts, err2 = run_feed(s["board"], s.get("nav", ""), force, query=s.get("query", ""))
-            if posts:
-                err = None
-            elif err2:
-                err = err2
-        per_board[s["board"]] = per_board.get(s["board"], 0) + len(posts)
+    http_clear = [s for s in clear if http_concurrent and bc.norm(s["board"]) in HTTP_ONLY_BOARDS]
+    tab_clear = [s for s in clear if s not in http_clear]
+
+    if http_clear:
+        from concurrent.futures import ThreadPoolExecutor
+        scrub = _scrubbed_env()
+        print(f"  sourcing {len(http_clear)} HTTP board(s) off-tab, "
+              f"{http_workers}-way concurrent...", file=sys.stderr)
+        with ThreadPoolExecutor(max_workers=max(1, http_workers)) as ex:
+            for board, posts, err, secs in ex.map(
+                    lambda s: _source_one(s, force, env=scrub), http_clear):
+                per_board[board] = per_board.get(board, 0) + len(posts)
+                all_posts.extend(posts)
+                if err:
+                    errors.append(err)
+                print(f"  sourced {board:<9} {len(posts):>3} cards in {secs:4.0f}s (off-tab)"
+                      + (f"  ERR: {err}" if err else ""), file=sys.stderr)
+
+    for s in tab_clear:
+        board, posts, err, secs = _source_one(s, force)
+        per_board[board] = per_board.get(board, 0) + len(posts)
         all_posts.extend(posts)
         if err:
             errors.append(err)
-        print(f"  sourced {s['board']:<9} {len(posts):>3} cards in {time.time()-t0:4.0f}s"
+        print(f"  sourced {board:<9} {len(posts):>3} cards in {secs:4.0f}s"
               + (f"  ERR: {err}" if err else ""), file=sys.stderr)
 
     # ── 2) merge (dedup by canonical id) ─────────────────────────────────────
@@ -535,6 +641,9 @@ def main():
         force=flag("--force"),
         only_boards=only_boards.split(",") if only_boards else None,
         out_path=opt("-o", QUEUE_DEFAULT),
+        min_queue=opt("--min-queue", 0, int),
+        http_concurrent=flag("--http-concurrent"),
+        http_workers=opt("--http-workers", 6, int),
     )
     print(json.dumps(result, ensure_ascii=False))  # E.5: no indent on the machine line
     if result.get("verdict") != "WORK":

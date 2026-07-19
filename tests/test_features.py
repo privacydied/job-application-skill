@@ -436,5 +436,173 @@ class TestScrubPII(unittest.TestCase):
                 self.assertNotIn(val, src, f"scrub_pii.py must not hardcode the real {key}")
 
 
+class TestPipelineDemandAndConcurrency(unittest.TestCase):
+    """#2 demand-driven min-queue gate + #3 off-tab HTTP concurrency classification."""
+
+    def setUp(self):
+        import pipeline
+        self.pipeline = pipeline
+
+    def _set_env(self, **kv):
+        for k, v in kv.items():
+            old = os.environ.get(k)
+            self.addCleanup(lambda k=k, old=old:
+                            os.environ.__setitem__(k, old) if old is not None
+                            else os.environ.pop(k, None))
+            os.environ[k] = v
+
+    def test_queue_depth_counts_nonblank_lines(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as f:
+            f.write('{"a":1}\n\n   \n{"b":2}\n')
+            p = f.name
+        self.addCleanup(os.unlink, p)
+        self.assertEqual(self.pipeline.queue_depth(p), 2)
+        self.assertEqual(self.pipeline.queue_depth("/no/such/file.jsonl"), 0)
+
+    def test_http_only_boards_exclude_browser_bound(self):
+        # cfx-only and auto-fallback boards must NEVER be in the concurrent off-tab set,
+        # or a concurrent pass could open a second camofox tab and wedge the backend.
+        for b in ("csj", "linkedin", "hackney", "wttj", "mi5", "mi6",
+                  "indeed", "reed", "nhs", "guardian", "dezeen", "gchq", "parliament"):
+            self.assertNotIn(b, self.pipeline.HTTP_ONLY_BOARDS, f"{b} must stay on-tab")
+        for b in ("adzuna", "atsdirect", "remotive", "himalayas", "jobicy"):
+            self.assertIn(b, self.pipeline.HTTP_ONLY_BOARDS)
+
+    def test_scrubbed_env_strips_cfx_creds(self):
+        self._set_env(CFX_KEY="secret", CFX_TAB="tabid")
+        e = self.pipeline._scrubbed_env()
+        self.assertNotIn("CFX_KEY", e)
+        self.assertNotIn("CFX_TAB", e)
+        # a non-CFX var is preserved
+        self.assertEqual(e.get("PATH"), os.environ.get("PATH"))
+
+    def test_min_queue_gate_short_circuits_without_planning(self):
+        # Queue already deep => run() returns skipped_sourcing WITHOUT calling sp.plan
+        # (so it never opens a browser). Force bypasses the gate.
+        with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as f:
+            for i in range(5):
+                f.write('{"i":%d}\n' % i)
+            p = f.name
+        self.addCleanup(os.unlink, p)
+        planned = {"n": 0}
+        saved = self.pipeline.sp.plan
+        self.pipeline.sp.plan = lambda *a, **k: planned.__setitem__("n", planned["n"] + 1) or \
+            {"verdict": "SLEEP"}
+        try:
+            res, code = self.pipeline.run(min_queue=3, out_path=p)
+            self.assertEqual(code, 0)
+            self.assertTrue(res["counts"].get("skipped_sourcing"))
+            self.assertEqual(planned["n"], 0, "gate must skip planning entirely")
+            # below the threshold, the gate does NOT fire (planning proceeds)
+            self.pipeline.run(min_queue=99, out_path=p)
+            self.assertEqual(planned["n"], 1)
+        finally:
+            self.pipeline.sp.plan = saved
+
+
+class TestCfxTabGuardAndSync(unittest.TestCase):
+    """#4 tab-budget prune guard + #5 canonical tab-pointer sync (real cfx, no browser)."""
+
+    def _real_cfx(self):
+        # test_features stubs `cfx`; load the REAL module from its file so we exercise the
+        # actual prune/sync logic. No browser is touched — list_tabs/close_tab are patched.
+        import importlib.util
+        path = os.path.join(_SCRIPTS, "cfx.py")
+        spec = importlib.util.spec_from_file_location("cfx_real_test", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_prune_reaps_oldest_and_never_the_active_tab(self):
+        cfx = self._real_cfx()
+        tabs = [f"t{i}" for i in range(1, 9)]   # 8 live, budget 7 -> must free room for 1 more
+        closed = []
+        cfx.list_tabs = lambda: [{"tabId": t} for t in tabs]
+        cfx.close_tab = lambda t: closed.append(t)
+        got = cfx.prune_tabs(budget=7, keep="t1")
+        # excess = 8 - (7-1) = 2; reap 2 oldest that aren't the active tab (t1) -> t2,t3
+        self.assertEqual(got, ["t2", "t3"])
+        self.assertNotIn("t1", got)
+
+    def test_prune_is_noop_under_budget(self):
+        cfx = self._real_cfx()
+        cfx.list_tabs = lambda: [{"tabId": "a"}, {"tabId": "b"}]
+        cfx.close_tab = lambda t: self.fail("must not close under budget")
+        self.assertEqual(cfx.prune_tabs(budget=7), [])
+
+    def test_sync_tab_writes_complete_export_blocks(self):
+        cfx = self._real_cfx()
+        d = tempfile.mkdtemp()
+        cfx._ROOT = d                       # keep the built-in pointer set off the REAL root
+        os.environ.pop("CFX_TAB_FILE", None)
+        os.environ.pop("CFX_TAB_FILES", None)
+        old_key = os.environ.get("CFX_KEY")
+        os.environ["CFX_KEY"] = "KEY123"
+        self.addCleanup(lambda: os.environ.__setitem__("CFX_KEY", old_key)
+                        if old_key is not None else os.environ.pop("CFX_KEY", None))
+        f1, f2 = os.path.join(d, "p1"), os.path.join(d, "p2")
+        written = cfx.sync_tab(tab_id="TAB999", extra_files=[f1, f2])
+        self.assertIn(f1, written)
+        self.assertIn(f2, written)
+        body = open(f1, encoding="utf-8").read()
+        self.assertIn('CFX_TAB="TAB999"', body)
+        self.assertIn('CFX_KEY="KEY123"', body)   # never a half-written keyless file
+
+
+class TestHumanQueue(unittest.TestCase):
+    """#1 coalesced human worklist — pure matchers + the leverage-sorted invariant."""
+
+    def setUp(self):
+        import human_queue
+        self.hq = human_queue
+
+    def test_site_matching_is_loose_both_ways(self):
+        self.assertTrue(self.hq._site_matches("guardian", "jobs.theguardian.com"))
+        self.assertTrue(self.hq._site_matches("https://jobs.theguardian.com/x", "guardian"))
+        self.assertTrue(self.hq._site_matches("tfl", "tfl.gov.uk"))
+        self.assertFalse(self.hq._site_matches("tfl", "adzuna.co.uk"))
+        self.assertFalse(self.hq._site_matches("", "anything"))
+
+    def test_worklist_is_sorted_by_unlocks_desc(self):
+        # Runs against real (read-only) state; asserts the invariant, not any count.
+        wl = self.hq.build_worklist()
+        self.assertIsInstance(wl, list)
+        unlocks = [int(i.get("unlocks") or 0) for i in wl]
+        self.assertEqual(unlocks, sorted(unlocks, reverse=True))
+        for item in wl:
+            for key in ("kind", "target", "unlocks", "action", "resolve"):
+                self.assertIn(key, item)
+
+
+class TestPrerenderQueue(unittest.TestCase):
+    """#6 async pre-render — pure staleness + queue-read helpers (no render subprocess)."""
+
+    def setUp(self):
+        import prerender_queue
+        self.pr = prerender_queue
+
+    def test_needs_render_staleness(self):
+        d = tempfile.mkdtemp()
+        html = os.path.join(d, "resume.html")
+        pdf = os.path.join(d, "resume.pdf")
+        self.assertFalse(self.pr._needs_render(d))           # no html -> nothing to render
+        open(html, "w").close()
+        self.assertTrue(self.pr._needs_render(d))            # html, no pdf -> render
+        open(pdf, "w").close()
+        os.utime(pdf, (10, 10))
+        os.utime(html, (20, 20))                             # html newer than pdf -> stale
+        self.assertTrue(self.pr._needs_render(d))
+        os.utime(pdf, (30, 30))                              # pdf newer -> fresh
+        self.assertFalse(self.pr._needs_render(d))
+
+    def test_read_queue_skips_bad_lines(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as f:
+            f.write('{"family":"design"}\nnot-json\n\n{"family":"ai"}\n')
+            p = f.name
+        self.addCleanup(os.unlink, p)
+        rows = self.pr._read_queue(p)
+        self.assertEqual([r["family"] for r in rows], ["design", "ai"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
