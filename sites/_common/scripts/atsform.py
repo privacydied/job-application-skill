@@ -13,9 +13,14 @@ text is stable across postings while `name`/`id` are random per posting. Built o
 `cfx.py`, so it inherits the pacing + referer anti-detection.
 
 Importable (adapters do `from atsform import fill, select, ...`) or CLI:
-    CFX_KEY=... CFX_TAB=... python3 atsform.py <apply|fill|select|combo|combo-type|radio|checkbox|upload|review|submit|click> ...
-    # combo "<css/#id>" "<option>"   pick a react-select combobox where synthetic events are
-    #                                ignored + /click hangs (Greenhouse EEO, SmartRecruiters)
+    CFX_KEY=... CFX_TAB=... python3 atsform.py <apply|fill|select|pick|combo|combo-type|radio|checkbox|upload|review|submit|click> ...
+    # pick "<label|css/#id>" "<option>" [--multi] [--clear]   ⭐ the universal dropdown driver:
+    #                                native <select> AND every react-select variant via the
+    #                                interaction ladder (mousedown → ArrowDown → trusted click →
+    #                                type-to-filter). --multi = mark-all-that-apply; --clear =
+    #                                remove existing chips first. `select`/`combo`/`pick-dropdown`
+    #                                all route through this ONE engine (combobox_pick).
+    # combo "<css/#id>" "<option>"   alias for `pick` by selector (kept for back-compat)
     # combo-type "<css/#id>" "<text>"  type-to-search react-select (e.g. a Location autocomplete)
 
 Primitives (all return 0 on success, non-zero on failure, and print a status line):
@@ -222,6 +227,218 @@ def fill(label, value, quiet_notfound=False):
     return 0 if ok else 1
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# combobox_pick — the ONE universal dropdown/combobox driver every ATS shares.
+#
+# PHILOSOPHY: drive at the INTERACTION layer, not the DOM-contract layer. Match a field
+# by accessible semantics (label text / role), OPEN it with the primitive human interaction,
+# and READ the resulting menu from SEVERAL fallbacks — never one framework-specific contract
+# (a class name, `aria-controls`). react-select (Greenhouse, Lever, Ashby, WTTJ, SmartRecruiters
+# — all the same library) toggles its menu on the control's MOUSEDOWN; some variants also open
+# on ArrowDown; a few need a real trusted click; big async lists (Country/Location) need typing.
+# So the OPEN LADDER tries, in order, stopping at the first rung that renders options:
+#   1) synthetic pointer sequence (pointerdown/mousedown/mouseup) on the control  ← proven, fast
+#   2) focus + a real ArrowDown key
+#   3) a trusted Playwright click on the input (last resort — can hang ~30s on Greenhouse)
+#   4) type-to-filter (real per-char keystrokes) for large async/typeahead lists
+# and it READS options from: the aria-controls listbox → the open .select__menu → global
+# .select__option → [role=option]. No single variant can stump a ladder, and because every
+# combobox caller (select/react_select/pick_dropdown/answer) routes through this ONE engine,
+# a fix here fixes every ATS at once. A widget that won't drive is a CAPABILITY GAP to debug
+# (probe_widget.py), never a "structural limit" — only an eligibility question with no truthful
+# answer is a legitimate stop.
+# ═══════════════════════════════════════════════════════════════════════════
+
+_COMBO_READ_OPTS = r"""
+(() => {
+  const inp = document.querySelector('[data-ats-target]');
+  let els = [];
+  if (inp) { const ac = inp.getAttribute('aria-controls'); const box = ac && document.getElementById(ac);
+    if (box) els = [...box.querySelectorAll('[role=option],[class*="option"]')]; }
+  if (!els.length) { const m = document.querySelector('[class*="select__menu"],[class*="-menu"]');
+    if (m) els = [...m.querySelectorAll('[class*="option"],[role=option]')]; }
+  if (!els.length) els = [...document.querySelectorAll('[class*="select__option"]')];
+  if (!els.length) els = [...document.querySelectorAll('[role=option]')];
+  return JSON.stringify(els.map(e => (e.textContent||'').replace(/\s+/g,' ').trim()).filter(Boolean).slice(0,80));
+})()
+"""
+
+_COMBO_POINTER_OPEN = r"""
+(() => {
+  const i = document.querySelector('[data-ats-target]'); if (!i) return 'NO_INPUT';
+  let c = i.closest('[class*="control"]');
+  if (!c) { let n=i; for(let k=0;k<6&&n;k++,n=n.parentElement){const x=n.querySelector&&n.querySelector('[class*="control"]');if(x){c=x;break;}} }
+  if (!c) c = i;
+  c.scrollIntoView({block:'center'});
+  ['pointerdown','mousedown','mouseup'].forEach(t => c.dispatchEvent(new MouseEvent(t,{bubbles:true,cancelable:true,view:window})));
+  return 'OPENED';
+})()
+"""
+
+_COMBO_CLICK = r"""
+(() => {
+  const t = __OPT__.replace(/\s+/g,' ').trim().toLowerCase();
+  const inp = document.querySelector('[data-ats-target]');
+  let els = [];
+  const ac = inp && inp.getAttribute('aria-controls'); const box = ac && document.getElementById(ac);
+  if (box) els = [...box.querySelectorAll('[role=option],[class*="option"]')];
+  if (!els.length) { const m = document.querySelector('[class*="select__menu"],[class*="-menu"]'); if (m) els = [...m.querySelectorAll('[class*="option"],[role=option]')]; }
+  if (!els.length) els = [...document.querySelectorAll('[class*="select__option"],[role=option]')];
+  const norm = e => (e.textContent||'').replace(/\s+/g,' ').trim().toLowerCase();
+  const o = els.find(e => norm(e) === t) || els.find(e => norm(e).includes(t));
+  document.querySelectorAll('[data-ats-target]').forEach(e=>e.removeAttribute('data-ats-target'));
+  if (!o) return 'NO_OPTION:'+els.map(e=>(e.textContent||'').replace(/\s+/g,' ').trim()).slice(0,10).join(' | ');
+  o.scrollIntoView({block:'center'});
+  ['pointerdown','mousedown','mouseup','click'].forEach(tp => o.dispatchEvent(new MouseEvent(tp,{bubbles:true,cancelable:true,view:window})));
+  return 'OK:'+(o.textContent||'').replace(/\s+/g,' ').trim().slice(0,40);
+})()
+"""
+
+_COMBO_RESOLVE = r"""
+(() => {
+  const norm = s => (s||'').replace(/\s+/g,' ').trim().toLowerCase();
+  document.querySelectorAll('[data-ats-target],[data-ats-native]').forEach(e=>{e.removeAttribute('data-ats-target');e.removeAttribute('data-ats-native');});
+  const target = __TARGET__;
+  let el = null;
+  if (/^[#.\[]/.test(target)) { try { el = document.querySelector(target); } catch(e){} }
+  else { el = document.getElementById(target); }
+  if (!el) { try { el = (__FIND__)(target); } catch(e){} }
+  if (!el) return JSON.stringify({kind:'none'});
+  if (el.tagName === 'SELECT') { el.setAttribute('data-ats-native','1');
+    const cur = el.options[el.selectedIndex];
+    return JSON.stringify({kind:'native', current:(cur && cur.value!=='')?[norm(cur.text)]:[]}); }
+  let inp = el;
+  if (el.tagName !== 'INPUT') inp = el.querySelector('input[role=combobox],input[class*="select__input"],input') || el;
+  inp.setAttribute('data-ats-target','1');
+  const ctrl = inp.closest('[class*="control"]');
+  const single = ctrl ? [...ctrl.querySelectorAll('[class*="singleValue"]')].map(v=>norm(v.textContent)) : [];
+  const chips = ctrl ? [...ctrl.querySelectorAll('[class*="multi-value__label"],[class*="multiValueLabel"]')].map(v=>norm(v.textContent)) : [];
+  const box = inp.closest('div');
+  const isMulti = chips.length>0 || (box && /mark all/i.test(box.innerText||''));
+  return JSON.stringify({kind:'combo', current:[...single,...chips].filter(Boolean), isMulti:!!isMulti});
+})()
+"""
+
+_COMBO_NATIVE_SET = r"""
+(() => {
+  const s = document.querySelector('[data-ats-native]'); if (!s) return 'NO';
+  const w = __OPT__.toLowerCase();
+  const cur = s.options[s.selectedIndex];
+  if (cur && cur.value!=='' && cur.text.toLowerCase().includes(w)) return 'OK=already:'+cur.text.trim().slice(0,40);
+  const o = [...s.options].find(o=>o.text.trim().toLowerCase()===w) || [...s.options].find(o=>o.text.toLowerCase().includes(w));
+  if (!o) return 'NO_OPTION';
+  const nv = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype,'value').set;
+  nv.call(s,o.value); s.dispatchEvent(new Event('input',{bubbles:true})); s.dispatchEvent(new Event('change',{bubbles:true}));
+  return 'OK:'+o.text.trim().slice(0,40);
+})()
+"""
+
+_COMBO_CLEAR_CHIPS = r"""
+(() => {
+  const i = document.querySelector('[data-ats-target]'); const c = i && i.closest('[class*="control"]');
+  if (!c) return 0; let n=0;
+  for (const b of c.querySelectorAll('[class*="multi-value__remove"],[class*="multiValueRemove"]')) {
+    ['pointerdown','mousedown','mouseup','click'].forEach(t=>b.dispatchEvent(new MouseEvent(t,{bubbles:true,cancelable:true,view:window}))); n++;
+  }
+  return n;
+})()
+"""
+
+
+def _combo_focus():
+    cfx.evaluate("(()=>{const i=document.querySelector('[data-ats-target]');"
+                 "if(i){i.scrollIntoView({block:'center'});i.focus();}})()")
+
+
+def _combo_options():
+    raw = cfx.evaluate(_COMBO_READ_OPTS)
+    try:
+        return json.loads(raw) if isinstance(raw, str) else []
+    except ValueError:
+        return []
+
+
+def _combo_type(option):
+    """Real per-char keystrokes into the focused combobox input — synthetic input events are
+    IGNORED by react-select and the /type endpoint 500s, so this is how big async/typeahead
+    lists (Country, Location) get filtered down to the target."""
+    _combo_focus()
+    for ch in str(option)[:24]:
+        try:
+            cfx.press(ch)
+        except cfx.CfxError:
+            pass
+        time.sleep(0.05)
+    time.sleep(0.7)
+
+
+def _combo_open_and_pick(option, multi=False):
+    """Open the react-select marked [data-ats-target] via the interaction LADDER, read its
+    options from several fallbacks, and commit the match. THE engine every combobox caller
+    shares (see the block header). Returns 0 on success, 1 otherwise."""
+    want = str(option).strip().lower()
+
+    def _has_match(opts):
+        return any(o.strip().lower() == want or (want and want in o.strip().lower()) for o in opts)
+
+    _combo_focus()
+    rungs = (lambda: cfx.evaluate(_COMBO_POINTER_OPEN),     # 1) synthetic pointer sequence
+             lambda: cfx.press("ArrowDown"),                # 2) real ArrowDown key
+             lambda: cfx.click_selector('[data-ats-target]'))  # 3) trusted click (last resort)
+    opts = []
+    for rung in rungs:
+        try:
+            rung()
+        except Exception:  # noqa: BLE001 — a dead rung must fall through to the next
+            pass
+        cfx.poll(_COMBO_READ_OPTS,
+                 predicate=lambda r: isinstance(r, str) and r not in ("", "[]"), timeout=2.5)
+        opts = _combo_options()
+        if _has_match(opts):
+            break
+    if not _has_match(opts):        # 4) big typeahead (Country/Location) — filter then re-read
+        _combo_type(option)
+        cfx.poll(_COMBO_READ_OPTS,
+                 predicate=lambda r: isinstance(r, str) and r not in ("", "[]"), timeout=2.5)
+    clicked = cfx.evaluate(_COMBO_CLICK.replace("__OPT__", _js(option)))
+    print(clicked if isinstance(clicked, str) else "FAIL")
+    return 0 if isinstance(clicked, str) and clicked.startswith("OK") else 1
+
+
+def combobox_pick(target, option, multi=False, clear_first=False, quiet_notfound=False):
+    """THE universal dropdown/combobox primitive — native <select> AND every react-select
+    variant, driven by the interaction ladder (see block header). `target` = a CSS/#id
+    selector OR a substring of the field's visible label. `multi` = mark-all-that-apply
+    (adds, doesn't replace); `clear_first` removes existing chips first (to REPLACE a wrong
+    multi-select answer). Returns 0 / 1 / NOTFOUND (the last only with quiet_notfound when
+    no such field exists — the defaults path uses it to skip a missing field cleanly)."""
+    resolve_js = _COMBO_RESOLVE.replace("__TARGET__", _js(target)).replace("__FIND__", _FIND_CONTROL)
+    try:
+        info = json.loads(cfx.evaluate(resolve_js))
+    except (ValueError, TypeError):
+        info = {"kind": "none"}
+    kind = info.get("kind")
+    if kind == "none":
+        if quiet_notfound:
+            return NOTFOUND
+        print(f"FAIL combobox_pick: no select/combobox for {target!r}")
+        return 1
+    want = str(option).strip().lower()
+    # IDEMPOTENCY: already shows the target → don't disturb it (re-clicking a multi-select
+    # option would TOGGLE it off; re-setting a native select can reset dependent fields).
+    if any(c == want for c in info.get("current", [])):
+        print(f"OK= combobox_pick {target!r} already = {option!r}")
+        return 0
+    if kind == "native":
+        res = cfx.evaluate(_COMBO_NATIVE_SET.replace("__OPT__", _js(option)))
+        print(res if isinstance(res, str) else "FAIL")
+        return 0 if isinstance(res, str) and res.startswith("OK") else 1
+    if clear_first:
+        cfx.evaluate(_COMBO_CLEAR_CHIPS)
+        time.sleep(0.3)
+    return _combo_open_and_pick(option, multi=multi or bool(info.get("isMulti")))
+
+
 def select(label, option, quiet_notfound=False):
     """Native <select> first; else a react-select combobox (Greenhouse/Lever/WTTJ).
     quiet_notfound (defaults path only): return NOTFOUND instead of FAIL when NO
@@ -359,62 +576,9 @@ def select(label, option, quiet_notfound=False):
         print(f"OK= select {label!r} (already shows {option!r} — skipped re-open)")
         return 0
     time.sleep(0.3)
-    # ── OPEN THE MENU via a real MOUSEDOWN on the react-select CONTROL (primary) ──
-    # WHY (the Greenhouse "remix" blindness this fixes, verified live on Vercel 2026-07-19):
-    #   * These widgets expose NO aria-controls, so the old aria-controls→listbox lookup
-    #     found nothing even when a menu WAS open, and
-    #   * JS-focus + ArrowDown does not reliably open them, while a *trusted* click on the
-    #     input HANGS ~30s on Greenhouse (React re-render Playwright waits on).
-    # react-select toggles its menu on the control's MOUSEDOWN (not click, not a synthetic
-    # value/'input' event) — dispatching pointerdown/mousedown/mouseup opens it instantly and
-    # never hangs. This is what made two comboboxes ("authorization", "where did you hear")
-    # look like a structural camofox limit when they were just never being opened.
-    def _dispatch_open():
-        return cfx.evaluate("""
-        (() => {
-          const inp = document.querySelector('[data-ats-target]');
-          if (!inp) return 'NO_INPUT';
-          let ctrl = inp.closest('[class*="control"]');
-          if (!ctrl) { let n=inp; for(let i=0;i<6&&n;i++,n=n.parentElement){
-            const c=n.querySelector&&n.querySelector('[class*="control"]'); if(c){ctrl=c;break;} } }
-          if (!ctrl) return 'NO_CONTROL';
-          ctrl.scrollIntoView({block:'center'});
-          ['pointerdown','mousedown','mouseup'].forEach(t =>
-            ctrl.dispatchEvent(new MouseEvent(t,{bubbles:true,cancelable:true,view:window})));
-          return 'OPENED';
-        })()
-        """)
-    _opts_js = ('[...document.querySelectorAll(\'[class*="select__option"],'
-                '[class*="-option"],[role=option]\')].map(o=>o.textContent.trim())')
-    _dispatch_open()
-    # Wait for options to mount. aria-controls is null on these, so read the open menu
-    # globally — only one react-select menu is open at a time, so no cross-widget match.
-    got = cfx.poll(_opts_js, predicate=lambda r: isinstance(r, list) and len(r) > 0, timeout=4.0)
-    if not (isinstance(got, list) and got):
-        # Fallback for react-select variants that open on ArrowDown, not control-mousedown
-        # (some Ashby/Lever): focus is already on the marked input from the open dispatch.
-        try:
-            cfx.press("ArrowDown")
-        except cfx.CfxError:
-            pass
-        cfx.poll(_opts_js, predicate=lambda r: isinstance(r, list) and len(r) > 0, timeout=3.0)
-    # ── COMMIT the option via its MOUSEDOWN (react-select preventDefaults click) ──
-    clicked = cfx.evaluate(f"""
-    (() => {{
-      const t = {_js(option)}.trim().toLowerCase();
-      const els = [...document.querySelectorAll('[class*="select__option"],[class*="-option"],[role=option]')];
-      const o = els.find(x => x.textContent.trim().toLowerCase() === t)
-             || els.find(x => x.textContent.trim().toLowerCase().includes(t));
-      document.querySelectorAll('[data-ats-target]').forEach(e=>e.removeAttribute('data-ats-target'));
-      if (!o) return 'NO_OPTION:' + els.map(x=>x.textContent.trim()).slice(0,10).join(' | ');
-      o.scrollIntoView({{block:'center'}});
-      ['pointerdown','mousedown','mouseup','click'].forEach(tp =>
-        o.dispatchEvent(new MouseEvent(tp,{{bubbles:true,cancelable:true,view:window}})));
-      return 'OK:' + o.textContent.trim().slice(0,40);
-    }})()
-    """)
-    print(clicked if isinstance(clicked, str) else "FAIL")
-    return 0 if isinstance(clicked, str) and clicked.startswith("OK") else 1
+    # react-select branch resolved (the input is marked data-ats-target) → hand off to the
+    # ONE shared ladder engine so every combobox caller benefits from the same fix.
+    return _combo_open_and_pick(option)
 
 
 def set_radio(question, option, quiet_notfound=False):
@@ -630,33 +794,12 @@ def _rs_focus(selector):
 
 
 def react_select(selector, option, timeout=6):
-    """Pick `option` in a react-select combobox (`input[role=combobox]`) where synthetic
-    events are IGNORED and /click HANGS — Greenhouse (Remix EEO combos), SmartRecruiters, etc.
-    Recipe: JS-focus the input, a REAL ArrowDown (cfx.press) opens the listbox, read its
-    options via `aria-controls`, keyboard-navigate to the match (menu opens with index 0
-    highlighted, so ArrowDown i times), Enter. `selector` resolves to the input (id or CSS).
-    Returns 'ok', or 'OPT_NF:<opts>' / 'FOCUS_FAIL' / 'NF'. Verify with the caller if needed."""
-    cfx.press("Escape"); time.sleep(0.3)
-    if _rs_focus(selector) != "ok":
-        return "FOCUS_FAIL"
-    time.sleep(0.35); cfx.press("ArrowDown"); time.sleep(0.7)
-    raw = cfx.evaluate(f"(()=>{{const i=document.querySelector({_js(selector)});"
-                       f"const b=document.getElementById(i.getAttribute('aria-controls'));"
-                       f"return b?JSON.stringify([...b.querySelectorAll('[role=option],[id*=option]')]"
-                       f".map(e=>(e.textContent||'').trim())):'[]';}})()")
-    try:
-        opts = json.loads(raw) if isinstance(raw, str) else []
-    except ValueError:
-        opts = []
-    o = option.lower()
-    idx = next((k for k, t in enumerate(opts) if o in t.lower()), None)
-    if idx is None:
-        cfx.press("Escape")
-        return f"OPT_NF:{opts[:8]}"
-    for _ in range(idx):
-        cfx.press("ArrowDown"); time.sleep(0.12)
-    cfx.press("Enter"); time.sleep(0.5)
-    return "ok"
+    """Pick `option` in a react-select combobox by CSS/#id `selector`. Now a thin wrapper
+    over the ONE combobox engine (`combobox_pick`) so it inherits the full interaction ladder
+    (mousedown → ArrowDown → trusted click → type) and multi-source menu reads — the old
+    ArrowDown/aria-controls-only recipe was blind to Greenhouse "remix" (aria-controls: null).
+    Returns 'ok' on success, 'FAIL' otherwise (CLI `combo` only checks == 'ok')."""
+    return "ok" if combobox_pick(selector, option) == 0 else "FAIL"
 
 
 def react_select_type(selector, text, pick_first=True):
@@ -677,43 +820,10 @@ def react_select_type(selector, text, pick_first=True):
 
 
 def pick_dropdown(label, option, settle=0.9):
-    """Open a custom/react-select dropdown near `label` and choose `option`. Opens the
-    control (real click), waits for the listbox, clicks the option by text; falls back to a
-    native <select> if present. Returns 0 on success."""
-    open_finder = f"""(() => {{
-      const norm=s=>(s||'').replace(/\\s+/g,' ').trim().toLowerCase();
-      const w=norm({_js(label)});
-      const labs=[...document.querySelectorAll('label,legend,span,div,p')]
-        .filter(e=>norm(e.textContent).startsWith(w) && norm(e.textContent).length < w.length+30);
-      for (const l of labs){{
-        const scope=l.closest('div,fieldset,section')||l.parentElement;
-        const ctl=scope && scope.querySelector(
-          '[role=combobox],[role=listbox],[aria-haspopup],[class*=control i],select,'+
-          'button[aria-expanded],input:not([type=hidden])');
-        if(ctl) return ctl;
-      }}
-      return null;
-    }})()"""
-    if not _mark(open_finder):
-        print(f"FAIL pick_dropdown: no control near {label!r}")
-        return 1
-    try:
-        cfx.click_selector('[data-cfx-hit="1"]')
-    except cfx.CfxError as e:
-        print(f"FAIL pick_dropdown open {label!r}: {e}")
-        return 1
-    time.sleep(settle)
-    if rclick(option):
-        print(f"OK pick_dropdown {label!r} = {option!r}")
-        return 0
-    # fallback: native <select>
-    r = cfx.evaluate(f"""(()=>{{const w={_js(option)}.toLowerCase();
-      for(const s of document.querySelectorAll('select')){{
-        const o=[...s.options].find(o=>o.text.toLowerCase().includes(w));
-        if(o){{s.value=o.value;s.dispatchEvent(new Event('change',{{bubbles:true}}));return true;}}}}
-      return false;}})()""")
-    print(f"{'OK' if r is True else 'FAIL'} pick_dropdown(native) {label!r} = {option!r}")
-    return 0 if r is True else 1
+    """Open a custom/react-select dropdown by `label` and choose `option`. Now a thin wrapper
+    over the ONE combobox engine (`combobox_pick`) — native <select> and every react-select
+    variant, via the full interaction ladder. Returns 0 on success."""
+    return combobox_pick(label, option)
 
 
 def pick_radio(question, option):
@@ -810,7 +920,12 @@ def answer(question, value):
           return true;}})()""")
         print(f"{'OK' if r is True else 'FAIL'} answer(select) {question[:26]!r}={value!r}")
         return 0 if r is True else 1
-    # radio-group or combobox: scope to the group and click the matching option
+    if kind == 'combo':
+        # react-select / custom combobox → the ONE shared ladder engine (mousedown-open,
+        # multi-source menu read, type-to-filter). Was a bespoke open+rclick that inherited
+        # none of the combobox_pick robustness.
+        return combobox_pick(question, str(value))
+    # radio-group: scope to the group and click the matching option
     finder = f"""(() => {{
       const norm=s=>(s||'').replace(/\\s+/g,' ').trim().toLowerCase();
       const el=({find}); if(!el) return null;
@@ -1292,6 +1407,11 @@ def main():
             r = react_select(a[1], a[2]); print(f"combo {a[1]!r} -> {a[2]!r}: {r}"); return 0 if r == "ok" else 1
         if cmd == "combo-type" and len(a) == 3:
             r = react_select_type(a[1], a[2]); print(f"combo-type {a[1]!r} -> {a[2]!r}: {r}"); return 0 if r == "ok" else 1
+        if cmd == "pick" and len(a) >= 3:
+            # pick "<label|css/#id>" "<option>" [--multi] [--clear] — the universal driver
+            # (native <select> + every react-select variant via the interaction ladder).
+            # --multi = mark-all-that-apply (adds); --clear = remove existing chips first.
+            return combobox_pick(a[1], a[2], multi="--multi" in a, clear_first="--clear" in a)
         if cmd == "radio" and len(a) == 3:     return set_radio(a[1], a[2])
         if cmd == "checkbox" and len(a) in (2, 3): return set_checkbox(a[1], a[2] if len(a) == 3 else "on")
         if cmd == "upload" and len(a) == 3:    return upload(a[1], a[2])

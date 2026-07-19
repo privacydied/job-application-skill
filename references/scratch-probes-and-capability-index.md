@@ -5,6 +5,28 @@ one-shot `.py` probes were written to `/tmp` (`nav.py`, `csj_applylink.py`,
 `wd_*.py`, `broad.py`, …). The lessons below are why they were **not** folded
 into the skill — and how to avoid re-deriving them next time.
 
+## Widget capability index (dropdown / combobox strategies)
+`atsform.combobox_pick` is the ONE engine that drives every dropdown/combobox (native
+`<select>` + all react-select variants) via an interaction LADDER — open with a synthetic
+pointer sequence (`pointerdown/mousedown/mouseup`) on the control, else focus+ArrowDown, else
+a trusted click, else type-to-filter; read the menu from `aria-controls` OR `.select__menu`
+OR global `.select__option`. **Known-working strategies (auto-appended by `probe_widget.py`):**
+
+- **react-select (Greenhouse remix, `select__control` + `aria-controls: null`)** → opens on
+  **pointer-mousedown** on the control; options in the global `.select__option` list. Verified
+  Vercel `job-boards.greenhouse.io` 2026-07-19 (single-select + `mark all that apply` multi).
+- Lever / Ashby / WTTJ / SmartRecruiters use the same react-select library → same
+  pointer-mousedown open; a few variants also honour focus+ArrowDown (ladder rung 2).
+- Large async country/location typeaheads → rungs 1–3 render nothing; **type-to-filter**
+  (rung 4) narrows the list, then the option click commits.
+
+When you meet a widget the ladder can't open, run
+`python3 scripts/probe_widget.py "<label>"` — it reports the winning rung (or none) and
+appends a row here. A widget is a capability gap to record, **never** a "structural limit"
+or a `Blocked` (see `references/camofox-form-filling-pitfalls.md` §doctrine).
+
+### Auto-recorded widget probes (probe_widget.py appends below)
+
 ## Rule 1 — a probe must NEVER hardcode credentials
 Five of that run's `/tmp/wd_*.py` probes hardcoded Jane's ATS password in
 plaintext (`pw = "…"`). **A probe that hardcodes a secret can never be committed**
@@ -60,3 +82,4 @@ one-shot — and note it here so the next run finds it.
   treat that as **skip**, not a form to drive. A real advertiser link resolves to an
   actual ATS (Workday, Applied, etc.). (See `sites/civilservicejobs/NOTES.md` for the
   advertiser-site external-ATS handling this extends.)
+- **combobox** `Will you require Visa Sponsorship` @ `job-boards.greenhouse.io` (role=combobox, aria-controls=None, ctrl=select__control remix-css-13cymwt-control) → opened via **pointer-mousedown**; tried pointer-mousedown=ok, arrowdown=ok, trusted-click=ok [2026-07-19]

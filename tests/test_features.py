@@ -604,5 +604,116 @@ class TestPrerenderQueue(unittest.TestCase):
         self.assertEqual([r["family"] for r in rows], ["design", "ai"])
 
 
+class _FakeCfx:
+    """A scripted cfx stand-in for the combobox ladder tests. It routes each JS template to a
+    recorded-style response (the way a real widget would answer), and records every press /
+    click_selector so a test can assert WHICH ladder rung fired. `opts` is a queue of
+    READ_OPTS responses consumed one per rung — the DOM-fixture: recorded menu states."""
+    CfxError = type("CfxError", (RuntimeError,), {})
+
+    def __init__(self, resolve='{"kind":"none"}', opts=None, click="OK:X", native="OK:X"):
+        self.resolve, self.opts = resolve, list(opts or [])
+        self.click, self.native = click, native
+        self.presses, self.clicks, self.evals = [], [], []
+
+    def evaluate(self, expr, *a, **k):
+        self.evals.append(expr)
+        if "isMulti" in expr:                        # _COMBO_RESOLVE
+            return self.resolve
+        if "HTMLSelectElement" in expr:              # _COMBO_NATIVE_SET
+            return self.native
+        if "NO_OPTION:" in expr:                     # _COMBO_CLICK (terminal)
+            return self.click
+        if "slice(0,80)" in expr:                    # _COMBO_READ_OPTS
+            return self.opts.pop(0) if self.opts else "[]"
+        if "multi-value__remove" in expr:            # _COMBO_CLEAR_CHIPS
+            return 2
+        return ""                                    # focus / pointer-open / close
+
+    def poll(self, expr, predicate=None, **k):
+        return None                                  # value is read via _combo_options next
+
+    def press(self, key, *a, **k):
+        self.presses.append(key)
+
+    def click_selector(self, sel, *a, **k):
+        self.clicks.append(sel)
+
+
+class TestComboboxLadder(unittest.TestCase):
+    """DOM-fixture regression tests for the ONE combobox engine (atsform.combobox_pick) —
+    exercises the resolve→branch decision and the open LADDER offline against recorded widget
+    responses, so a refactor can't silently re-break Greenhouse/Lever/Ashby driving."""
+
+    def setUp(self):
+        import atsform
+        self.atsform = atsform
+        self._real_cfx = atsform.cfx
+        self._real_sleep = atsform.time.sleep
+        atsform.time.sleep = lambda *a, **k: None    # keep the ladder tests fast
+
+    def tearDown(self):
+        self.atsform.cfx = self._real_cfx
+        self.atsform.time.sleep = self._real_sleep
+
+    def _use(self, fake):
+        self.atsform.cfx = fake
+        return fake
+
+    def test_none_returns_notfound_or_fail(self):
+        self._use(_FakeCfx(resolve='{"kind":"none"}'))
+        self.assertEqual(self.atsform.combobox_pick("nope", "x", quiet_notfound=True),
+                         self.atsform.NOTFOUND)
+        self._use(_FakeCfx(resolve='{"kind":"none"}'))
+        self.assertEqual(self.atsform.combobox_pick("nope", "x"), 1)
+
+    def test_native_select_path(self):
+        f = self._use(_FakeCfx(resolve='{"kind":"native","current":[]}', native="OK:United States"))
+        self.assertEqual(self.atsform.combobox_pick("Country", "United States"), 0)
+        self.assertTrue(any("HTMLSelectElement" in e for e in f.evals), "native setter must run")
+        self.assertEqual(f.presses, [], "native path must not use keyboard")
+
+    def test_idempotent_skip_no_interaction(self):
+        f = self._use(_FakeCfx(resolve='{"kind":"combo","current":["no"],"isMulti":false}'))
+        self.assertEqual(self.atsform.combobox_pick("Visa", "No"), 0)
+        self.assertEqual(f.presses, [])
+        self.assertEqual(f.clicks, [])
+        self.assertFalse(any("NO_OPTION:" in e for e in f.evals), "must not open/click when already set")
+
+    def test_pointer_rung_wins_no_arrowdown(self):
+        f = self._use(_FakeCfx(resolve='{"kind":"combo","current":[],"isMulti":false}',
+                               opts=['["Yes","No"]'], click="OK:No"))
+        self.assertEqual(self.atsform.combobox_pick("Visa", "No"), 0)
+        self.assertNotIn("ArrowDown", f.presses, "pointer opened it — ladder must stop before ArrowDown")
+
+    def test_arrowdown_rung_when_pointer_empty(self):
+        f = self._use(_FakeCfx(resolve='{"kind":"combo","current":[],"isMulti":false}',
+                               opts=['[]', '["Yes","No"]'], click="OK:No"))
+        self.assertEqual(self.atsform.combobox_pick("Visa", "No"), 0)
+        self.assertIn("ArrowDown", f.presses, "pointer yielded nothing — must escalate to ArrowDown")
+
+    def test_typeahead_filter_rung(self):
+        f = self._use(_FakeCfx(resolve='{"kind":"combo","current":[],"isMulti":false}',
+                               opts=['[]', '[]', '[]', '["United Kingdom +44"]'],
+                               click="OK:United Kingdom +44"))
+        self.assertEqual(self.atsform.combobox_pick("Country", "United Kingdom"), 0)
+        # rungs 1-3 empty → type-to-filter fires real per-char keystrokes
+        self.assertIn("U", f.presses)
+        self.assertGreater(len([p for p in f.presses if len(p) == 1]), 3)
+
+    def test_no_match_anywhere_fails(self):
+        self._use(_FakeCfx(resolve='{"kind":"combo","current":[],"isMulti":false}',
+                           opts=['["Yes","No"]'], click="NO_OPTION:Yes | No"))
+        self.assertEqual(self.atsform.combobox_pick("Visa", "Maybe"), 1)
+
+    def test_multi_clear_first_removes_chips(self):
+        f = self._use(_FakeCfx(resolve='{"kind":"combo","current":["i don\'t wish to answer"],"isMulti":true}',
+                               opts=['["Man"]'], click="OK:Man"))
+        self.assertEqual(self.atsform.combobox_pick("gender identity", "Man",
+                                                    multi=True, clear_first=True), 0)
+        self.assertTrue(any("multi-value__remove" in e for e in f.evals),
+                        "clear_first must remove existing chips before selecting")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

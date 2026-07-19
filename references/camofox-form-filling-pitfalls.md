@@ -58,6 +58,28 @@ Note: a post-upload poll can report `FAIL: NONE` while the file IS attached
 (Greenhouse swaps the `<input>` for a filename display) — confirm via the
 filename text, not the input.
 
+## 🩺 Widget-driving doctrine (read before you ever log a widget as Blocked)
+**A field/widget that won't drive is a CAPABILITY GAP to debug — NEVER a "structural
+limit," and NEVER a reason to log `Blocked`.** The only legitimate widget stop is an
+*eligibility* question with no truthful answer for the applicant. Everything else is the
+driver not yet knowing the interaction — which is fixable, usually in seconds.
+
+- **Debug it, don't declare it dead:** `python3 scripts/probe_widget.py "<label>"` dumps the
+  widget's DOM (tag/role/aria/classes/current value) and runs the full interaction ladder,
+  reporting **which strategy opened it** and the options it exposes — then appends the result
+  to `references/scratch-probes-and-capability-index.md`. First encounter with a new variant
+  → working method found and recorded in one pass, never rediscovered.
+- **Drive at the interaction layer, not the DOM contract.** Match by accessible semantics
+  (label text / `role`), open with the primitive human interaction, read state from several
+  fallbacks. A widget built for humans answers human-shaped input; one assumed to expose a
+  specific ARIA wiring (`aria-controls`) or class is a trap. This is why the ONE engine
+  `atsform.combobox_pick` uses a ladder (mousedown → ArrowDown → trusted-click → type) and
+  reads the menu from `aria-controls` OR `.select__menu` OR global `.select__option`.
+- **Escalate at most once**, with the captured DOM sample from `probe_widget.py`, and keep
+  applying to everything else. Do not write "structural limit / don't retry" in any note —
+  that false claim is exactly what cost a real submission (the Vercel Blocked 2026-07-19; the
+  combobox was always drivable via control-mousedown).
+
 ## 4. Invisible reCAPTCHA = submit, not a stop
 `recaptcha.py click` on an **invisible** reCAPTCHA returns
 `NO-CHANGE / nothing to click` — that is NORMAL (there is no checkbox). It
