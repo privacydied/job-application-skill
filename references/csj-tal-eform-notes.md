@@ -201,10 +201,14 @@ single-field reads work. The wedge triggers on COMPLEX array-mapping JS
   in its OWN minimal evaluate. The 500 may still return on the CLICK call, but the
   click usually FIRES before the response — re-read `:checked` with a separate tiny
   evaluate to confirm (retry the read a few times; reads recover).
-- This wedge was NOT cured by reducing tab count. When it hard-wedges (reads 500
-  repeatedly), the real fix is restarting camofox (`docker restart <camofox-container>`
-  or `docker compose restart camofox-browser`) — which needs user permission the
-  agent lacks. State this as the unblock; do not loop the wedge.
+- This wedge was NOT cured by reducing tab count. When it hard-wedges (reads/uploads 500
+  repeatedly), the fix is a camofox engine restart — and that is **SELF-SERVICE, agent-callable,
+  NO user permission needed**: run `python3 sites/_common/scripts/cfx.py restart-engine` yourself
+  (it drops all tabs; login persists), then open + persist a fresh tab and resume. Do NOT declare
+  "needs user permission / needs a docker restart" and stop — that's a false wall (verified: the
+  agent restarted the engine and the /upload endpoint recovered). Only if `restart-engine` itself
+  returns `restarted_and_healthy:false` is the docker/watchdog path (SKILL.md §engine-death)
+  needed. Do not loop the wedge, but do not sandbag it either.
 
 ## Re-authenticating a dead CSJ/TAL session (SCRIPTABLE — not a VNC halt)
 The TAL flow needs the **CSJ SSO session** in the camofox tab, and it CAN die

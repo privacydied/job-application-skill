@@ -138,8 +138,43 @@ while IFS= read -r tok; do
   fi
 done <<< "$TOKENS"
 
+# ── Defense-in-depth: also surface PII in UNTRACKED, non-ignored files ──
+# check-no-pii's primary job is the tracked-file leak boundary (correct: a commit
+# can only ship tracked files). But forks like `_set_micro1.py` hardcode PII and live
+# untracked until someone `git add`s them — scrub_pii.py scrubs them, but we ALSO want
+# a loud warning HERE so the leak is caught before staging, not just at commit.
+# This pass is NON-FATAL: it warns but does not change the exit code (tracked leaks
+# remain the hard failure), so a legitimately-untracked working file won't block a push
+# dry-run — but a PII fork will be impossible to miss.
+untracked_hits=0
+while IFS= read -r tok; do
+  [ -z "$tok" ] && continue
+  case "$tok" in
+    "SECRET::"*) continue;;   # secrets handled by the tracked pass above
+  esac
+  # untracked, NOT gitignored (gitignore'd files like spec_*.json / uploads/ are safe)
+  while IFS= read -r uf; do
+    [ -z "$uf" ] && continue
+    if grep -iqF -- "$tok" "$uf" 2>/dev/null; then
+      if [ "$untracked_hits" -eq 0 ]; then
+        echo "⚠ UNTRACKED-BUT-NOT-IGNORED files contain personal tokens (will leak if git-added):"
+      fi
+      echo "    $tok  ->  $uf"
+      untracked_hits=1
+    fi
+  done < <(git ls-files --others --exclude-standard 2>/dev/null)
+done <<< "$TOKENS"
+if [ "$untracked_hits" -eq 1 ]; then
+  echo "  (These are NOT in the repo yet. Either gitignore them, or run scripts/scrub_pii.py to"
+  echo "   placeholder the PII. Tracked-file check below is the authoritative pre-commit gate.)"
+fi
+
 if [ "$found" -eq 0 ]; then
-  echo "✓ check-no-pii: no personal tokens or credential secrets appear in any tracked file."
+  if [ "$untracked_hits" -eq 0 ]; then
+    echo "✓ check-no-pii: no personal tokens or credential secrets appear in any tracked file."
+  else
+    echo "✓ check-no-pii: tracked files are clean (see ⚠ untracked warnings above)."
+  fi
   exit 0
 fi
 echo ""
