@@ -52,3 +52,21 @@ pagination that looks like it works and quietly re-scrapes the first page foreve
   Treat as display text, not a key.
 - Company can be a feed handle rather than a name (e.g. `hays-gcj-v4-pd-online`).
 - ~20 cards/page; `--pages 2` yields ~35 postings.
+
+## Apply flow (VERIFIED live 2026-07-20 — driver is buildable, not external-ATS)
+
+talent.com "Quick Apply" is a **talent.com-HOSTED native form**, NOT an external-ATS redirect
+(contradicts the earlier "no driver possible" read). Verified on `view?id=553230416258205009`:
+
+- Job page: `https://uk.talent.com/view?id=<id>` → a **"Quick Apply"** `<a href="/redirect?id=<id>&pid=<pid>&action=quickapply" target="_blank">`.
+- The `/redirect?...&action=quickapply` URL is MISLEADING — it stays on `uk.talent.com` and renders
+  the quick-apply form in-page (removing `target=_blank` keeps it same-tab, easier to drive).
+- ⚠️ The apply form is **iframe-embedded** AND gated by a **Google reCAPTCHA**
+  (`google.com/recaptcha/api2/bframe` iframe present) — top-level `querySelectorAll` sees 0 inputs;
+  the fields live inside the iframe. A driver must reach the form via `cfx.eval_frame` (frame
+  selector) and solve the reCAPTCHA via the sanctioned `sites/_common/scripts/recaptcha.py`.
+
+DRIVER SHAPE (for the build): open job → click Quick Apply (strip target=_blank) → resolve the
+form iframe → fill (atsform against the frame) → solve reCAPTCHA (recaptcha.py) → submit → verify
+confirmation + capture proof. NOT yet built — needs a focused session to map the iframe fields and
+live-verify end-to-end. Sourced pool: ~34 talent.com roles in the queue as of 2026-07-20.
