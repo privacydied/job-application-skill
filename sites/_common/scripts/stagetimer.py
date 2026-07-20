@@ -92,12 +92,15 @@ def _run_id():
 
 
 def _marker_path(stage):
-    # A.4: key the marker by run-id AND PID so a concurrent firing + the warm-queue
-    # daemon bracketing the same-named stage don't share one marker file (one process's
-    # stop() would otherwise read/remove the other's start, yielding garbage durations).
+    # Key the marker by run-id ONLY — NOT pid. The documented CLI workflow runs `start` and
+    # `stop` as SEPARATE processes (e.g. the agent brackets the `tailor` stage: `stagetimer.py
+    # start tailor` … `stagetimer.py stop tailor`), so a pid in the name made `stop`'s path
+    # differ from `start`'s and it NEVER found the marker — silently recording nothing for
+    # every hand-bracketed stage (on-by-default). Concurrent runs isolate via STAGETIMER_RUN
+    # (the run-id); the in-process `timed()` path uses no marker at all, so pid never helped it.
     safe = "".join(c if (c.isalnum() or c in "-_") else "_" for c in stage)
     rid = "".join(c if (c.isalnum() or c in "-_") else "_" for c in _run_id())
-    return os.path.join(_marker_dir(), f"{safe}.{rid}.{os.getpid()}.start")
+    return os.path.join(_marker_dir(), f"{safe}.{rid}.start")
 
 
 def record(stage, seconds, meta=""):
