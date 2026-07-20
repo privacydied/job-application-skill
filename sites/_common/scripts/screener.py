@@ -66,7 +66,7 @@ _SEED = [
     ("earliest start", "text", "Immediately", "profile"),
     # demographics (two disclose exceptions per profile; rest default prefer-not)
     ("pronoun", "select", "Prefer not to say", "profile:edit for your situation"),
-    ("/age|how old|date of birth|d\\.?o\\.?b/", "text", "Prefer not to say", "profile:edit for your situation"),
+    ("/\\bage\\b|how old|date of birth|d\\.?o\\.?b/", "text", "Prefer not to say", "profile:edit for your situation"),
     ("gender", "select", "Prefer not to say", "profile:edit for your situation"),
     ("/ethnic|ethnicity/", "select", "Prefer not to say", "profile:edit for your situation"),
     ("disability", "select", "No", "profile"),
@@ -80,7 +80,7 @@ _SEED = [
     # MUST precede the generic "years of experience" catch-all (first match wins).
     ("/years.*figma/", "number", "6", "profile"),
     ("/years.*(research|usability|user research)/", "number", "5", "profile"),
-    ("/years.*(product|ux|ui|interaction|\\bdesign)/", "number", "6", "profile"),
+    ("/years.*(product|\\bux\\b|\\bui\\b|interaction|\\bdesign)/", "number", "6", "profile"),
     ("/years.*(accessibility|wcag)/", "number", "2", "profile"),
     ("/years.*design system/", "number", "3", "profile"),
     ("/years.*(front.?end|html|css|node|web develop)/", "number", "3", "profile"),

@@ -1896,6 +1896,16 @@ class TestScreenerMemo(unittest.TestCase):
         self.s._compiled.cache_clear()
         shutil.rmtree(self._dir, ignore_errors=True)
 
+    def test_regex_rows_do_not_match_mid_word(self):
+        # The /age|.../ demographics row (word-bounded) must NOT match "manAGEment"/"packAGE",
+        # and the product/ux/ui years row must NOT match "recrUIting" — both used to collide and
+        # put the WRONG answer (a demographics non-answer, or 6 instead of 5) on real screeners.
+        self.assertEqual(self.s.lookup("how many years of management experience")["answer"], "5")
+        self.assertEqual(self.s.lookup("how many years of recruiting experience")["answer"], "5")
+        # the intended matches still resolve
+        self.assertEqual(self.s.lookup("what is your age")["answer"], "Prefer not to say")
+        self.assertEqual(self.s.lookup("how many years of UX design")["answer"], "6")
+
     def test_memoized_and_record_invalidates(self):
         import time
         self.assertIs(self.s._rows(), self.s._rows())                 # stable file → memoized
