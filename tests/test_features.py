@@ -798,5 +798,53 @@ class TestComboboxLadder(unittest.TestCase):
                         "clear_first must remove existing chips before selecting")
 
 
+class TestAtsRouter(unittest.TestCase):
+    """ats_router.classify() — the external-ATS auto-route brain (WTTJ/escapecity hop)."""
+
+    @classmethod
+    def setUpClass(cls):
+        import ats_router
+        cls.classify = staticmethod(ats_router.classify)
+
+    def test_ashby_drivable(self):
+        r = self.classify("https://jobs.ashbyhq.com/primer/12345678-abcd-ef01")
+        self.assertEqual(r["ats"], "ashby")
+        self.assertTrue(r["drivable"])
+        self.assertIn("ashby.py", r["invoke"])
+        self.assertIn("<config.json>", r["invoke"])  # never fabricates the config
+
+    def test_greenhouse_variants_drivable(self):
+        for u in ("https://boards.greenhouse.io/storyblok/jobs/6789",
+                  "https://job-boards.greenhouse.io/acme/jobs/1",
+                  "https://acme.com/careers?gh_jid=4567"):
+            r = self.classify(u)
+            self.assertEqual(r["ats"], "greenhouse", u)
+            self.assertTrue(r["drivable"], u)
+            self.assertIn("gh_apply.py", r["invoke"], u)
+
+    def test_recognised_but_no_driver_never_drivable(self):
+        # Lever/Workday/SmartRecruiters/Workable/SuccessFactors: recognised → NOT a false auto-submit.
+        for u, ats in (("https://jobs.lever.co/deliveroo/abc-def", "lever"),
+                       ("https://acme.wd3.myworkdayjobs.com/en-US/careers/job/London/X", "workday"),
+                       ("https://jobs.smartrecruiters.com/Acme/743999", "smartrecruiters"),
+                       ("https://apply.workable.com/acme/j/ABC123/", "workable"),
+                       ("https://form.typeform.com/to/BnSEtzL7", "typeform"),
+                       ("https://acme.rmkcloud.com/careersection/x", "successfactors")):
+            r = self.classify(u)
+            self.assertEqual(r["ats"], ats, u)
+            self.assertFalse(r["drivable"], u)
+            self.assertIsNone(r["invoke"], u)
+
+    def test_unknown_host(self):
+        r = self.classify("https://example.com/some-random-page")
+        self.assertEqual(r["ats"], "unknown")
+        self.assertFalse(r["drivable"])
+
+    def test_empty_url_safe(self):
+        r = self.classify("")
+        self.assertEqual(r["ats"], "unknown")
+        self.assertFalse(r["drivable"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

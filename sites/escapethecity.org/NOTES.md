@@ -76,12 +76,25 @@ guarding:
   `money()` renders as "£90,000–£100". A max is only trusted when it is itself >= 1000 **and**
   >= low; otherwise only the low is shown.
 
-## Apply
-Off-site per employer — Escape the City links out to the org's own ATS/careers page. The
-Algolia record carries **no** apply/external URL field (checked every url/link/apply-ish key),
-and the JD page is a Vue SPA whose apply CTA is not in the static HTML, so `ats_hint` is left
-empty and the path resolves per-listing on the JD page. **Apply is not HTTP-probed** — no
-browser was used per this task's constraint; treat the apply path as unverified.
+## Apply — resolve + route (VERIFIED 2026-07-21, `scripts/apply.py`)
+Off-site per employer — Escape the City links out to wherever the org collects applications,
+per-listing, from the JD page (a Vue SPA — the CTA is NOT in the static HTML, so the browser is
+required; the Algolia record has no apply URL field). There is NO in-platform form and NO single
+mechanism, so the driver CLASSIFIES + ROUTES rather than fills:
+
+    CFX_KEY=.. python3 sites/escapethecity.org/scripts/apply.py <slug-or-url> [--json]
+
+It opens the JD, extracts the "Apply"/"Register your interest" CTA href, **follows shortlinks**
+(bit.ly → final), and classifies via `sites/_common/scripts/ats_router.py`:
+  * **Ashby / Greenhouse** → guest-drivable: prints the exact driver command (build a config, run it).
+  * **Typeform / Lever / Workday / SmartRecruiters / email / unknown** → manual/VNC (no driver /
+    anti-bot). Never a false auto-submit.
+Verified live: the Runna "Director of Product Design" listing routes `Register your interest` →
+`bit.ly/48V62ue` → `form.typeform.com/to/BnSEtzL7` → classified `typeform` (manual). Expired
+listings (title "Not Found") are reported as expired, not driven.
+
+This converts the escapecity channel from "NO_DRIVER → all VNC" to "every listing resolved +
+routed; the Ashby/Greenhouse-backed ones auto-drive."
 
 ## CAPTCHA
 ⛔ Per `references/captcha-policy.md`: full halt for any CAPTCHA except the two sanctioned

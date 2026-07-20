@@ -51,6 +51,7 @@ If send returns 3 (EXTERNAL_FALLBACK): open-external → drive the company ATS t
 → resolve-applied yes. That last step clears the toast that otherwise freezes the feed.
 """
 import os
+import re
 import sys
 import time
 
@@ -284,18 +285,55 @@ def send():
 
 
 def open_external():
-    """Click WTTJ's "Apply on <company>'s website" button (the external-ATS fallback). The
-    ATS opens in a NEW tab; the caller drives it with the matching recipe (Ashby/Greenhouse/
-    …) and then calls `resolve_applied_prompt`. Prints the company label; the new tab's URL
-    identifies the ATS (poll `GET /tabs`). Returns 0 if clicked, 1 if no external button."""
+    """Click WTTJ's "Apply on <company>'s website" button (the external-ATS fallback), then
+    AUTO-ROUTE: find the new tab's URL, classify its ATS via ats_router, and print the exact
+    driver command (Ashby/Greenhouse guest-drivable) or a manual/VNC note (recognised-but-no-driver
+    / unknown). No more "find the tab yourself + guess the recipe". Returns 0 if clicked (routing
+    printed), 1 if no external button."""
     label = cfx.evaluate(r"""(()=>{const b=[...document.querySelectorAll('button,a')]
       .find(x=>/apply on .+ website/i.test(x.textContent||''));return b?(b.textContent||'').trim():'';})()""") or ""
     if not label:
         print("NF: no 'Apply on <company>'s website' button on this page.")
         return 1
+    # snapshot tabs BEFORE the click so we can identify the one that opens
+    try:
+        before = {t.get("tabId") for t in (cfx.list_tabs() or [])}
+    except Exception:  # noqa: BLE001
+        before = set()
     _react_click(r"[...document.querySelectorAll('button,a')].find(x=>/apply on .+ website/i.test(x.textContent||''))")
-    time.sleep(3)
-    print(f"OPENED external ATS ({label}). Find the new tab via GET /tabs and drive it with that ATS's recipe.")
+    # poll for the new tab and let its URL settle past any redirect interstitial
+    new_url, new_tab = "", ""
+    for _ in range(8):
+        time.sleep(2)
+        try:
+            tabs = cfx.list_tabs() or []
+        except Exception:  # noqa: BLE001
+            tabs = []
+        cand = [t for t in tabs if t.get("tabId") not in before
+                and "welcometothejungle" not in (t.get("url") or "")]
+        if cand:
+            new_tab = cand[-1].get("tabId") or ""
+            new_url = cand[-1].get("url") or ""
+            if new_url and not re.search(r"/redirect|/away|linkout|/r/|utm_", new_url):
+                break
+    if not new_url:
+        print(f"OPENED external ATS ({label}) — but no new tab URL detected yet. Poll GET /tabs and "
+              f"run ats_router.py on it. (Toast: resolve_applied_prompt after you apply.)")
+        return 0
+    try:
+        import ats_router  # _common/scripts already on sys.path (module load)  # noqa: E402
+        r = ats_router.classify(new_url)
+    except Exception as e:  # noqa: BLE001
+        print(f"OPENED external ATS ({label}) → {new_url} (tab {new_tab}); ats_router failed ({e}).")
+        return 0
+    print(f"OPENED external ATS ({label}) → {r['ats']} @ {new_url} (tab {new_tab})")
+    if r["drivable"]:
+        cmd = (r["invoke"] or "").replace("<config.json>", "<config.json>")
+        print(f"  ▶ AUTO-ROUTE: guest-drivable — build the config, then run (with CFX_TAB={new_tab}):\n"
+              f"    CFX_TAB={new_tab} {cmd}")
+    else:
+        print(f"  ⚠ {r['note']} — hand to VNC ({_VNC if '_VNC' in globals() else 'noVNC'}); "
+              f"do NOT log Applied without proof.")
     return 0
 
 
