@@ -87,21 +87,29 @@ def set_text(name, val):
 
 
 def set_checkbox(name, want=True):
+    # IDEMPOTENT: click only when the current state differs from `want`. The old code always
+    # clicked (toggling), then for a mismatch re-set .checked AND dispatched a synthetic 'click'
+    # that toggled AGAIN — so a PRE-checked box (Section 2 persists server-side across re-runs)
+    # ended up UNCHECKED, the declaration-gated Submit button never rendered, and the submit
+    # silently failed. `.click()` alone toggles + fires native events; 'change' updates Knockout.
     return cfx.evaluate(
         "(function(n,w){const c=document.querySelector('input[name=\\'"+name+"\\']');"
-        "if(!c)return 'NO_FIELD';c.click();"
-        "if(w && !c.checked){c.checked=true;c.dispatchEvent(new Event('click',{bubbles:true}));}"
-        "if(!w && c.checked){c.checked=false;c.dispatchEvent(new Event('click',{bubbles:true}));}"
+        "if(!c)return 'NO_FIELD';"
+        "if(c.checked!==w){c.click();}"
         "c.dispatchEvent(new Event('change',{bubbles:true}));return 'OK:'+c.checked;})"
         "(" + json.dumps(name) + "," + json.dumps(want) + ")")
 
 
 def set_select(name, want):
+    # EXACT match first across ALL options, THEN fall back to substring — the old single-pass
+    # `find(exact(x) || substring(x))` was first-either-wins, so a substring hit on an EARLIER
+    # option (options=['Greater London','London'], want 'London') beat the exact match and wrote
+    # the WRONG value to the submitted Section-2 form. (Same fix pick.py already carries.)
     return cfx.evaluate(
         "(function(n,w){const s=document.querySelector('select[name=\\'"+name+"\\']');"
         "if(!s)return 'NO_FIELD';"
-        "const o=[...s.options].find(x=>(x.text||'').trim().toLowerCase()===w.toLowerCase()"
-        "||(x.text||'').toLowerCase().includes(w.toLowerCase()));"
+        "const o=[...s.options].find(x=>(x.text||'').trim().toLowerCase()===w.toLowerCase())"
+        "||[...s.options].find(x=>(x.text||'').toLowerCase().includes(w.toLowerCase()));"
         "if(!o)return 'NO_OPT:'+[...s.options].map(x=>x.text.trim()).join(',');"
         "s.value=o.value;s.dispatchEvent(new Event('change',{bubbles:true}));"
         "s.dispatchEvent(new Event('input',{bubbles:true}));return 'OK:'+o.text.trim();})"

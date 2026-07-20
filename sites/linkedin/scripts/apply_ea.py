@@ -244,7 +244,11 @@ def run(job, company, role, resume, source, notes, max_attempts, dry_run):
             low = step.lower()
             # LinkedIn sometimes auto-advances straight to "Your application was
             # sent" with no Review step. Treat that as an immediate success.
-            if "sent" in low or "was sent" in low or "application submitted" in low:
+            # WORD-BOUNDARY "sent" ("application sent" / "was sent") — a bare `"sent" in low`
+            # also matched "conSENT" / "preSENT" step titles, setting already_sent=True and
+            # logging a FALSE "Applied" WITHOUT ever clicking Submit (false success is the
+            # worst outcome here). "application submitted" kept as an explicit phrase.
+            if re.search(r"\bsent\b", low) or "application submitted" in low:
                 already_sent = True
                 break
             if "review" in low:

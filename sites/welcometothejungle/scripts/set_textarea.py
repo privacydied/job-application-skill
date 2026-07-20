@@ -80,7 +80,12 @@ def main():
     # would spuriously FAIL a clean set (and exit non-zero, tripping the caller).
     # Measure against the same normalization the browser applies. LF-only text
     # (the common case) is unchanged.
-    want = len(text.replace("\r\n", "\n").replace("\r", "\n"))
+    # Compare in UTF-16 code UNITS: `got` is JS el.value.length (UTF-16 units — an astral char
+    # like an emoji counts as 2), so Python code-point len() over-/under-counts vs the field and
+    # would spuriously FAIL a clean set of text containing any non-BMP char. BMP text (the common
+    # case, incl. curly quotes/accents) is unchanged: 1 code point == 1 UTF-16 unit there.
+    norm = text.replace("\r\n", "\n").replace("\r", "\n")
+    want = len(norm.encode("utf-16-le")) // 2
     if got == want:
         print(f"PASS: set {got} chars into #{el_id}.")
         sys.exit(0)
