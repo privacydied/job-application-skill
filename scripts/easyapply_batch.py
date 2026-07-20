@@ -52,7 +52,7 @@ TRACKER = os.path.join(ROOT, "application-tracker.csv")
 # Known screener answers. Keys are lowercased SUBSTRINGS of the question text.
 # RADIO_KEYS are answered with `easyapply.py radio` first (fallback to fill).
 RADIO_KEYS = ("sponsorship", "authorized to work", "right to work",
-              "willing to relocate", "notice period", "available to start",
+              "relocat", "notice period", "available to start",
               "require sponsorship", "visa sponsorship", "currently employed")
 KNOWN = {
     "sponsorship": "No",
@@ -60,7 +60,10 @@ KNOWN = {
     "visa sponsorship": "No",
     "authorized to work": "Yes",
     "right to work": "Yes",
-    "willing to relocate": "No",
+    # "relocat" (not "willing to relocate") so a label reading "open to relocation?" / "relocate?"
+    # matches — AND it precedes "location" below, else "location" ⊂ "reLOCATION" answered a
+    # relocation Yes/No with the city "London".
+    "relocat": "No",
     "notice period": "Immediately",
     "available to start": "Immediately",
     "currently employed": "Yes",
@@ -169,12 +172,16 @@ def drive(job_id, company, role):
     for _ in range(8):           # up to ~16s polling the spinner
         time.sleep(2)
         st = state()
-        if "sent" in ((st.get("step", "") or "") + (st.get("header", "") or "")).lower():
+        # WORD-BOUNDARY "sent" — a bare substring also matched "conSENT"/"preSENT" in a step
+        # or (free-text) header and logged a FALSE Applied without ever submitting.
+        if re.search(r"\bsent\b", ((st.get("step", "") or "") + " " + (st.get("header", "") or "")).lower()):
             sent = True; break
     if not sent:
         try:
             txt = cfx.evaluate("(document.body.innerText||'').toLowerCase()")
-            if "your application was sent" in txt or "applied" in txt:
+            # Require the explicit confirmation phrase — a bare "applied" is in nearly every JD
+            # ("applied research", "candidates who have applied") and false-logged Applied.
+            if "your application was sent" in txt or "application was sent" in txt:
                 sent = True
         except Exception:
             pass
