@@ -57,6 +57,7 @@ QUEUE = os.path.join(_ROOT, "queue.jsonl")
 LOG = os.path.join(_ROOT, "autodrain.log")
 REED_APPLY = os.path.join(_ROOT, "scripts", "reed_apply.py")
 APPLY_QUEUE = os.path.join(_ROOT, "scripts", "apply_queue.py")
+LOG_APP = os.path.join(_ROOT, "sites", "_common", "scripts", "log-application.py")
 
 # markers a delegated driver prints when it hits a hard wall we must HALT on (never bypass).
 _CAPTCHA_MARKERS = re.compile(r"\b(turnstile|hcaptcha|captcha)\b", re.I)
@@ -108,12 +109,33 @@ def partition(rows):
             continue
         rid = _reed_id(r)
         if rid:
-            reed.append(rid)
+            reed.append((rid, r))    # keep the ROW too, for post-submit tracker logging
         elif r.get("ats_hint") == "linkedin-easyapply":
             ea.append(r)
         else:
             needs.append(r)          # greenhouse/workday/external/etc. — need tailoring/judgment
     return {"reed": reed, "ea": ea, "needs_model": needs}
+
+
+def _log_reed_submitted(row, url):
+    """Record a driven Reed submit so the NEXT pass DEDUPS it. reed_apply.py logs nothing and
+    autodrain wrote nothing back, so the same Reed posting re-sourced and re-submitted every
+    pass = duplicate applications to a real employer. Status is 'Applied?' (NOT 'Applied'):
+    autodrain captures no confirmation screenshot and log-application refuses Applied without
+    proof — 'submitted, unconfirmed' is the honest status; reconcile on Reed's
+    /account/jobs/applications page to promote it to Applied."""
+    company = (row.get("company") or "").strip() or "(unknown)"
+    role = (row.get("title") or row.get("role") or "").strip() or "(unknown)"
+    u = url or row.get("url") or ""
+    if not u:
+        return
+    try:
+        subprocess.run(
+            [sys.executable, LOG_APP, company, role, "Reed", u, "Applied?", "--append-new",
+             "--notes", "autodrain Reed auto-submit (no captured proof) — reconcile on Reed applications page"],
+            capture_output=True, text=True, cwd=_ROOT, timeout=30)
+    except Exception as e:  # noqa: BLE001 — logging must never crash the drain
+        _logline(f"reed: log-application failed for {u}: {e}")
 
 
 def _run(cmd, timeout):
@@ -164,8 +186,16 @@ def main():
 
     rows = load_queue()
     part = partition(rows)
-    n_reed, n_ea, n_needs = len(part["reed"]), len(part["ea"]), len(part["needs_model"])
-    _logline(f"queue={len(rows)}: reed={n_reed} ea={n_ea} needs_model={n_needs}")
+    # DEDUP Reed against the tracker (mirror apply_queue._handled: a tracked id is handled
+    # unless it's Blocked, which stays retryable). reed_apply.py logs nothing, so without this
+    # a Reed row already submitted on a prior pass re-sources and gets RE-SUBMITTED every pass.
+    by_id, _by_pair = precheck.load_tracker()
+    reed_pending = [(rid, r) for (rid, r) in part["reed"]
+                    if not (by_id.get(rid) and by_id.get(rid).lower() != "blocked")]
+    n_reed_tracked = len(part["reed"]) - len(reed_pending)
+    n_reed, n_ea, n_needs = len(reed_pending), len(part["ea"]), len(part["needs_model"])
+    _logline(f"queue={len(rows)}: reed={n_reed} (+{n_reed_tracked} already-tracked, skipped) "
+             f"ea={n_ea} needs_model={n_needs}")
 
     # cap: default = remaining headroom under APPLY_TARGET (today), min 0.
     applied_today = plan.get("applied_today", 0)
@@ -199,16 +229,24 @@ def main():
 
     drained = 0
     # ── Reed first (highest submit rate, cleanest code-only path) ────────────
-    if part["reed"] and not ea_only and drained < cap:
-        batch = part["reed"][:cap - drained]
-        _logline(f"reed: driving {len(batch)} id(s) via reed_apply.py")
-        rc, out = _run([sys.executable, REED_APPLY] + batch, timeout=len(batch) * 90 + 120)
+    if reed_pending and not ea_only and drained < cap:
+        batch = reed_pending[:cap - drained]
+        ids = [rid for rid, _r in batch]
+        rows_by_id = {rid: r for rid, r in batch}
+        _logline(f"reed: driving {len(ids)} id(s) via reed_apply.py")
+        rc, out = _run([sys.executable, REED_APPLY] + ids, timeout=len(ids) * 90 + 120)
         if _halt_on_captcha(out):
             _logline("HALT: Reed drain hit a non-sanctioned CAPTCHA — blocker recorded, stopping.")
             return 0
-        submitted = out.upper().count("SUBMITTED")
+        # reed_apply prints `[<id>] SUBMITTED (url=…)` / `[<id>] SUBMITTED2 (url=…)` per id.
+        # Log each so the NEXT pass dedups it (else the row re-drives forever).
+        urls_by_id = dict(re.findall(r"\[(\d+)\]\s+SUBMITTED2?\s+\(url=([^)]*)\)", out))
+        submitted_ids = re.findall(r"\[(\d+)\]\s+SUBMITTED", out)
+        for sid in submitted_ids:
+            _log_reed_submitted(rows_by_id.get(sid, {}), urls_by_id.get(sid, ""))
+        submitted = len(submitted_ids)
         drained += submitted
-        _logline(f"reed: reed_apply rc={rc}, ~{submitted} SUBMITTED")
+        _logline(f"reed: reed_apply rc={rc}, {submitted} SUBMITTED (logged Applied? for dedup)")
 
     # ── Easy-Apply via the existing queue driver ─────────────────────────────
     if part["ea"] and not reed_only and drained < cap:
