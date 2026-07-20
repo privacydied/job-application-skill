@@ -430,6 +430,25 @@ def _combo_type(option):
     time.sleep(0.7)
 
 
+_COMBO_FREETEXT_COMMIT = r"""
+(function(){
+  var t=document.querySelector('[data-ats-target]');
+  var cb=(t&&t.tagName==='INPUT')?t:(t?t.querySelector('input'):null);
+  if(!cb) cb=document.querySelector('input[role=combobox],input[aria-autocomplete=list]');
+  if(!cb) return 'NO_INPUT';
+  cb.focus();
+  var set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
+  set.call(cb, __VAL__);
+  cb.dispatchEvent(new Event('input',{bubbles:true}));
+  cb.dispatchEvent(new Event('change',{bubbles:true}));
+  cb.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',keyCode:13,bubbles:true}));
+  cb.dispatchEvent(new KeyboardEvent('keyup',{key:'Enter',keyCode:13,bubbles:true}));
+  cb.dispatchEvent(new Event('blur',{bubbles:true}));
+  return (cb.value||'').trim() ? 'OK:'+cb.value.slice(0,40) : 'EMPTY';
+})()
+"""
+
+
 def _combo_open_and_pick(option, multi=False):
     """Open the react-select marked [data-ats-target] via the interaction LADDER, read its
     options from several fallbacks, and commit the match. THE engine every combobox caller
@@ -463,9 +482,24 @@ def _combo_open_and_pick(option, multi=False):
         _combo_type(option)
         cfx.poll(_COMBO_READ_OPTS,
                  predicate=lambda r: isinstance(r, str) and r not in ("", "[]"), timeout=2.5)
+        opts = _combo_options()
     clicked = cfx.evaluate(_COMBO_CLICK.replace("__OPT__", _js(option)))
+    if isinstance(clicked, str) and clicked.startswith("OK"):
+        print(clicked)
+        return 0
+    # FREE-TEXT FALLBACK — ONLY when the list came back genuinely EMPTY. Some Ashby "Where are you
+    # located?" comboboxes are async autocompletes whose suggestion source returns NOTHING in a
+    # headless session (empty listbox), yet the field accepts the TYPED value on submit. Committing
+    # the typed value (React native-setter so onChange fires, then Enter/blur) unblocks those. We do
+    # NOT do this when options exist but none matched — that must still fail rather than guess a
+    # wrong value — so the blast radius is only comboboxes that ALREADY fail with NO_OPTION.
+    if not opts:
+        ft = cfx.evaluate(_COMBO_FREETEXT_COMMIT.replace("__VAL__", _js(str(option))))
+        if isinstance(ft, str) and ft.startswith("OK"):
+            print(f"OK=freetext:{str(option)[:40]} (async suggestion list empty — committed typed value)")
+            return 0
     print(clicked if isinstance(clicked, str) else "FAIL")
-    return 0 if isinstance(clicked, str) and clicked.startswith("OK") else 1
+    return 1
 
 
 def combobox_pick(target, option, multi=False, clear_first=False, quiet_notfound=False):
