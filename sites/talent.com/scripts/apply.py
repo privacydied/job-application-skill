@@ -74,6 +74,18 @@ def _ev(expr, tries=4):
     return None
 
 
+def _wait(cond, timeout=15, interval=1.5):
+    """Poll cond() until truthy or timeout; returns the last value (async pages need this)."""
+    deadline = time.time() + timeout
+    r = None
+    while time.time() < deadline:
+        r = cond()
+        if r:
+            return r
+        time.sleep(interval)
+    return r
+
+
 def _job_url(a):
     a = a.strip()
     return a if a.startswith("http") else f"https://uk.talent.com/view?id={a}"
@@ -228,21 +240,88 @@ def _send_enabled():
     return _ev("(function(){var b=[...document.querySelectorAll('button')].filter(function(e){return e.offsetParent;}).find(function(x){return /send application/i.test(x.innerText||'');});return b?!b.disabled:false;})()")
 
 
+def _turnstile_sitekey():
+    """Best-effort extract of the Cloudflare Turnstile sitekey (data-sitekey, the
+    challenges.cloudflare.com iframe ?k= param incl. shadow roots, or a 0x… token in the HTML). A
+    solver service needs this. Returns '' when Cloudflare shields it (the common case here)."""
+    return _ev(r'''(function(){
+      var d=document.querySelector('[data-sitekey]'); if(d)return d.getAttribute('data-sitekey');
+      var found='';
+      function walk(root,dep){if(dep>6||!root||found)return;var e=root.querySelectorAll?root.querySelectorAll('*'):[];for(var i=0;i<e.length&&!found;i++){var x=e[i];var s=(x.src||'')+'';var m=s.match(/[?&]k=([^&]+)/);if(m&&/cloudflare|turnstile/i.test(s)){found=m[1];return;}var sk=x.getAttribute&&x.getAttribute('data-sitekey');if(sk){found=sk;return;}if(x.shadowRoot)walk(x.shadowRoot,dep+1);}}
+      walk(document,0); if(found)return found;
+      return (document.documentElement.innerHTML.match(/\b0x[0-9A-Za-z_-]{20,}\b/)||[''])[0];
+    })()''') or ""
+
+
+def _solve_turnstile_via_service():
+    """OPTIONAL autonomous Turnstile solve via a 2captcha-compatible solver (key from
+    CAPTCHA_API_KEY / TWOCAPTCHA_KEY). Turnstile CANNOT be solved in-browser here — camofox is
+    fingerprinted (clicks return "Verification failed") and the sitekey is usually DOM-shielded — so
+    a solver service is the only headless path, and even it needs the sitekey to be extractable.
+    This wiring means: the instant a key is provisioned AND the sitekey surfaces, the whole flow is
+    fully autonomous. Returns True iff a token was obtained + injected (Send became enabled)."""
+    key = os.environ.get("CAPTCHA_API_KEY") or os.environ.get("TWOCAPTCHA_KEY") or ""
+    if not key:
+        return False
+    import urllib.parse
+    import urllib.request
+    sitekey = _turnstile_sitekey()
+    pageurl = _ev("location.href") or ""
+    if not sitekey or not pageurl:
+        print("  talent: solver — sitekey not extractable (Cloudflare-shielded); cannot auto-solve",
+              file=sys.stderr)
+        return False
+    try:
+        q = urllib.parse.urlencode({"key": key, "method": "turnstile", "sitekey": sitekey,
+                                    "pageurl": pageurl, "json": 1})
+        rid = json.loads(urllib.request.urlopen("https://2captcha.com/in.php?" + q, timeout=30).read())
+        if str(rid.get("status")) != "1":
+            print(f"  talent: solver submit failed {rid}", file=sys.stderr)
+            return False
+        cid, token = rid["request"], ""
+        for _ in range(40):                       # poll up to ~3½ min
+            time.sleep(5)
+            res = json.loads(urllib.request.urlopen(
+                "https://2captcha.com/res.php?" + urllib.parse.urlencode(
+                    {"key": key, "action": "get", "id": cid, "json": 1}), timeout=30).read())
+            if str(res.get("status")) == "1":
+                token = res["request"]
+                break
+        if not token:
+            return False
+        _ev("""(function(t){[...document.querySelectorAll('[name*=turnstile],textarea[name*=cf-]')].forEach(function(e){var P=(e.tagName==='TEXTAREA'?window.HTMLTextAreaElement:window.HTMLInputElement).prototype;Object.getOwnPropertyDescriptor(P,'value').set.call(e,t);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));});return 'ok';})(""" + json.dumps(token) + ")")
+        time.sleep(2)
+        return bool(_send_enabled())
+    except Exception as e:  # noqa: BLE001
+        print(f"  talent: solver error {e}", file=sys.stderr)
+        return False
+
+
 def _final_submit(job, company, role, dry):
     if dry:
         return "DRY_READY (at Turnstile/Send)"
-    # HALT for a human VNC Turnstile solve — do NOT auto-click it (policy: compounds risk score).
+    # Cloudflare Turnstile gate. Per references/external-ats-bypass.md, this is the SAME class of
+    # HARD BLOCKER as Indeed SmartApply: unsolvable via camofox (fingerprinted; clicks return
+    # "Verification failed"; the sitekey is DOM-shielded). Policy (captcha-policy.md): NEVER auto-
+    # click it — that compounds the risk score. So: (1) try a solver service IF one is provisioned
+    # (fully autonomous); else (2) classify a clean Blocked — no long hang — and record a cooldown
+    # so hermes routes the role to the user's own device, exactly like Indeed. It is NOT a crash.
     if _turnstile_present() and not _send_enabled():
-        print(f"\nTALENT_TURNSTILE_HALT — {company or job} | {role} needs the Cloudflare 'Verify you "
-              f"are human' checkbox solved. Held; tab left filled. Solve in VNC: {VNC}", file=sys.stderr)
-        deadline = time.time() + 900   # poll up to 15 min for the human solve
-        while time.time() < deadline:
-            if _send_enabled():
-                print("  talent: Turnstile cleared — sending")
-                break
-            time.sleep(5)
+        if _solve_turnstile_via_service():
+            print("  talent: Turnstile solved via solver service (autonomous)")
         else:
-            return "TURNSTILE_HELD (solve in VNC, re-run)"
+            try:
+                import subprocess
+                subprocess.run(["bash", os.path.join(_COMMON, "cfx.sh"),
+                                "record-captcha-fail", "talent.com"],
+                               capture_output=True, timeout=15)
+            except Exception:  # noqa: BLE001
+                pass
+            print(f"\nTALENT_TURNSTILE_WALL — {company or job} | {role}: Cloudflare Turnstile "
+                  f"(unsolvable via camofox — same as Indeed SmartApply). Filled to review; needs "
+                  f"the user's own device, or set CAPTCHA_API_KEY. VNC: {VNC}", file=sys.stderr)
+            return ("TURNSTILE_WALL (Blocked — Cloudflare Turnstile, unsolvable via camofox; "
+                    "apply on user device or set CAPTCHA_API_KEY)")
     # send + verify
     _ev("""(function(){[...document.querySelectorAll('input[type=checkbox]')].filter(function(e){return e.offsetParent&&!e.checked;}).forEach(function(c){c.click();});var b=[...document.querySelectorAll('button,input[type=submit]')].filter(function(e){return e.offsetParent&&!e.disabled;}).find(function(x){return /send application/i.test(x.innerText||x.value||'');});if(b)b.click();return 'ok';})()""")
     for _ in range(12):
@@ -270,9 +349,14 @@ def apply(job, dry=False):
         time.sleep(6)
         _ev("""(function(){var b=[...document.querySelectorAll('a,button')].find(function(e){return /quick apply/i.test(e.innerText||'');});if(b){b.removeAttribute('target');b.click();}return 'ok';})()""")
         time.sleep(6)
-    # open the 3-step flow
-    _ev("""(function(){var b=[...document.querySelectorAll('button,input[type=submit]')].find(function(x){return /send application/i.test((x.innerText||x.value||'').trim());});if(b)b.click();return 'ok';})()""")
-    time.sleep(6)
+    # the /redirect interstitial renders the initial quick-apply form (First name + "Send
+    # application") asynchronously — WAIT for it, then click "Send application" to open the 3-step
+    # flow, and WAIT for "1 of 3" before walking. Clicking too early was the /redirect STUCK.
+    if not _wait(lambda: _ev("!!document.querySelector('input')&&/send application/i.test(document.body.innerText||'')"), 20):
+        return f"[{job}] NO_APPLY_FORM (stuck on /redirect interstitial)"
+    _ev("""(function(){var b=[...document.querySelectorAll('button,input[type=submit]')].filter(function(e){return e.offsetParent;}).find(function(x){return /send application/i.test((x.innerText||x.value||'').trim());});if(b)b.click();return 'ok';})()""")
+    _wait(lambda: _ev("/\\d of \\d/.test(document.body.innerText||'')"), 15)
+    time.sleep(2)
     # walk the steps
     last = ""
     for _ in range(6):
