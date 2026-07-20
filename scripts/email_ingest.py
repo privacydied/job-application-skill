@@ -122,8 +122,9 @@ def _creds():
             if (row.get("site") or "").strip().lower().startswith("imap"):
                 site = (row.get("site") or "").strip()
                 host = site.split(":", 1)[-1].split(",", 1)[0].strip()
-                if host.startswith("imap."):
-                    host = host[len("imap."):]
+                # Return the host AS WRITTEN — the old code UNCONDITIONALLY stripped a leading
+                # "imap.", which turns the documented `imap.gmail.com` into `gmail.com` (does NOT
+                # answer IMAP). _connect() now handles the apex-only case with a fallback instead.
                 return (row.get("email") or "").strip(), \
                        (row.get("password") or "").strip(), host
     raise RuntimeError("no IMAP row (site starts with 'imap') in ats-credentials.csv")
@@ -136,9 +137,23 @@ def _connect():
         raise RuntimeError(
             "no IMAP creds — add a row to ats-credentials.csv whose `site` starts "
             "with `imap` (e.g. `imap.example.com,<address>,<app-password>`).")
-    M = imaplib.IMAP4_SSL(host)
-    M.login(email, pw)
-    return M
+    # Try the host AS WRITTEN first (so `imap.gmail.com` reaches Gmail), then fall back to the
+    # apex (strip a leading `imap.`) for providers whose IMAP answers on the bare domain. A
+    # DNS/socket failure moves to the next host; a LOGIN failure (bad password) is not a host
+    # problem, so it propagates from the first host that actually connects.
+    hosts = [host]
+    if host.startswith("imap."):
+        hosts.append(host[len("imap."):])
+    last = None
+    for h in hosts:
+        try:
+            M = imaplib.IMAP4_SSL(h)
+        except OSError as e:
+            last = e
+            continue
+        M.login(email, pw)
+        return M
+    raise RuntimeError(f"IMAP connect failed for {hosts!r}: {last}")
 
 
 def _fetch(folder, days):
