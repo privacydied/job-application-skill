@@ -70,3 +70,18 @@ DRIVER SHAPE (for the build): open job → click Quick Apply (strip target=_blan
 form iframe → fill (atsform against the frame) → solve reCAPTCHA (recaptcha.py) → submit → verify
 confirmation + capture proof. NOT yet built — needs a focused session to map the iframe fields and
 live-verify end-to-end. Sourced pool: ~34 talent.com roles in the queue as of 2026-07-20.
+
+## ⚠️ CORRECTION (2026-07-20, same day): quick-apply does NOT render headlessly — session-gated
+
+The section above ("native form, buildable") was WRONG — it was based on a probe corrupted by a
+tab-management bug (cfx.eval_frame/press have no `tab=` param and hit the DEFAULT CFX_TAB, i.e. a
+different tab, so a stray "1 field" reading leaked in). Re-verified with CFX_TAB **pinned** to the
+driving tab: clicking "Quick Apply" → `/redirect?...&action=quickapply` renders a **BLANK page**
+(0 visible inputs, 0 buttons, empty innerText); the only iframes present are the reCAPTCHA anchor +
+challenge. So the quick-apply form does NOT render in the automation context — it is **session /
+login-gated** (needs a logged-in talent.com account + saved profile/CV), the SAME blocker class as
+Reed's magic-link and the applicationtrack login.
+
+NET: a talent.com apply driver is NOT buildable headlessly today — there is no form to drive until
+a talent.com login session exists on the tab (VNC login, like Reed). Not shipping an apply.py
+against a form that never renders. The +34 talent.com pool is session-blocked, not driver-blocked.
