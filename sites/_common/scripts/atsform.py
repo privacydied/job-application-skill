@@ -392,9 +392,12 @@ def _combo_open_and_pick(option, multi=False):
         return any(o.strip().lower() == want or (_wb and _wb.search(o.strip().lower())) for o in opts)
 
     _combo_focus()
+    # 3) trusted click is the last-resort opener AND the one that can hang (~30s on Greenhouse
+    #    remix) — time-box it to 6s so a stuck widget falls through to type-to-filter instead of
+    #    stalling the whole run (the Graphcore "combobox_pick hung the run" symptom).
     rungs = (lambda: cfx.evaluate(_COMBO_POINTER_OPEN),     # 1) synthetic pointer sequence
              lambda: cfx.press("ArrowDown"),                # 2) real ArrowDown key
-             lambda: cfx.click_selector('[data-ats-target]'))  # 3) trusted click (last resort)
+             lambda: cfx.click_selector('[data-ats-target]', timeout=6))  # 3) trusted click, bounded
     opts = []
     for rung in rungs:
         try:

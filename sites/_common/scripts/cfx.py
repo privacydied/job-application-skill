@@ -612,12 +612,15 @@ def dismiss_cookie_banner(tab: str = None) -> bool:
     return True
 
 
-def click_selector(selector: str, pace: bool = True) -> dict:
+def click_selector(selector: str, pace: bool = True, timeout: int = 30) -> dict:
     """Click by CSS selector (react-select openers etc. that expose no a11y
-    ref). Paced like a human click by default."""
+    ref). Paced like a human click by default. `timeout` bounds the /click round-trip:
+    a *trusted* Playwright click on some React controls (Greenhouse remix comboboxes) can
+    otherwise hang ~30s waiting for actionability — callers on a hot path (the combobox
+    ladder's trusted-click rung) pass a short timeout so a stuck widget can't stall the run."""
     if pace:
         human_pause()
-    return post(f"/tabs/{_tab()}/click", {"userId": _uid(), "selector": selector})
+    return post(f"/tabs/{_tab()}/click", {"userId": _uid(), "selector": selector}, timeout)
 
 
 def click_ref(ref: str, pace: bool = True) -> dict:
