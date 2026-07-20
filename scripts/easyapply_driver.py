@@ -178,7 +178,10 @@ def drive(job_id, company, role):
             st = state()
         except Exception:
             heal_and_nav(url); continue
-        if "sent" in ((st.get("step", "") or "") + (st.get("header", "") or "")).lower():
+        # WORD-BOUNDARY "sent" ("Application sent") — a bare substring test also matched
+        # "conSENT"/"preSENT"/"repreSENTed", which could log a false Applied for a modal
+        # that was still on a consent step and never actually submitted.
+        if re.search(r"\bsent\b", (st.get("step", "") or "") + " " + (st.get("header", "") or ""), re.I):
             sent = True; break
         # fallback: job page button now reads "Applied"
         try:
