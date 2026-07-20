@@ -93,6 +93,15 @@ def answer_yes_and_advance():
       for(var i=0;i<ls.length;i++){if(ls[i].innerText.trim()==='Yes'){var f=ls[i].getAttribute('for');if(f){var el=document.getElementById(f);if(el){el.click();break;}}}}
       var r=[...document.querySelectorAll('input[type=radio]')];
       for(var j=0;j<r.length;j++){var lab=(r[j].parentElement?r[j].parentElement.innerText:'');if(/\\byes\\b/i.test(lab)){r[j].click();break;}}
+      // "How did you hear about this job?" is a CHECKBOX step (no Yes radio); when nothing in a
+      // visible checkbox group is ticked, Continue re-loops to the SAME step (the AJ-Bell symptom).
+      // Tick ONE truthful source option so it advances — prefer job-board/Reed/website (how it was
+      // actually sourced), else the first visible box.
+      var cbs=[...document.querySelectorAll('input[type=checkbox]')].filter(function(c){return c.offsetParent!==null;});
+      if(cbs.length && !cbs.some(function(c){return c.checked;})){
+        var pref=cbs.find(function(c){var l=((document.querySelector('label[for=\"'+c.id+'\"]')||c.closest('label')||{}).textContent)||'';return /job ?board|reed|company website|website|online/i.test(l);});
+        (pref||cbs[0]).click();
+      }
       var b=[...document.querySelectorAll('button,input[type=submit]')].map(x=>(x.innerText||x.value||'').trim());
       if(b.indexOf('Submit application')>=0){var s=[...document.querySelectorAll('button,input[type=submit]')].find(x=>(x.innerText||x.value||'').trim()==='Submit application');s.click();return 'SUBMIT';}
       var c=[...document.querySelectorAll('button,input[type=submit]')].find(x=>(x.innerText||x.value||'').trim()==='Continue');
