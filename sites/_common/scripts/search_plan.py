@@ -111,7 +111,13 @@ def plan(now=None, target=DEFAULT_TARGET, searches=None, holds=None,
     needs to act, WITHOUT any side effects or I/O beyond the small CSV reads above."""
     now = now or datetime.now()
     if searches is None:
-        searches = read_searches()
+        try:
+            searches = read_searches()
+        except OSError:
+            # Contract (docstring + exit-code 2): a missing/unreadable searches.csv is a
+            # clean ERROR verdict, NOT an uncaught traceback escaping pipeline()/autodrain()
+            # (read_holds/applied_today already guard their reads; this one was the gap).
+            return {"verdict": "ERROR", "error": "searches.csv missing/unreadable"}
     if holds is None:
         holds = read_holds()
     if not searches:
@@ -145,7 +151,15 @@ def plan(now=None, target=DEFAULT_TARGET, searches=None, holds=None,
         if bc.norm(s["board"]) in login_blocked:
             continue  # that whole site is login-walled this firing
         if bc.norm(s["board"]) in rate_limited:
-            continue  # board-wide daily submission cap still cooling — switch boards
+            # The board-wide daily cap is SELF-CLEARING, so fold its remaining time into
+            # `cooling` — otherwise, when every actionable board is daily-capped, plan()
+            # fell through to `SLEEP wake_at=None` and loop-preflight reported a timed,
+            # auto-clearing cap as an unrecoverable login wall needing manual intervention
+            # (and in the mixed case, wake_at ignored a sooner-lapsing cap).
+            rem = bc.remaining_hours(s["board"], bc.DAILY_LIMIT_KEY, now=now, rows=cd_rows)
+            if rem > 0:
+                cooling.append((s, rem))
+            continue  # then switch boards for actual sourcing this firing
         # Cooldown-KEY ROBUSTNESS: derive it from the nav keyword (what the linkedin/indeed
         # feeds mark cooldown under, via query_from_url) with a fallback to the `query` column
         # (the fixed-QUERY boards csj/hackney/wttj have empty nav keywords and their column IS

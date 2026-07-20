@@ -971,6 +971,43 @@ class TestLinkedinRateLimit(unittest.TestCase):
         self.assertIn("indeed", boards)                    # switched to
         self.assertIn("linkedin", out["rate_limited"])
 
+    def test_plan_all_rate_limited_sleeps_with_wake(self):
+        # When EVERY actionable board is under its SELF-CLEARING daily cap, plan() must
+        # SLEEP with a real wake_at (the cap's remaining time) — NOT fall through to
+        # wake_at=None, which loop-preflight reports as an unrecoverable login wall.
+        import search_plan as sp
+        import board_cooldown as bc
+        saved = (bc.daily_limit_active, bc.remaining_hours, bc.expected_yield,
+                 bc._read_rows, bc._read_yield_rows)
+        bc.daily_limit_active = lambda board, **k: True          # every board capped
+        bc.remaining_hours = lambda *a, **k: 5.0                 # 5h left on the cap
+        bc.expected_yield = lambda *a, **k: 1.0
+        bc._read_rows = lambda: []
+        bc._read_yield_rows = lambda: []
+        try:
+            searches = [{"board": "linkedin", "query": "q", "nav": ""}]
+            out = sp.plan(searches=searches, holds=[], count_applied=False)
+        finally:
+            (bc.daily_limit_active, bc.remaining_hours, bc.expected_yield,
+             bc._read_rows, bc._read_yield_rows) = saved
+        self.assertEqual(out["verdict"], "SLEEP")
+        self.assertIsNotNone(out["wake_at"])                     # timed wake, not a dead-stop
+        self.assertAlmostEqual(out["in_hours"], 5.0)
+
+    def test_plan_missing_searches_returns_error(self):
+        # A missing/unreadable searches.csv is a clean ERROR verdict (exit 2), not an
+        # uncaught traceback escaping pipeline()/autodrain().
+        import search_plan as sp
+        saved = sp.read_searches
+        def _raise(*a, **k):
+            raise FileNotFoundError("searches.csv")
+        sp.read_searches = _raise
+        try:
+            out = sp.plan(searches=None, holds=[], count_applied=False)
+        finally:
+            sp.read_searches = saved
+        self.assertEqual(out["verdict"], "ERROR")
+
     def test_deferred_store_roundtrip(self):
         import tempfile
         rl = self._rl()
