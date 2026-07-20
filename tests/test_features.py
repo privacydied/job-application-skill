@@ -320,6 +320,27 @@ class TestEmailIngest(unittest.TestCase):
         self.assertEqual(email_ingest.classify_response("Please complete an online assessment", ""), "Assessment")
         self.assertEqual(email_ingest.classify_response("Unfortunately we won't be progressing", ""), "Rejected")
         self.assertIsNone(email_ingest.classify_response("Your weekly newsletter", ""))
+        # A post-interview REJECTION must classify as Rejected, not Interview — the body
+        # says "interview with us" but the decision is a rejection (regression: the bare
+        # "interview with" alt used to mask it because Interview is checked first).
+        self.assertEqual(email_ingest.classify_response(
+            "Update on your application",
+            "Thank you for taking the time to interview with us. "
+            "Unfortunately, we have decided not to proceed with your application."), "Rejected")
+
+    def test_verification_code_freshness_window(self):
+        # get_code's minutes= is the REAL freshness window; a stale same-day code must be
+        # skipped (SINCE is only date-granular). Fail-open on a missing/unparseable Date.
+        import fetch_verification_code as vcode
+        from datetime import datetime, timedelta, timezone
+        from email.utils import format_datetime
+        now = datetime(2026, 7, 20, 12, 0, 0, tzinfo=timezone.utc)
+        fresh = format_datetime(now - timedelta(minutes=2))
+        stale = format_datetime(now - timedelta(minutes=45))
+        self.assertTrue(vcode._within_window(fresh, 20, now=now))
+        self.assertFalse(vcode._within_window(stale, 20, now=now))
+        self.assertTrue(vcode._within_window("", 20, now=now))          # missing -> keep
+        self.assertTrue(vcode._within_window("not a date", 20, now=now))  # unparseable -> keep
 
 
 class TestOutcomes(unittest.TestCase):

@@ -58,7 +58,11 @@ _HREF_RE = re.compile(r'<a\b[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', re.I 
 _RESPONSE_RULES = [
     ("Offer", r"\b(pleased to offer|offer of employment|job offer|we would like to offer)\b"),
     ("Interview", r"\b(invit\w* (you )?to (an? )?interview|invitation to interview|"
-                  r"interview (invitation|for|with)|schedule (an?|your) interview|"
+                  # NB: no bare "interview with" — a post-interview REJECTION ("thank you
+                  # for taking the time to interview with us. Unfortunately…") contains that
+                  # phrase, and Interview is checked before Rejected, so it would mask the
+                  # rejection. The decisive invite signals (invitation/schedule/book/…) stay.
+                  r"interview (invitation|for)|schedule (an?|your) interview|"
                   r"book (an?|your) interview|first[- ]stage interview|"
                   r"phone screen|screening call|meet the team)\b"),
     ("Assessment", r"\b(assessment|online test|coding challenge|take[- ]home|"

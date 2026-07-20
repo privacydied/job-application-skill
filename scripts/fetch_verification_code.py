@@ -30,6 +30,7 @@ import re
 import sys
 import time
 from datetime import datetime, timedelta
+from email.utils import parsedate_to_datetime
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.abspath(os.path.join(_HERE, ".."))
@@ -80,6 +81,26 @@ def _extract(text, digits=None):
     return ""
 
 
+def _within_window(date_hdr, minutes, now=None):
+    """True if the email's Date header is within the last `minutes` — the REAL freshness
+    window. The IMAP SINCE term is only date-granular (whole calendar day), so without this
+    a stale same-day code (e.g. a prior apply to the same company, or an earlier code that
+    has since expired) is the newest match and gets returned instead of waiting for the fresh
+    one. Fail-open: a missing/unparseable Date returns True (never over-filter a real code)."""
+    if not date_hdr:
+        return True
+    try:
+        dt = parsedate_to_datetime(date_hdr)
+    except (TypeError, ValueError):
+        return True
+    if dt is None:
+        return True
+    if dt.tzinfo is None:               # naive Date -> interpret as local
+        dt = dt.astimezone()
+    now = now or datetime.now().astimezone()
+    return dt >= now - timedelta(minutes=minutes)
+
+
 def get_code(sender="greenhouse", minutes=20, digits=None, company=None,
              wait_s=0, poll_s=6):
     """Freshest verification code from the applicant mailbox (newest first), or ''.
@@ -107,6 +128,10 @@ def get_code(sender="greenhouse", minutes=20, digits=None, company=None,
                 if typ != "OK" or not md or not md[0]:
                     continue
                 msg = emaillib.message_from_bytes(md[0][1])
+                # Enforce the real N-minute freshness window (SINCE is only date-granular),
+                # so a stale same-day code isn't returned before the fresh email lands.
+                if not _within_window(msg.get("Date"), minutes):
+                    continue
                 frm = (msg.get("From") or "").lower()
                 subj = (msg.get("Subject") or "").lower()
                 if snd != "any" and snd not in frm:
