@@ -126,18 +126,23 @@ def _navigate(url):
     return False
 
 
-def _continue():
-    """Click the 'Continue' (or final 'Submit') button on the form.
-    Wedge-resistant: camofox's evaluate often 500s on CSJ TAL pages even when the
-    click fires. So we fire the click, ignore the 500, and verify navigation by
-    title change (retry up to N times).
-    Robust targeting: only consider real form submit controls (input[type=submit] /
-    button[type=submit]): a TOC <a> named 'continue' must NEVER be clicked."""
+def _continue(submit=False):
+    """Click the intermediate 'Continue' — or, ONLY when submit=True, the final
+    'Submit'/'Finish'/'Confirm'. When the only advance control is a final submit (no
+    intermediate Continue exists — i.e. the Declaration page) and submit is False, DO NOT click
+    it: return 'SUBMIT_GATE:<label>' so the caller stops. The final submit of a real Civil
+    Service application is the user's, taken only with --submit (integrity rule).
+    Wedge-resistant: camofox's evaluate often 500s on CSJ TAL pages even when the click fires,
+    so we fire the click, ignore the 500, and verify navigation by title change (retry N times).
+    Robust targeting: only real form submit controls (input/button[type=submit]) — a TOC <a>
+    named 'continue' must NEVER be clicked."""
     before = _page_title()
+    allow = "true" if submit else "false"
     for _ in range(8):
         time.sleep(1.5)  # let SPA settle field saves before navigating
+        r = None
         try:
-            cfx.evaluate("""(() => {
+            r = cfx.evaluate("""(() => {
               // Real form submit controls only (never TOC anchors).
               const subs=[...document.querySelectorAll('input[type=submit], button[type=submit]')]
                 .filter(e=>{const v=(e.value||e.innerText||'').trim().toLowerCase();
@@ -145,12 +150,17 @@ def _continue():
               if(!subs.length) return 'NO_CONTINUE';
               // Prefer the one whose label is 'Continue' (intermediate) or 'Submit'/'Finish'/'Confirm' (final).
               const cont=subs.find(e=>(e.value||e.innerText||'').trim().toLowerCase()==='continue');
-              const sub=cont || subs.find(e=>/^submit$|^finish$|^confirm$/i.test((e.value||e.innerText||'').trim()));
-              (sub||subs[0]).click();
-              return 'clicked:'+((sub||subs[0]).value||sub.innerText||'').trim();
-            })()""")
+              const fin=subs.find(e=>/^submit$|^finish$|^confirm$/i.test((e.value||e.innerText||'').trim()));
+              const target=cont||fin||subs[0];
+              // No intermediate Continue => this IS the final submit page. Gate it on --submit.
+              if(!cont && !%s) return 'SUBMIT_GATE:'+((target.value||target.innerText||'').trim());
+              target.click();
+              return 'clicked:'+((target.value||target.innerText||'').trim());
+            })()""" % allow)
         except cfx.CfxError:
             pass  # 500 is spurious after the click fires; verify by navigation
+        if isinstance(r, str) and r.startswith("SUBMIT_GATE"):
+            return r  # final submit reached without --submit — stop, do not submit
         time.sleep(2.5)
         after = _page_title()
         if after and after != before:
@@ -166,7 +176,13 @@ def walk(spec, submit=False, max_page=99):
     if cur and "Guidance" not in cur:
         _navigate(f"{_EOFORM_BASE}/page/1")
     time.sleep(9)
+    # stopAtPage (documented spec key): don't Continue past this page — belt-and-braces on top
+    # of _continue()'s automatic final-submit gate (e.g. stopAtPage=5 = Declaration).
+    stop_at = spec.get("stopAtPage")
     while page <= max_page:
+        if stop_at and page > stop_at:
+            results.append(("stop", f"reached stopAtPage={stop_at} — not advancing further"))
+            break
         # upload if present and requested
         if spec.get("upload"):
             try:
@@ -195,9 +211,13 @@ def walk(spec, submit=False, max_page=99):
                 r = _set_field(nm, "checkbox", "1")
                 if not str(r).startswith("NO_FIELD"):
                     results.append(("check " + nm, r))
-        # advance: on the last page, Continue = submit
-        r = _continue()
+        # advance: on the last page Continue == submit, so _continue() gates it on `submit`.
+        r = _continue(submit=submit)
         results.append(("continue p%d" % page, r))
+        if isinstance(r, str) and (r.startswith("SUBMIT_GATE") or r == "NO_ADVANCE"):
+            # SUBMIT_GATE: reached the final submit without --submit — stop (don't submit).
+            # NO_ADVANCE: page didn't advance (stuck) — stop re-filling/re-clicking it.
+            break
         time.sleep(2.5)
         page += 1
     return results
