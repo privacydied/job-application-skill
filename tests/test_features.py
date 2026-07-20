@@ -110,6 +110,20 @@ class TestJournal(unittest.TestCase):
         self.assertFalse(journal.is_submitted_unconfirmed(s))
         self.assertTrue(journal.is_confirmed(s))
 
+    def test_last_state_terminal_is_not_sticky_after_progress(self):
+        # A posting blocked on first attempt, then retried into forward progress, must
+        # report its forward state — a once-seen `blocked` must NOT stay sticky.
+        s = "gamma-blocked-then-progress"
+        journal.record(s, "blocked", reason="hCaptcha")
+        self.assertEqual(journal.last_state(s), "blocked")
+        journal.record(s, "opened", url="http://x")
+        journal.record(s, "filled", step="contact")
+        journal.record(s, "submitted")
+        self.assertEqual(journal.last_state(s), "submitted")
+        # But a terminal marker that IS the last meaningful event stays reported.
+        journal.record(s, "blocked", reason="hCaptcha again")
+        self.assertEqual(journal.last_state(s), "blocked")
+
     def test_attempts_counter(self):
         s = "beta-role"
         journal.record(s, "opened")

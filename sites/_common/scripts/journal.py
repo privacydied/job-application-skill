@@ -112,6 +112,12 @@ def last_state(slug):
         ev = e.get("event")
         if ev in _TERMINAL and ev != "confirmed":
             terminal = ev
+        elif ev in _ORDER:
+            # A later forward-progress event clears a stale terminal marker, so a posting
+            # that was blocked/skipped and then retried into progress reports its forward
+            # state — honouring the docstring's "if the LAST meaningful event was
+            # blocked/skipped" rather than making a once-seen `blocked` permanently sticky.
+            terminal = None
         r = _ORDER.get(ev, 0)
         if r > best_rank:
             best, best_rank = ev, r

@@ -55,9 +55,13 @@ DEFAULT_HEADLESS_ATS = {"linkedin-easyapply"}
 
 
 def heal_tab():
+    # current_url() SWALLOWS CfxError and returns "" on a dead/blank tab (it never raises),
+    # so its truthiness IS the liveness signal — a real http(s) URL means the tab is alive.
+    # A bare `try: current_url(); return True` always succeeded, making the recovery loop
+    # below dead code and the proactive self-heal a no-op.
     try:
-        cfx.current_url()
-        return True
+        if cfx.current_url():
+            return True
     except Exception:
         pass
     for _ in range(4):

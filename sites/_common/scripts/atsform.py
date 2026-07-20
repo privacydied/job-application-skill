@@ -183,6 +183,12 @@ _REACT_SET = r"""
 
 
 def fill(label, value, quiet_notfound=False):
+    # A non-str config value (e.g. a JSON number like a notice period) would crash the
+    # `.startswith("@")` check below with an AttributeError — and _run/main() only catch
+    # cfx.CfxError, so it would escape as a raw traceback and abort the whole batch fill.
+    # Coerce first, exactly as the checkbox/default paths already do.
+    if not isinstance(value, str):
+        value = str(value)
     # "-" reads stdin, "@path" reads a file. A missing/unreadable @file must
     # fail as a clean FAIL line + non-zero exit, NOT an uncaught OSError escaping
     # main() (whose try only catches cfx.CfxError) as a raw traceback.
