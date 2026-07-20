@@ -419,6 +419,7 @@ def check() -> int:
     import json
     expr = r"""
     (() => {
+""" + _TOGGLE_HELPERS + r"""
       const clean = s => (s||'').replace(/\s+/g,' ').trim();
       const out = { empty: [], answered: [], errors: [] };
       // text-like inputs
@@ -447,7 +448,12 @@ def check() -> int:
       for (const y of yesBtns) {
         let box=y; for(let i=0;i<8;i++){box=box.parentElement; if(box&&[...box.querySelectorAll('button')].some(b=>b.innerText.trim()==='No')&&box.innerText.length>20)break;}
         const q = clean(box.innerText.split('\n').map(s=>s.trim()).filter(Boolean)[0]).slice(0,45);
-        const sel = [...box.querySelectorAll('button')].filter(b=>getComputedStyle(b).backgroundColor!=='rgba(0, 0, 0, 0)').map(b=>b.innerText.trim())[0];
+        // Use the SAME score-based read as the fill path (selectedOf), not the discredited
+        // "first non-transparent button" heuristic — that always reported 'Yes' (first in DOM)
+        // when both buttons were non-transparent, so this human-review surface showed the wrong
+        // toggle value. null on ambiguity => shown as empty (review it), never a wrong guess.
+        const noB = [...box.querySelectorAll('button')].find(b=>b.innerText.trim()==='No');
+        const sel = selectedOf([y, noB]);
         (sel ? out.answered : out.empty).push('toggle: ' + q + (sel?(' = '+sel):''));
       }
       out.errors = [...new Set([...document.querySelectorAll('[role=alert]')].map(e=>clean(e.innerText)).filter(t=>/missing|required|correction/i.test(t)))];

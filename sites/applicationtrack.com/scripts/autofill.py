@@ -62,7 +62,11 @@ RULES = [
     (r"\bover (16|17|18)\b|are you over|(16|17|18) years of age|aged 18 or over", "Yes"),
     (r"lived in the uk|resided in the uk|residenc|7 (of|out of) the last 10|uk for \d+ of", "Yes"),
     (r"free to (remain|take up employment)|free to remain and take", "Yes"),
-    (r"correspondence address.*different|is your correspondence address (the same|different)", "No"),
+    # ONLY the "different?" phrasing -> "No". The old rule also matched "...the same?" and still
+    # answered "No", which INVERTS it (correspondence IS the applicant's home address), so a
+    # "same as your home address?" question falsely said "different". That phrasing now falls
+    # through to needs_human rather than auto-answering wrong on a vetting form.
+    (r"correspondence address.*different|is your correspondence address different", "No"),
     (r"agree to the terms|security vetting.*(agree|terms)|i agree to (the|these)", "agree"),
     (r"undischarged bankrupt|are you bankrupt", "No"),
     (r"completed an apprenticeship|since 2010.*apprenticeship|apprenticeship\?", "No"),
@@ -126,7 +130,12 @@ def resolve_answer(question):
     """Pure: map a culprit question to an answer token, or None if we won't answer it.
     None => needs_human (never guessed). USER_ONLY always => None."""
     q = (question or "").strip()
-    if not q or USER_ONLY.search(q):
+    # _FAMILY_Q guard too (not just USER_ONLY): every RULE below is about the APPLICANT, but
+    # `_resolve = resolve_answer() or resolve_value()` short-circuits, so without this a family
+    # question ("Is your partner a British citizen?", "Has your father lived in the UK?") matches
+    # an applicant RULE and fills a FAMILY member's vetting field with the applicant's answer —
+    # bypassing the family-field invariant that resolve_value() enforces. Family Qs => needs_human.
+    if not q or USER_ONLY.search(q) or _FAMILY_Q.search(q):
         return None
     for pat, token in RULES:
         if re.search(pat, q, re.I):
@@ -515,6 +524,12 @@ def selftest():
         fails.append("FAMILY GUARD BROKEN — a Father's field resolved to an applicant value")
     if resolve_value("Mother's Place of Birth (Town and Country)") is not None:
         fails.append("FAMILY GUARD BROKEN — a Mother's field resolved to an applicant value")
+    # …and the SAME guard must hold for resolve_answer (the RULES path) — a family question that
+    # grazes an applicant RULE (british citizen / lived in the UK) must NOT be auto-answered.
+    if resolve_answer("Is your partner a British citizen?") is not None:
+        fails.append("FAMILY GUARD BROKEN — partner citizenship auto-answered via RULES")
+    if resolve_answer("Has your father ever lived in the UK?") is not None:
+        fails.append("FAMILY GUARD BROKEN — father residency auto-answered via RULES")
     if resolve_value("Please provide a memorable word") is not None:
         fails.append("user-only guard broken — memorable word resolved to a value")
     if resolve_value("What is your favourite colour?") is not None:
