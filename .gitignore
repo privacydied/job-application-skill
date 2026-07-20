@@ -152,3 +152,8 @@ state.db
 state.db-wal
 state.db-shm
 *.lock
+
+# --- hermes runtime per-application configs + analysis (contain PII; never commit) ---
+config_*.json
+scripts/convertible_pool.py
+references/convertible-pool-*.md
