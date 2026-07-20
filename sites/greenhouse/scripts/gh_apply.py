@@ -308,9 +308,18 @@ def main():
             print(f"  eeo {lab!r}={val!r} -> {rc}")
 
     # Required non-EEO react-select screeners (per-company, from config "combo") — driven by
-    # the ONE engine, native <select> or react-select alike.
+    # the ONE engine, native <select> or react-select alike. A mid-run camofox tab death
+    # (HTTP 404 Tab not found) is an INFRA failure, not a form failure — catch it and log a
+    # clean Blocked instead of crashing with a traceback (the run can be retried on a fresh tab).
     for label_sub, val in cfg.get("combo", {}).items():
-        rc = atsform.combobox_pick(label_sub, val)
+        try:
+            rc = atsform.combobox_pick(label_sub, val)
+        except cfx.CfxError as e:
+            print(f"  combo {label_sub!r} ENGINE_ERR {e}")
+            _log(company, role, "Greenhouse", url, "Blocked",
+                 note=f"camofox tab/engine died mid-fill ({str(e)[:60]}) — retry on a fresh tab",
+                 proof=None)
+            return 6
         print(f"  combo {label_sub!r}={val!r} -> {rc}")
 
     if cfg.get("no_submit"):
