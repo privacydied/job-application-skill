@@ -13,8 +13,8 @@ Single source of truth for Greenhouse submits in this skill. Reads a config JSON
    "no_submit": true}                          # fill+review only, don't submit
 
 Every dropdown/combobox — native <select> AND every react-select variant — is driven by the
-ONE shared engine `atsform.combobox_pick` (interaction ladder: mousedown → ArrowDown →
-trusted-click → type-to-filter; menu read from aria-controls / .select__menu / global options;
+ONE shared engine `atsform.combobox_pick` (interaction ladder: mousedown -> ArrowDown ->
+trusted-click -> type-to-filter; menu read from aria-controls / .select__menu / global options;
 exact-then-word-boundary match so 'Man' != 'Isle of Man', 'No' != 'Monaco'). This file adds
 NO combobox logic of its own — a fix in combobox_pick fixes Greenhouse too.
 
@@ -24,7 +24,10 @@ Hard rules enforced here (not left to the caller):
   * Upload CV via container path /uploads/base-resume.pdf (host path 400s).
   * EEO answers come from apply-defaults.json -> applicant (gender/ethnicity/etc.) per the
     user's 2026-07-19 disclose instruction; age -> prefer not to say; religion untouched.
-  * Logs via log-application.py with --proof ONLY on a captured confirmation.
+  * Greenhouse gates submit behind an emailed 8-char "Security code" (anti-bot). The
+    applicant's mailbox (address read from config by email_ingest) is IMAP-readable, so we
+    poll for the freshest code for THIS company and type it in (char-by-char — React OTP boxes
+    reject a bulk paste). Logs via log-application.py with --proof ONLY on a captured confirmation.
 
 Proof artifact: applications/<slug>/confirmation.png + .txt, captured after submit.
 """
@@ -38,9 +41,11 @@ import time
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.abspath(os.path.join(_HERE, "..", "..", ".."))
 sys.path.insert(0, os.path.join(_ROOT, "sites", "_common", "scripts"))
+sys.path.insert(0, os.path.join(_ROOT, "scripts"))  # email_ingest lives at skill root
 
 import cfx        # noqa: E402
 import atsform    # noqa: E402
+import fetch_verification_code as vcode  # noqa: E402  — the ONE shared email-code primitive
 
 UPLOADS = os.path.join(_ROOT, "uploads")
 APPS = os.path.join(_ROOT, "applications")
@@ -53,10 +58,65 @@ def _slug(company, role):
 
 def _antiai_present():
     return bool(cfx.evaluate(
-        r"""(function(){
+        r"""(function() {
             var t = document.body ? document.body.innerText : '';
             return /own words|use of AI|AI[- ]generated content|generated content/i.test(t);
         })()"""))
+
+
+# The emailed-code fetch lives in the ONE shared primitive scripts/fetch_verification_code.py
+# (used by Greenhouse AND applicationtrack/MI5) — imported above as `vcode`. gh_apply just
+# calls vcode.get_code(...) and types the result; no per-driver mailbox logic here, and no
+# hardcoded address (creds come from the ats-credentials.csv `imap` row via email_ingest).
+
+
+def _type_code(label, code):
+    """Type a Greenhouse OTP security code. The field is a single React input that only
+    commits ONE character per keystroke (a full /type value-set lands just the first char),
+    so we focus the field and press each character individually via cfx.press — real
+    keystrokes that React's onChange accepts. Small gaps between chars; re-focus if the
+    field blurs."""
+    info = cfx.evaluate(
+        "(function(){"
+        "  function ownLabel(e){"
+        "    if(e.id){var l=document.querySelector('label[for=\"'+e.id+'\"]');if(l)return l.innerText;}"
+        "    var p=e.closest('label');if(p)return p.innerText;"
+        "    return (e.getAttribute('aria-label')||e.getAttribute('placeholder')||e.getAttribute('name')||'');"
+        "  }"
+        "  var ins=[].slice.call(document.querySelectorAll('input'));"
+        "  for(var j=0;j<ins.length;j++){"
+        "    var e=ins[j];"
+        "    var t=ownLabel(e);"
+        "    if(/security code|verification code|enter the code|one.?time code/i.test(t)) return '#'+e.id;"
+        "  }"
+        "  for(var j=0;j<ins.length;j++){"
+        "    var e=ins[j];"
+        "    var sig=(e.id+' '+(e.getAttribute('name')||'')+' '+(e.getAttribute('autocomplete')||'')+' '+(e.getAttribute('inputmode')||'')).toLowerCase();"
+        "    if(/code|otp|verif|one-time/.test(sig)) return '#'+e.id;"
+        "  }"
+        "  return null;"
+        "})()")
+    if not info:
+        raise RuntimeError("no security-code field found on the form")
+    print(f"  CODE_FIELD {info}")
+    # focus + scroll the field into view
+    cfx.evaluate(
+        "(function(){var e=document.querySelector(" + json.dumps(info) + ");"
+        "if(e){e.focus();e.scrollIntoView({block:'center'});}})()")
+    time.sleep(0.3)
+    for i, ch in enumerate(str(code)):
+        # re-assert focus each char (some OTP fields blur between keystrokes)
+        cfx.evaluate(
+            "(function(){var e=document.querySelector(" + json.dumps(info) + ");if(e)e.focus();})()")
+        try:
+            cfx.press(ch)
+        except cfx.CfxError as e:
+            print(f"  CODE_KEY_ERR {i}: {e}")
+        time.sleep(0.18)
+    time.sleep(0.5)
+    final = cfx.evaluate(
+        "(function(){var e=document.querySelector(" + json.dumps(info) + ");return e?e.value:'(none)';})()")
+    print(f"  CODE_TYPED len={len(str(final))} val={final!r}")
 
 
 def _upload_and_verify(target, filename):
@@ -100,7 +160,7 @@ def _fill_eeo():
     apply-defaults.json -> applicant (the user's 2026-07-19 disclose instruction). A field
     that's absent returns NOTFOUND and is skipped — EEO is optional. Tries several label
     phrasings per field because Greenhouse EEO wording varies by company. The gender /
-    orientation / ethnicity fields are usually "mark all that apply" multi-selects → driven
+    orientation / ethnicity fields are usually "mark all that apply" multi-selects -> driven
     with multi=True + clear_first (replace any stale chip). Returns [(field, value, result)].
 
     Label care: the gender phrasings are SPECIFIC ("how would you describe your gender" /
@@ -222,17 +282,57 @@ def main():
     except Exception as e:  # noqa: BLE001
         print(f"SHOT_WARN {e}")
 
+    # ── submit (Greenhouse MAY gate submit behind an emailed "Security code") ──
+    _CONF = r"thank you for applying|application received|successfully submitted"
+
+    def _confirm_text():
+        try:
+            t = cfx.evaluate("document.body?document.body.innerText:''") or ""
+        except Exception:  # noqa: BLE001
+            t = ""
+        return t if re.search(_CONF, t, re.I) else ""
+
     try:
         atsform.submit("Submit application",
                        "thank you for applying|application (received|sent)|we.?re rooting|successfully submitted")
     except Exception as e:  # noqa: BLE001
-        print(f"SUBMIT_ERR {e}")
-    txt = ""
-    try:
-        txt = cfx.evaluate("document.body?document.body.innerText:''") or ""
-    except Exception:  # noqa: BLE001
-        pass
-    if re.search(r"thank you for applying|application received|successfully submitted", txt, re.I):
+        print(f"SUBMIT1_ERR {e}")
+
+    txt = _confirm_text()
+    if not txt:
+        # Not confirmed → likely the emailed "Security code" gate: the first Submit fired the
+        # email, so poll the mailbox for it, type it char-by-char, and Submit again. (Forms
+        # WITHOUT the gate confirmed on the first Submit above and skip this whole block — no
+        # wasted 90s poll for a code that will never arrive.)
+        code = vcode.get_code(sender="greenhouse", company=company, digits=8, wait_s=90)
+        if code:
+            try:
+                _type_code("Security code", code)
+                print(f"  CODE_FILL ok ({len(code)} chars)")
+            except Exception as e:  # noqa: BLE001
+                print(f"  CODE_FILL_WARN {e}")
+            # DIAGNOSTIC: what is the field value + which submit buttons exist now?
+            try:
+                diag = cfx.evaluate(
+                    "(function(){"
+                    "  var f=document.getElementById('security-input-0');"
+                    "  var btns=[].slice.call(document.querySelectorAll('button')).map(function(b){return b.innerText.trim();});"
+                    "  return {fieldVal:(f?f.value:'(no field)'), btns:btns.filter(Boolean).slice(0,12)};"
+                    "})()")
+                open("/tmp/gh_pre2.txt","w").write(str(diag))
+                print("  PRE2_DIAG", diag)
+            except Exception as e:
+                print("  PRE2_DIAG_ERR", e)
+            try:
+                atsform.submit("Submit application",
+                               "thank you for applying|application (received|sent)|we.?re rooting|successfully submitted")
+            except Exception as e:  # noqa: BLE001
+                print(f"SUBMIT2_ERR {e}")
+            txt = _confirm_text()
+        else:
+            print("  CODE_MISSING — no verification code fetched")
+
+    if txt:
         proof_png = os.path.join(appdir, "confirmation.png")
         proof_txt = os.path.join(appdir, "confirmation.txt")
         try:
@@ -244,11 +344,16 @@ def main():
         _log(company, role, "Greenhouse", url, "Applied", proof=proof_png)
         print(f"APPLIED_OK {company} {role} proof={proof_png}")
         return 0
-    else:
-        print(f"SUBMIT_NO_CONFIRM {company} {role} — logging Blocked")
-        _log(company, role, "Greenhouse", url, "Blocked",
-             note="submit returned no confirmation (required EEO/field gap)", proof=None)
-        return 5
+    print(f"SUBMIT_NO_CONFIRM {company} {role} — logging Blocked")
+    try:
+        dbg = cfx.evaluate("document.body?document.body.innerText:''") or ""
+        open("/tmp/gh_debug.txt", "w").write(dbg[:3000])
+        print(f"  DEBUG_TEXT_SAVED /tmp/gh_debug.txt ({len(dbg)} chars)")
+    except Exception as e:  # noqa: BLE001
+        print(f"  DEBUG_ERR {e}")
+    _log(company, role, "Greenhouse", url, "Blocked",
+         note="submit returned no confirmation (verification code gap or required field)", proof=None)
+    return 5
 
 
 if __name__ == "__main__":

@@ -108,15 +108,30 @@ def classify_response(subject, body):
 
 
 # ── IMAP layer (only reached at runtime; the pure fns above are what tests target) ──────
+def _creds():
+    # Read the IMAP row directly so we get (email, password, host) — the host lives in
+    # the `site` column (e.g. "imap.example.com"), not derivable from the address.
+    import csv as _csv
+    path = os.path.join(_ROOT, "ats-credentials.csv")
+    with open(path, newline="", encoding="utf-8") as f:
+        for row in _csv.DictReader(f):
+            if (row.get("site") or "").strip().lower().startswith("imap"):
+                site = (row.get("site") or "").strip()
+                host = site.split(":", 1)[-1].split(",", 1)[0].strip()
+                if host.startswith("imap."):
+                    host = host[len("imap."):]
+                return (row.get("email") or "").strip(), \
+                       (row.get("password") or "").strip(), host
+    raise RuntimeError("no IMAP row (site starts with 'imap') in ats-credentials.csv")
+
+
 def _connect():
     import imaplib
-    email, pw = _creds()
-    if not email or not pw:
+    email, pw, host = _creds()
+    if not email or not pw or not host:
         raise RuntimeError(
-            "no IMAP creds — add a row to ats-credentials.csv whose `site` starts with "
-            "`imap` (e.g. `imap.gmail.com,<address>,<app-password>`). Gmail needs an "
-            "app-password with IMAP enabled.")
-    host = "imap.gmail.com" if "gmail" in email else os.environ.get("IMAP_HOST", "imap.gmail.com")
+            "no IMAP creds — add a row to ats-credentials.csv whose `site` starts "
+            "with `imap` (e.g. `imap.example.com,<address>,<app-password>`).")
     M = imaplib.IMAP4_SSL(host)
     M.login(email, pw)
     return M
