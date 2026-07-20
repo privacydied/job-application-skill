@@ -206,13 +206,25 @@ def reveal() -> int:
         print("OK: form already revealed")
         return 0
     import json
+    # Match the apply CTA robustly: Ashby postings vary the label ("Apply for this Job/Role/
+    # Position", "Apply Now", bare "Apply") and some render it as an <a>/[role=button], not a
+    # <button> — the old exact "apply for this job" <button>-only match missed those (e.g. Primer).
+    # Exclude external "Apply on website/company site" links (those leave Ashby). Prefer the most
+    # specific "apply for this …" phrasing, else the first bare apply CTA.
     marked = json.loads(cfx.evaluate(
-        "(()=>{const b=[...document.querySelectorAll('button')].find(x=>/apply for this job/i.test(x.innerText));"
-        "if(!b)return JSON.stringify({ok:false});b.setAttribute('data-ashby-target','1');return JSON.stringify({ok:true});})()"
+        "(()=>{const els=[...document.querySelectorAll('button,a,[role=button]')].filter(x=>{"
+        "const t=(x.innerText||x.textContent||'').trim();"
+        "return /^apply(\\s+(for\\s+this\\s+(job|role|position)|now|to\\s+this))?\\s*$/i.test(t)"
+        "&&!/website|company\\s*site|external/i.test(t);});"
+        "if(!els.length)return JSON.stringify({ok:false});"
+        "const b=els.find(x=>/for\\s+this/i.test(x.innerText||x.textContent||''))||els[0];"
+        "b.setAttribute('data-ashby-target','1');return JSON.stringify({ok:true,label:(b.innerText||'').trim()});})()"
     ))
     if not marked.get("ok"):
-        print("FAIL: no 'Apply for this Job' button found (already on the form? or wrong page)")
+        print("FAIL: no Apply CTA found (already on the form? external 'Apply on website'? wrong page?)")
         return 1
+    if marked.get("label"):
+        print(f"reveal: clicking Apply CTA '{marked['label']}'")
     # JS click directly: a camofox trusted click on this button HANGS (~30s) because
     # its post-click ref-rebuild stalls on the form re-render this click triggers.
     # The button is a plain <button>, so a JS click renders the form without that
