@@ -52,6 +52,7 @@ _ROOT = os.path.dirname(_here)
 sys.path.insert(0, os.path.join(_ROOT, "sites", "_common", "scripts"))
 import search_plan as sp   # noqa: E402
 import precheck            # noqa: E402  (canon_ids -> reed numeric id)
+import journal             # noqa: E402  (slugify -> applications/<slug>/ proof dir)
 
 QUEUE = os.path.join(_ROOT, "queue.jsonl")
 LOG = os.path.join(_ROOT, "autodrain.log")
@@ -117,23 +118,54 @@ def partition(rows):
     return {"reed": reed, "ea": ea, "needs_model": needs}
 
 
-def _log_reed_submitted(row, url):
-    """Record a driven Reed submit so the NEXT pass DEDUPS it. reed_apply.py logs nothing and
-    autodrain wrote nothing back, so the same Reed posting re-sourced and re-submitted every
-    pass = duplicate applications to a real employer. Status is 'Applied?' (NOT 'Applied'):
-    autodrain captures no confirmation screenshot and log-application refuses Applied without
-    proof — 'submitted, unconfirmed' is the honest status; reconcile on Reed's
-    /account/jobs/applications page to promote it to Applied."""
+def _capture_reed_proof(row):
+    """Screenshot the current (post-submit confirmation) tab into applications/<slug>/ so a Reed
+    submit can be logged strict **Applied**. Falls back to a .txt capture of the confirmation text
+    if the screenshot endpoint flakes (mirrors apply_ea) — either satisfies log-application's
+    Applied proof-gate. Returns a proof path, or None (⇒ caller logs Applied? instead)."""
+    import cfx
+    slug = journal.slugify(row.get("company") or "", row.get("title") or row.get("role") or "")
+    appdir = os.path.join(_ROOT, "applications", slug)
+    os.makedirs(appdir, exist_ok=True)
+    png = os.path.join(appdir, "confirmation.png")
+    try:
+        cfx.shot(png)
+        if os.path.isfile(png) and os.path.getsize(png) > 1024:
+            return png
+    except Exception as e:  # noqa: BLE001
+        _logline(f"reed: screenshot failed for {slug}: {e}")
+    try:
+        body = cfx.evaluate("(document.body?document.body.innerText:'').slice(0,2000)") or ""
+    except Exception:  # noqa: BLE001
+        body = ""
+    if body.strip():
+        txt = os.path.join(appdir, "confirmation.txt")
+        with open(txt, "w", encoding="utf-8") as f:
+            f.write(body)
+        if os.path.getsize(txt) > 0:
+            return txt
+    return None
+
+
+def _log_reed_applied(row, url, proof):
+    """Record a driven Reed submit so the NEXT pass DEDUPS it (reed_apply.py logs nothing and
+    autodrain used to write nothing back → duplicate applications every pass). Logs strict
+    **Applied** WITH the captured --proof; if no proof could be captured, falls back to
+    **Applied?** (log-application refuses Applied without proof). Either status lands the row in
+    the tracker so the next pass skips it."""
     company = (row.get("company") or "").strip() or "(unknown)"
     role = (row.get("title") or row.get("role") or "").strip() or "(unknown)"
     u = url or row.get("url") or ""
     if not u:
-        return
+        return None
+    status = "Applied" if proof else "Applied?"
+    cmd = [sys.executable, LOG_APP, company, role, "Reed", u, status, "--append-new",
+           "--notes", "autodrain Reed auto-submit"]
+    if proof:
+        cmd += ["--proof", proof]
     try:
-        subprocess.run(
-            [sys.executable, LOG_APP, company, role, "Reed", u, "Applied?", "--append-new",
-             "--notes", "autodrain Reed auto-submit (no captured proof) — reconcile on Reed applications page"],
-            capture_output=True, text=True, cwd=_ROOT, timeout=30)
+        subprocess.run(cmd, capture_output=True, text=True, cwd=_ROOT, timeout=30)
+        return status
     except Exception as e:  # noqa: BLE001 — logging must never crash the drain
         _logline(f"reed: log-application failed for {u}: {e}")
 
@@ -229,24 +261,35 @@ def main():
 
     drained = 0
     # ── Reed first (highest submit rate, cleanest code-only path) ────────────
+    # Drive ONE id at a time: after each reed_apply SUBMITTED the tab is left on that posting's
+    # confirmation page, so we can screenshot it and log strict **Applied** (with --proof) per id,
+    # instead of a batch that leaves only the last page capturable.
     if reed_pending and not ea_only and drained < cap:
         batch = reed_pending[:cap - drained]
-        ids = [rid for rid, _r in batch]
-        rows_by_id = {rid: r for rid, r in batch}
-        _logline(f"reed: driving {len(ids)} id(s) via reed_apply.py")
-        rc, out = _run([sys.executable, REED_APPLY] + ids, timeout=len(ids) * 90 + 120)
-        if _halt_on_captcha(out):
-            _logline("HALT: Reed drain hit a non-sanctioned CAPTCHA — blocker recorded, stopping.")
-            return 0
-        # reed_apply prints `[<id>] SUBMITTED (url=…)` / `[<id>] SUBMITTED2 (url=…)` per id.
-        # Log each so the NEXT pass dedups it (else the row re-drives forever).
-        urls_by_id = dict(re.findall(r"\[(\d+)\]\s+SUBMITTED2?\s+\(url=([^)]*)\)", out))
-        submitted_ids = re.findall(r"\[(\d+)\]\s+SUBMITTED", out)
-        for sid in submitted_ids:
-            _log_reed_submitted(rows_by_id.get(sid, {}), urls_by_id.get(sid, ""))
-        submitted = len(submitted_ids)
-        drained += submitted
-        _logline(f"reed: reed_apply rc={rc}, {submitted} SUBMITTED (logged Applied? for dedup)")
+        _logline(f"reed: driving {len(batch)} id(s) one-at-a-time via reed_apply.py (per-id proof)")
+        n_applied = n_unconfirmed = 0
+        for rid, row in batch:
+            if drained >= cap:
+                break
+            rc, out = _run([sys.executable, REED_APPLY, rid], timeout=90 + 120)
+            if _halt_on_captcha(out):
+                _logline("HALT: Reed drain hit a non-sanctioned CAPTCHA — blocker recorded, stopping.")
+                return 0
+            if not re.search(r"\[" + re.escape(rid) + r"\]\s+SUBMITTED", out):
+                tail = (out.strip().splitlines() or ["(no output)"])[-1]
+                _logline(f"reed: {rid} not submitted (rc={rc}, {tail[:90]})")
+                continue
+            m = re.search(r"\[" + re.escape(rid) + r"\]\s+SUBMITTED2?\s+\(url=([^)]*)\)", out)
+            url = m.group(1) if m else ""
+            proof = _capture_reed_proof(row)                 # screenshot the confirmation (+ .txt fallback)
+            status = _log_reed_applied(row, url, proof)
+            drained += 1
+            if status == "Applied":
+                n_applied += 1
+            else:
+                n_unconfirmed += 1
+            _logline(f"reed: {rid} SUBMITTED -> {status} (proof={os.path.basename(proof) if proof else 'none'})")
+        _logline(f"reed: done — {n_applied} Applied (with proof), {n_unconfirmed} Applied? (no proof)")
 
     # ── Easy-Apply via the existing queue driver ─────────────────────────────
     if part["ea"] and not reed_only and drained < cap:
