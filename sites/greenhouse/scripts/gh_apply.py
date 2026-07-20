@@ -71,11 +71,17 @@ def _antiai_present():
 
 
 def _type_code(label, code):
-    """Type a Greenhouse OTP security code. The field is a single React input that only
-    commits ONE character per keystroke (a full /type value-set lands just the first char),
-    so we focus the field and press each character individually via cfx.press — real
-    keystrokes that React's onChange accepts. Small gaps between chars; re-focus if the
-    field blurs."""
+    """Commit a Greenhouse OTP security code to the (controlled) React input.
+
+    The field is a single input whose id is `security-input-0`. A plain value-set or a
+    /type value-set only keeps the first char because the component is controlled and
+    resets on each render — so we commit the way React expects: set the value via the
+    element's native setter (bypassing the React-overridden `.value`), then dispatch
+    `input` + `change` events so React's onChange picks it up. If the field is actually
+    an N-box OTP (siblings security-input-1..N), the same approach per-box works because
+    each box is independently controlled.
+
+    Returns nothing; prints the committed length for verification."""
     info = cfx.evaluate(
         "(function(){"
         "  function ownLabel(e){"
@@ -99,24 +105,46 @@ def _type_code(label, code):
     if not info:
         raise RuntimeError("no security-code field found on the form")
     print(f"  CODE_FIELD {info}")
-    # focus + scroll the field into view
-    cfx.evaluate(
-        "(function(){var e=document.querySelector(" + json.dumps(info) + ");"
-        "if(e){e.focus();e.scrollIntoView({block:'center'});}})()")
-    time.sleep(0.3)
-    for i, ch in enumerate(str(code)):
-        # re-assert focus each char (some OTP fields blur between keystrokes)
-        cfx.evaluate(
-            "(function(){var e=document.querySelector(" + json.dumps(info) + ");if(e)e.focus();})()")
-        try:
-            cfx.press(ch)
-        except cfx.CfxError as e:
-            print(f"  CODE_KEY_ERR {i}: {e}")
-        time.sleep(0.18)
+    code = str(code)
+    # Detect sibling boxes: security-input-0..N (multi-box OTP).
+    boxes = cfx.evaluate(
+        "(function(){var base=" + json.dumps(info) + ".replace(/^#/,'').replace(/-0$/,'');"
+        "var out=[];for(var i=0;i<12;i++){var el=document.getElementById(base+'-'+i);if(el)out.push('#'+el.id);else break;}"
+        "if(out.length)return out;"
+        "var single=document.querySelector(" + json.dumps(info) + ");return single?['#'+single.id]:[];})()")
+    if len(boxes) > 1:
+        print(f"  CODE_BOXES {len(boxes)} (multi-box OTP)")
+        for i, ch in enumerate(code):
+            if i >= len(boxes):
+                break
+            _react_set(boxes[i], ch)
+            time.sleep(0.12)
+    else:
+        _react_set(boxes[0] if boxes else info, code)
     time.sleep(0.5)
+    # Verify by CONCATENATING all boxes (a multi-box OTP holds one char each) — reading only
+    # box 0 falsely reported len=1 even when all 8 were filled and the submit succeeded.
     final = cfx.evaluate(
-        "(function(){var e=document.querySelector(" + json.dumps(info) + ");return e?e.value:'(none)';})()")
+        "(function(){var s='';for(var i=0;i<12;i++){var e=document.getElementById('security-input-'+i);"
+        "if(!e)break;s+=(e.value||'');}"
+        "if(!s){var one=document.querySelector(" + json.dumps(info) + ");s=one?one.value:'';}return s;})()")
     print(f"  CODE_TYPED len={len(str(final))} val={final!r}")
+
+
+def _react_set(sel, value):
+    """Set a controlled React input's value via the native setter + dispatch input/change.
+    Mirrors atsform's React-commit trick; usable for OTP boxes where /type truncates."""
+    cfx.evaluate(
+        "(function(){"
+        "  var el=document.querySelector(" + json.dumps(sel) + ");"
+        "  if(!el) return;"
+        "  var proto = el.tagName==='TEXTAREA' ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;"
+        "  var setter = Object.getOwnPropertyDescriptor(proto,'value').set;"
+        "  setter.call(el, " + json.dumps(value) + ");"
+        "  el.focus();"
+        "  el.dispatchEvent(new Event('input',{bubbles:true}));"
+        "  el.dispatchEvent(new Event('change',{bubbles:true}));"
+        "})()")
 
 
 def _upload_and_verify(target, filename):
@@ -256,6 +284,18 @@ def main():
     except Exception as e:  # noqa: BLE001
         print(f"FILL_WARN {e}")
 
+    # TOP-UP: atsform.apply batch-fill occasionally leaves a field empty (React commit
+    # timing). Re-fill each text field individually via atsform.fill — the proven path —
+    # so required fields that the batch missed actually bind. Combinations of label
+    # substring + value; failures are reported, not fatal.
+    for lab, val in cfg.get("fill", {}).items():
+        try:
+            rc = atsform.fill(lab, val)
+            if rc != 0:
+                print(f"  FILL_TOPUP {lab!r} -> {rc}")
+        except Exception as e:  # noqa: BLE001
+            print(f"  FILL_TOPUP_WARN {lab!r}: {e}")
+
     for frag in ("UK Right to Work", "right to work"):
         try:
             if atsform.set_radio(frag, "Yes") == 0:
@@ -286,11 +326,30 @@ def main():
     _CONF = r"thank you for applying|application received|successfully submitted"
 
     def _confirm_text():
+        # Confirmed if the page is on the /confirmation route OR the body shows the success
+        # text. Greenhouse redirects to .../confirmation on a successful (code-gated) submit,
+        # and that redirect can LAG the submit by several seconds — so treat the URL as proof.
+        try:
+            url = cfx.current_url()
+        except Exception:  # noqa: BLE001
+            url = ""
         try:
             t = cfx.evaluate("document.body?document.body.innerText:''") or ""
         except Exception:  # noqa: BLE001
             t = ""
-        return t if re.search(_CONF, t, re.I) else ""
+        if "/confirmation" in url or re.search(_CONF, t, re.I):
+            return t or url
+        return ""
+
+    def _confirm_poll(seconds=45):
+        # Poll for confirmation — the emailed-code submit + redirect lags well past atsform's
+        # own submit wait; a single read here is what caused false 'Blocked' on Monzo.
+        deadline = time.time() + seconds
+        while True:
+            t = _confirm_text()
+            if t or time.time() >= deadline:
+                return t
+            time.sleep(2)
 
     try:
         atsform.submit("Submit application",
@@ -328,7 +387,7 @@ def main():
                                "thank you for applying|application (received|sent)|we.?re rooting|successfully submitted")
             except Exception as e:  # noqa: BLE001
                 print(f"SUBMIT2_ERR {e}")
-            txt = _confirm_text()
+            txt = _confirm_poll(45)   # the code-gated redirect lags — poll, don't single-read
         else:
             print("  CODE_MISSING — no verification code fetched")
 
