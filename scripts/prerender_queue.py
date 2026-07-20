@@ -156,7 +156,7 @@ def main():
 
     # 2) --stage: pre-seed each queued row's app dir with its family base (fallback artifact)
     staged = []
-    for r in rows[: limit or len(rows)]:
+    for r in rows[: limit if limit is not None else len(rows)]:
         fam = r.get("family")
         slug = journal.slugify(r.get("company", ""), r.get("title", ""))
         if not fam or not slug:
