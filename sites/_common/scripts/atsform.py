@@ -163,6 +163,25 @@ def _url_len():
         return "", None
 
 
+# React-commit fallback: set a controlled input's value via the element's NATIVE setter
+# (bypassing React's overridden `.value`) + dispatch input/change so React's onChange picks
+# it up. Some ATSes (Monzo) have inputs whose onChange resets a plain /type value-set so it
+# reads back EMPTY; this is the commit path that sticks. __SEL__/__VAL__ are _js()-quoted.
+_REACT_SET = r"""
+(() => {
+  const el = document.querySelector(__SEL__);
+  if (!el) return 'NO_EL';
+  const proto = el.tagName === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype
+                                          : window.HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, __VAL__);
+  el.focus();
+  el.dispatchEvent(new Event('input', {bubbles:true}));
+  el.dispatchEvent(new Event('change', {bubbles:true}));
+  return 'SET';
+})()
+"""
+
+
 def fill(label, value, quiet_notfound=False):
     # "-" reads stdin, "@path" reads a file. A missing/unreadable @file must
     # fail as a clean FAIL line + non-zero exit, NOT an uncaught OSError escaping
@@ -222,6 +241,21 @@ def fill(label, value, quiet_notfound=False):
     got_s = got if isinstance(got, str) else ""
     exact = got_s.strip() == value.strip()
     ok = exact or (bool(alnum(value)) and alnum(got_s) == alnum(value))
+    if not ok:
+        # /type didn't stick (controlled-React input, e.g. Monzo reads back empty) — commit
+        # via the native value setter + input/change and re-read. This is what turned an
+        # "OK but empty" MISMATCH into a real fill on Monzo's candidate-location/question_* fields.
+        try:
+            cfx.evaluate(_REACT_SET.replace("__SEL__", _js(sel)).replace("__VAL__", _js(value)))
+            got2 = cfx.poll(_read, predicate=lambda r: isinstance(r, str) and (
+                r.strip() == value.strip() or (bool(alnum(value)) and alnum(r) == alnum(value))),
+                timeout=1.0, interval=0.1)
+            if isinstance(got2, str):
+                got_s = got2
+                exact = got_s.strip() == value.strip()
+                ok = exact or (bool(alnum(value)) and alnum(got_s) == alnum(value))
+        except cfx.CfxError:
+            pass
     tag = "OK" if exact else ("OK~ (reformatted)" if ok else "MISMATCH")
     print(f"{tag} fill {label!r} ({len(got_s)} chars)")
     return 0 if ok else 1
