@@ -319,13 +319,23 @@ _COMBO_CLICK = r"""
   if (!els.length) { const m = document.querySelector('[class*="select__menu"],[class*="-menu"]'); if (m) els = [...m.querySelectorAll('[class*="option"],[role=option]')]; }
   if (!els.length) els = [...document.querySelectorAll('[class*="select__option"],[role=option]')];
   const norm = e => (e.textContent||'').replace(/\s+/g,' ').trim().toLowerCase();
-  // exact first; else WORD-BOUNDARY substring (never mid-word — so "No" can't match
-  // "Monaco" and "Man" can't match a stray "…man…"), scanned REVERSED so a real appended
-  // option wins over a prefixed country-list entry (react-select Remix prepends countries).
+  // exact first; else SCORE word-boundary matches (never mid-word, so "No" can't match
+  // "Monaco") and pick the BEST: target at the start followed by a separator/end scores
+  // highest — so "London" picks "London, UK", NOT "London Colney, Hertfordshire" — with
+  // shorter options winning ties; the reverse scan breaks remaining ties toward a real
+  // appended option over a prefixed country-list entry.
   const esc = t.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
   const wb = new RegExp('(^|[^a-z0-9])' + esc + '([^a-z0-9]|$)');
-  let o = els.find(e => norm(e) === t);
-  if (!o) for (let ix = els.length - 1; ix >= 0; ix--) { if (wb.test(norm(els[ix]))) { o = els[ix]; break; } }
+  let o = els.find(e => norm(e) === t), best = -1;
+  if (!o) for (let ix = els.length - 1; ix >= 0; ix--) {
+    const s = norm(els[ix]); if (!wb.test(s)) continue;
+    let sc = 0;
+    if (s.startsWith(t)) sc += 4;
+    const after = s.charAt(s.indexOf(t) + t.length);
+    if (after === '' || /[,)\-–—|/]/.test(after)) sc += 3;   // target is the leading place / whole value
+    sc += Math.max(0, 3 - Math.floor(s.length / 25));         // shorter is better
+    if (sc > best) { best = sc; o = els[ix]; }
+  }
   document.querySelectorAll('[data-ats-target]').forEach(e=>e.removeAttribute('data-ats-target'));
   if (!o) return 'NO_OPTION:'+els.map(e=>(e.textContent||'').replace(/\s+/g,' ').trim()).slice(0,10).join(' | ');
   o.scrollIntoView({block:'center'});
@@ -915,8 +925,12 @@ function(question){
   let c=[...document.querySelectorAll('input:not([type=hidden]),select,textarea,[role=radiogroup],[role=combobox]')]
         .find(e=>norm(e.getAttribute('aria-label')).includes(w));
   if(c) return c;
-  const lab=[...document.querySelectorAll('label')].find(match);
-  if(lab&&lab.htmlFor){const e=document.getElementById(lab.htmlFor); if(e)return e;}
+  // label[for=id] is an UNAMBIGUOUS association — match its text LOOSELY (no length cap), so a
+  // verbose consent label ("Keeping your data safe is really important to us. Please…") still
+  // resolves to its input (the length cap on `match` above excludes full-sentence labels).
+  const lab=[...document.querySelectorAll('label[for]')].find(
+    e=>norm(e.textContent).includes(w) && document.getElementById(e.htmlFor));
+  if(lab){const e=document.getElementById(lab.htmlFor); if(e)return e;}
   const h=[...document.querySelectorAll('label,legend,h3,h4,span,div,p')].find(match);
   if(h){const sc=h.closest('fieldset,div,section')||h.parentElement;
         if(sc) return sc.querySelector('input:not([type=hidden]),select,textarea,[role=radiogroup],[role=combobox]');}
