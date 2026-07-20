@@ -164,6 +164,17 @@ _EXTRACT_JS = r"""
 """
 
 
+# These UK_CITIES are also ordinary English words ("reading", "bath") or appear far more often
+# as QUALIFICATIONS than as a job location ("Oxford"/"Cambridge" graduate/degree). jd.py scans
+# the WHOLE JD PROSE (body+title+requirements), not a short location string like precheck does,
+# so a bare \bword\b match false-geolocates the role — e.g. "we look forward to reading your
+# application" -> uk_city_other=["reading"] -> pipeline auto-DROPS a genuinely remote/London
+# review. Skip them in the prose scan: precheck's metadata-only scan still catches a real
+# Reading/Oxford location from the actual location field, and an unflagged review simply stays a
+# review for the model to judge — the SAFE failure direction (never silently drop a good role).
+_PROSE_AMBIGUOUS_CITIES = {"reading", "bath", "oxford", "cambridge"}
+
+
 def extract(max_chars=7000):
     raw = cfx.evaluate(_EXTRACT_JS % max_chars, timeout=45)
     data = json.loads(raw) if isinstance(raw, str) else (raw or {})
@@ -184,7 +195,8 @@ def extract(max_chars=7000):
         "remote": bool(re.search(r"\bremote\b|work from home|fully.remote", low)),
         "hybrid": "hybrid" in low,
         # "york" guarded against "New York" (matches precheck.screen_location).
-        "uk_city_other": sorted({c for c in UK_CITIES if re.search(
+        "uk_city_other": sorted({c for c in UK_CITIES
+                                 if c not in _PROSE_AMBIGUOUS_CITIES and re.search(
             r"(?<!new )\byork\b" if c == "york" else r"\b" + re.escape(c) + r"\b", low)}),
         "sponsorship_mentioned": "sponsor" in low,
     }

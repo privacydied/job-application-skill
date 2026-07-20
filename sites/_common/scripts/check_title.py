@@ -61,14 +61,10 @@ SENIORITY_WORDS = ("senior", "lead", "principal", "staff", "director", "head", "
 # Fix is deliberately NARROW: only "design engineer" carrying an industrial modifier
 # AND no UX/creative signal is excluded — bare "Design Engineer" (Tier A), IT
 # "field service engineer" (Tier C), and "ICT Support" are all untouched. Widen the
-# modifier list here (single source of truth) rather than per-orchestrator.
-_DESIGN_ENG_INDUSTRIAL = (
-    "electrical", "electronic", "electronics", "mechanical", "hardware", "civil",
-    "structural", "ict", "embedded", "cad", "rf", "hvac", "chemical", "aerospace",
-    "automotive", "mechatronic", "pcb", "firmware", "optical", "thermal", "acoustic",
-    "instrumentation", "telecoms", "telecommunication", "manufacturing", "process",
-    "controls", "systems", "hydraulic", "piping", "geotechnical",
-)
+# modifier list at the `_DESIGN_ENG_INDUSTRIAL` tuple below (the single source of truth)
+# rather than per-orchestrator. (There used to be a SECOND, shorter _DESIGN_ENG_INDUSTRIAL
+# defined right here that the fuller one below silently shadowed — a maintainer widening
+# THIS list would have had the edit discarded and leaked an off-profile industrial title.)
 # Unambiguous UX/creative signals — if present alongside "design engineer", it's a
 # genuine hybrid (keep on-profile). These are the ONLY tokens that rescue an
 # industrial modifier; ambiguous tokens (frontend/web/digital/brand) do NOT, because

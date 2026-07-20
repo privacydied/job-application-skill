@@ -1844,6 +1844,18 @@ class TestJdLocationSignal(unittest.TestCase):
         self.assertFalse(self._extract_with_text("New London, CT")["location_signals"]["london"])
         self.assertTrue(self._extract_with_text("based in South London")["location_signals"]["london"])
 
+    def test_common_word_cities_not_geolocated_from_prose(self):
+        # "reading"/"bath"/"oxford"/"cambridge" are ordinary words or qualifications; scanning the
+        # whole JD prose must NOT flag them as the role's location — that false-drops good reviews.
+        sig = self._extract_with_text(
+            "Fully remote role. We look forward to reading your application. An Oxford or "
+            "Cambridge degree is a plus; enjoy a relaxing bath after a hard day.")
+        self.assertEqual(sig["location_signals"]["uk_city_other"], [])
+        # an unambiguous non-London city IS still flagged from prose
+        self.assertIn("manchester",
+                      self._extract_with_text("This role is based in Manchester.")
+                      ["location_signals"]["uk_city_other"])
+
 
 class TestSearchPlanPerf(unittest.TestCase):
     """G.3: plan() parses each cooldown CSV ONCE for the whole pass, not once per search."""
