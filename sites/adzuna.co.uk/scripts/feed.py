@@ -182,10 +182,14 @@ def main():
         except (URLError, ValueError) as e:
             print(f"ERROR: Adzuna API {e} on page {page}", file=sys.stderr)
             break
+        raw = (payload or {}).get("results") or []
         rows = _parse(payload)
         for r in rows:
             pool.setdefault(r["id"], r)
-        if len(rows) < 50:      # last page
+        # Stop on the RAW page count, not the filtered rows: _parse drops any result missing
+        # an id (or non-dict), so a single malformed result on a full page made len(rows) < 50
+        # and silently aborted pagination — losing every remaining page.
+        if len(raw) < 50:       # last page
             break
         time.sleep(1)           # be polite to the API
 

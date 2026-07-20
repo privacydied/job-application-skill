@@ -116,7 +116,10 @@ def build_replacements():
                         (r"\b[A-Z]{1,2}\d[A-Z\d]? ?\d[A-Z]{2}\b", "[postcode]"),
                         (r"\b\d{2}/\d{2}/(?:19|20)\d{2}\b", "[DOB]")):
             for val in set(re.findall(pat, body)):
-                reps.append((re.compile(re.escape(val)), ph))
+                # re.I: a real postcode/NINO can appear lowercased in free-text run notes
+                # ("e8 1ab") — a case-SENSITIVE pattern would miss it and LEAK the value.
+                # Every other replacement above is already re.I; this one was the gap.
+                reps.append((re.compile(re.escape(val), re.I), ph))
     # 6) name words (Title/lower/UPPER) → Jane / Doe
     for real, ph in ((first, "Jane"), (pref, "Jane"), (last, "Doe")):
         if real:

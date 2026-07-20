@@ -78,6 +78,22 @@ def _nontrivial(path, min_image):
     return sz > 0
 
 
+def _proof_in_row_dir(idx, base, company, role, min_image):
+    """True if a non-trivial file named `base` (case-insensitive) exists inside THIS row's own
+    applications/<slug>/ folder — NOT anywhere under applications/. A bare-basename match
+    against the whole tree let a fabricated/mislocated row pass whenever ANOTHER application
+    happened to save a file with the same name (dozens save confirmation.png), defeating the
+    audit. Scoped to the row's slug, tolerating a -N disambiguation suffix on the full slug."""
+    slug_cr = journal.slugify(company, role)
+    slug_c = journal.slugify(company)
+    for p in idx.get(base) or []:
+        par = os.path.basename(os.path.dirname(p))
+        if (par in (slug_cr, slug_c) or par.startswith(slug_cr + "-")) \
+                and _nontrivial(p, min_image):
+            return True
+    return False
+
+
 def _slug_dir_has_confirmation(company, role, min_image):
     """A confirmation artifact in the row's applications/<slug>/ folder (any of a few slug
     spellings), non-trivial."""
@@ -114,13 +130,11 @@ def audit(rows, min_image=1024):
             # live Applications page, not a captured file. It passes.
             if val.startswith("/account") or re.match(r"https?://", val) or "." not in base:
                 ok = True
+            elif _proof_in_row_dir(idx, base, r.get("Company"), r.get("Role"), min_image):
+                ok = True
             else:
-                paths = idx.get(base)
-                if paths and any(_nontrivial(p, min_image) for p in paths):
-                    ok = True
-                else:
-                    cls = "cites_missing"
-                    reason = f"cites proof={val} but no such non-trivial file on disk"
+                cls = "cites_missing"
+                reason = f"cites proof={val} but no such non-trivial file in its applications/<slug>/"
         if not ok and _slug_dir_has_confirmation(r.get("Company"), r.get("Role"), min_image):
             ok = True
         if not ok:

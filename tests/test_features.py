@@ -328,6 +328,37 @@ class TestEmailIngest(unittest.TestCase):
             "Thank you for taking the time to interview with us. "
             "Unfortunately, we have decided not to proceed with your application."), "Rejected")
 
+    def test_audit_proofs_scopes_cited_proof_to_own_folder(self):
+        # A cited proof must resolve inside the ROW'S OWN applications/<slug>/ folder — matching
+        # the basename anywhere under applications/ let a fabricated/mislocated row pass just
+        # because another application saved a file with the same name (many save confirmation.png).
+        import audit_proofs
+        d = tempfile.mkdtemp()
+
+        def _mk(slug):
+            os.makedirs(os.path.join(d, slug), exist_ok=True)
+            with open(os.path.join(d, slug, "confirmation.png"), "wb") as f:
+                f.write(b"\x89PNG" + b"0" * 2000)   # non-trivial (>1024)
+        _mk("real-co-ux-designer")     # a legit application's proof
+        _mk("beta-eng-2")              # a -N disambiguation folder
+        saved = audit_proofs.APPS
+        audit_proofs.APPS = d
+        try:
+            rows = [
+                {"Status": "Applied", "Company": "Real Co", "Role": "UX Designer",
+                 "Notes": "proof=confirmation.png"},   # own proof -> OK
+                {"Status": "Applied", "Company": "Fake Co", "Role": "Ghost",
+                 "Notes": "proof=confirmation.png"},    # no own file -> the scar (must flag)
+                {"Status": "Applied", "Company": "Beta", "Role": "Eng",
+                 "Notes": "proof=confirmation.png"},    # file in beta-eng-2 (disambiguation) -> OK
+            ]
+            v = audit_proofs.audit(rows)
+        finally:
+            audit_proofs.APPS = saved
+        flagged = {row["Company"] for _i, row, _c, _r in v}
+        self.assertEqual(flagged, {"Fake Co"})         # ONLY the fabricated/mislocated row
+        self.assertTrue(all(c == "cites_missing" for _i, _r, c, _rs in v))
+
     def test_verification_code_freshness_window(self):
         # get_code's minutes= is the REAL freshness window; a stale same-day code must be
         # skipped (SINCE is only date-granular). Fail-open on a missing/unparseable Date.
