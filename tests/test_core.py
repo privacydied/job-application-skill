@@ -1777,6 +1777,53 @@ class TestPipelineScreenCap(unittest.TestCase):
                   if '"screen_skipped": "screen-limit"' in ln]
         self.assertEqual(len(capped), 5)
 
+    def test_reviews_screened_before_keeps_under_cap(self):
+        # A location-ambiguous REVIEW must be JD-screened even when keeps already fill the
+        # --screen-limit — else a non-London review that screening would auto-drop leaks into
+        # the queue unresolved. survivors = reviews + keeps guarantees reviews win the budget.
+        import json
+        import pipeline
+        import tempfile
+        import types
+        keeps = [{"url": f"k{i}", "title": "Product Designer", "company": "C",
+                  "verdict": "keep", "eligibility": {"tier": "A"}} for i in range(40)]
+        review = {"url": "rev0", "title": "Product Designer", "company": "R",
+                  "verdict": "review", "eligibility": {"tier": "B"}}
+        saved = (pipeline.sp.plan, pipeline.run_feed,
+                 pipeline.merge_sources.merge_lists, pipeline.pc.precheck,
+                 sys.modules.get("jd"))
+        pipeline.sp.plan = lambda **k: {"verdict": "WORK", "login_blocked": set(),
+                                        "clear": [{"board": "linkedin", "query": "q", "nav": ""}],
+                                        "applied_today": 0, "target": 10}
+        pipeline.run_feed = lambda *a, **k: ([], None)
+        pipeline.merge_sources.merge_lists = lambda posts, **k: (
+            keeps + [review], {"in": 0, "out": 41, "dupes": 0, "tracked_dropped": 0, "no_key": 0})
+        pipeline.pc.precheck = lambda cands: {"keep": keeps, "review": [review], "drop": []}
+        jdmod = types.ModuleType("jd")
+
+        def _screen(url, **k):
+            if url == "rev0":   # a non-London UK city -> should auto-drop the review
+                return {"jd_text_full_len": 500,
+                        "location_signals": {"london": False, "remote": False,
+                                             "uk_city_other": ["Manchester"]}}
+            return {"jd_text_full_len": 500}
+        jdmod.screen_one = _screen
+        jdmod.compact = lambda d: d          # pass location_signals through
+        sys.modules["jd"] = jdmod
+        tmp = os.path.join(tempfile.mkdtemp(), "queue.jsonl")
+        try:
+            pipeline.run(screen_limit=40, out_path=tmp)
+        finally:
+            (pipeline.sp.plan, pipeline.run_feed, pipeline.merge_sources.merge_lists,
+             pipeline.pc.precheck) = saved[:4]
+            if saved[4] is not None:
+                sys.modules["jd"] = saved[4]
+            else:
+                sys.modules.pop("jd", None)
+        urls = [json.loads(ln)["url"] for ln in open(tmp, encoding="utf-8") if ln.strip()]
+        self.assertNotIn("rev0", urls)       # review was screened + auto-dropped, not leaked
+        self.assertEqual(len(urls), 40)      # the 40 keeps remain (one keep capped but queued)
+
 
 class TestJdLocationSignal(unittest.TestCase):
     """jd.extract's london signal must be word-bounded (Londonderry/New London != London)."""

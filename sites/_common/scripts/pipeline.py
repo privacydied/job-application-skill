@@ -493,7 +493,12 @@ def run(target=None, no_screen=False, screen_limit=40, force=False,
     # ── 3) precheck (title/location/salary/dedup) ────────────────────────────
     screened = pc.precheck(merged)
     keeps, reviews, drops = screened["keep"], screened["review"], screened["drop"]
-    survivors = keeps + reviews  # reviews still get screened; the model decides on them
+    # reviews FIRST so the --screen-limit cap can't starve them: they're the location-ambiguous
+    # ones that NEED JD-screening (and its review->drop auto-promotion below). keeps degrade
+    # gracefully when capped (queued unscreened, jd=None); an unscreened review would instead
+    # leak into the queue as an unresolved verdict. Queue order is re-sorted at write time, so
+    # this ordering only affects WHICH survivors win the screen budget, not the output order.
+    survivors = reviews + keeps
     n_tracked_dropped = sum(1 for d in drops
                             if "already tracked" in (d.get("verdict_reason") or ""))
 
