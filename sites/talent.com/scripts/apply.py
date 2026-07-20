@@ -196,17 +196,35 @@ def _fill_and_send(dry):
       if(cb && !cb.checked){cb.click();}
       return 'filled';
     })(""" + json.dumps(phone) + ")")
-    if _ev("!!document.querySelector('input[type=file]')"):
+    # CV upload (VERIFIED): the file input (#resume-upload) is inert/absent until the "Upload CV"
+    # widget is clicked; the GENERIC input[type=file] selector misses it. Click the widget, then
+    # attach to the specific id and fire change so React registers the file (advances past step 1).
+    _ev("""(function(){var t=[...document.querySelectorAll('div,label,button')].find(function(e){return e.offsetParent&&/^upload cv$/i.test((e.innerText||'').trim());});if(t)t.click();return 'ok';})()""")
+    time.sleep(1.5)
+    if _ev("!!document.getElementById('resume-upload')"):
         cv = os.environ.get("TALENT_CV", "base-resume.pdf")
         try:
-            print("  talent: CV upload ->", atsform.upload("input[type=file]", cv))
+            print("  talent: CV upload ->", atsform.upload("#resume-upload", cv))
+            _ev("""(function(){var e=document.getElementById('resume-upload');if(e){e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));}return 'ok';})()""")
         except Exception as e:  # noqa: BLE001
             print(f"  talent: CV upload warn {e}", file=sys.stderr)
     time.sleep(1)
     if dry:
         return "DRY_READY"
+    try:
+        cfgfill = (json.load(open(os.path.join(_COMMON, "apply-defaults.json"), encoding="utf-8")).get("fill") or {})
+    except Exception:  # noqa: BLE001
+        cfgfill = {}
     last = ""
-    for _ in range(7):
+    for _ in range(8):
+        # each step may add employer-query fields (e.g. "address", "salary expectations") — fill any
+        # that match a config value by label (best-effort, quiet), and keep the consent box ticked.
+        for lab, val in cfgfill.items():
+            try:
+                atsform.fill(lab, val, quiet_notfound=True)
+            except Exception:  # noqa: BLE001
+                pass
+        _ev("(function(){var cb=document.querySelector('input[name=user_consent]');if(cb&&!cb.checked)cb.click();return 'ok';})()")
         _ev("""(function(){var b=[...document.querySelectorAll('button,input[type=submit]')].filter(function(e){return e.offsetParent;}).find(function(x){return /send application|submit application|^submit$|^continue$|^next$|^apply$/i.test((x.innerText||x.value||'').trim());});if(b)b.click();return 'ok';})()""")
         time.sleep(4)
         if _ev(_CONF_JS):
