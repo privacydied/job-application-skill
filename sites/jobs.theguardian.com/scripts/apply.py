@@ -32,6 +32,11 @@ any posting already logged Applied BEFORE opening a thing — no wasted fill, no
 If a duplicate still slips through, the post-Send banner is detected, the tracker is backfilled,
 and it exits clean (Applied, not a failure). `--force` re-drives a tracked posting anyway.
 
+⚠️ PURPOSE-BUILT for the REVIVA SOFTWORKS "Product Designer" posting (id 10126456): the
+company/role logged and the applications/<slug> proof dir are HARDCODED. To retarget another
+Guardian job, edit those hardcodes (search REVIVA) — otherwise a submit would be MISLOGGED
+under REVIVA's identity. (The tracker pre-check itself is url-id-exact, so it won't false-skip.)
+
 Usage:
     CFX_KEY=.. CFX_TAB=.. python3 sites/jobs.theguardian.com/scripts/apply.py <job-url> \
         --cv uploads/<resume>.pdf [--cover "<message>"] [--no-submit] [--force]
@@ -129,7 +134,12 @@ def _already_in_tracker(url):
     try:
         sys.path.insert(0, os.path.join(_here, "..", "..", "_common", "scripts"))
         import precheck  # noqa: E402
-        hit = precheck.already_applied(url=url, company="REVIVA SOFTWORKS", role="Product Designer")
+        # Dedup on THIS url's canonical Guardian job-id only — NOT the hardcoded company/role.
+        # already_applied() falls back to a Company+Role match when the id isn't found, so passing
+        # the fixed REVIVA identity here would FALSE-SKIP a genuinely different Guardian posting
+        # whenever a REVIVA "Applied" row already exists. (This driver is purpose-built for the
+        # REVIVA posting — see the module docstring — but the pre-check should still be url-exact.)
+        hit = precheck.already_applied(url=url)
         if hit and precheck.is_applied(hit[0]):
             return f"{hit[0]} ({hit[1]})"
     except Exception:

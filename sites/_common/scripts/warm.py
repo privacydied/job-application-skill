@@ -130,7 +130,9 @@ def cmd_open(urls, map_path, cap, settle):
                 warm[u] = tab
                 opened_urls.append(u)
             print(f"  warm  {tab}  {u}", file=sys.stderr)
-        except cfx.CfxError as e:
+        except Exception as e:  # noqa: BLE001 — a non-CfxError (JSON/transport) used to kill the
+            # worker thread and drop the URL from BOTH warm-map and `failed`, so cmd_open still
+            # returned 0 while silently under-warming. Record every failure so the summary is honest.
             with state_lock:
                 failed.append(u)
             print(f"  FAIL  {u}  ({e})", file=sys.stderr)

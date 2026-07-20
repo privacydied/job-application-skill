@@ -226,7 +226,12 @@ def check_cover(cover, company, findings):
         if not other or other == tgt or (tgt and (tgt in other or other in tgt)):
             continue
         if re.search(r"\b" + re.escape(other) + r"\b", low):
-            findings.append(("FAIL", f"cover: mentions OTHER company {other!r} — wrong-company letter?"))
+            # A multi-word other-company ("AJ Bell", "Reviva Softworks") is distinctive, so a
+            # match is almost certainly a real wrong-company (copy-paste) letter -> FAIL. A single
+            # common word ("Access", "Which", "Reach") can match incidental prose, so WARN there
+            # instead of hard-blocking a correct letter from --render on a coincidence.
+            sev = "FAIL" if " " in other.strip() else "WARN"
+            findings.append((sev, f"cover: mentions OTHER company {other!r} — wrong-company letter?"))
     words = len(cover.split())
     if not 150 <= words <= 250:
         findings.append(("WARN", f"cover: {words} words (target 150-250)"))
