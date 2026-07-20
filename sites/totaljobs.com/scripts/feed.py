@@ -223,7 +223,11 @@ def main():
 
     track = bool(query) and "--all" not in args
     if track:
-        board_cooldown.record_yield(BOARD, query, len(jobs))
+        # Write under the sibling-aware `board` (matching the gate at remaining_hours(board,…)),
+        # NOT the constant BOARD — else a cwjobs/jobsite/milkround run marked/recorded under
+        # "totaljobs", so siblings never cooled (endless re-walks) AND a real totaljobs search
+        # hit that stray cooldown and returned [] early, silently dropping fresh postings.
+        board_cooldown.record_yield(board, query, len(jobs))
     print(json.dumps(jobs, ensure_ascii=False, indent=2))
     if jobs:
         print(f"\n{len(jobs)} FRESH Totaljobs jobs ({filtered} already tracked, filtered). "
@@ -231,9 +235,9 @@ def main():
     else:
         marked = ""
         if track and all_jobs:
-            hrs = board_cooldown.adaptive_hours(BOARD, query)
-            until = board_cooldown.mark(BOARD, query, hrs)
-            marked = f" Auto-marked {BOARD}/{query!r} cooldown until {until} ({hrs:.0f}h)."
+            hrs = board_cooldown.adaptive_hours(board, query)
+            until = board_cooldown.mark(board, query, hrs)
+            marked = f" Auto-marked {board}/{query!r} cooldown until {until} ({hrs:.0f}h)."
         print(f"\nEXHAUSTED: all {len(all_jobs)} Totaljobs results for {query!r} already "
               f"tracked.{marked}", file=sys.stderr)
     return 0 if jobs else 1
