@@ -1,33 +1,39 @@
 #!/usr/bin/env python3
-"""talent.com apply driver — authenticated "Quick Apply" (native talent.com form).
+"""talent.com apply driver — full "Quick Apply" flow (account OTP login + 3-step form).
 
-VERIFIED-LIVE FLOW (2026-07-20). talent.com Quick Apply is a talent.com-HOSTED form, NOT an
-external ATS — but it is ACCOUNT-GATED:
+VERIFIED-LIVE (2026-07-20). talent.com Quick Apply is a talent.com-HOSTED form (NOT an external
+ATS), account-gated, and its FINAL submit is protected by a Cloudflare Turnstile.
 
-  job page  https://uk.talent.com/view?id=<id>
-    -> "Quick Apply" <a target=_blank href="/redirect?id=<id>&pid=<pid>&action=quickapply">
-    -> renders  /apply?id=<id>...  which is EITHER:
-         (a) LOGGED IN  -> a short form: First name / Last name / Email (PREFILLED from the
-             account) + Phone + a user_consent checkbox (pre-ticked) + "Send application".
-             NO reCAPTCHA once authenticated.
-         (b) NOT logged in -> a "Sign in to apply" wall: Email field + Continue. Entering the
-             email triggers a 6-digit login code from  no-reply@account.talent.co  ("Complete
-             your sign up!"); the code goes into 6 single-char OTP boxes -> logged in. The
-             account/session then PERSISTS in the camofox profile, so (a) is the steady state
-             and login is only needed once (or after a session expiry). A reCAPTCHA guards the
-             sign-UP step only; sign-in reuse does not hit it.
+FLOW the driver handles end to end:
+  view?id=<id>  -> "Quick Apply" (<a target=_blank href=/redirect?...action=quickapply>)
+  -> /apply?id=<id> which is EITHER:
+       * NOT logged in -> "Sign in to apply": email -> 6-digit code emailed by
+         no-reply@account.talent.co ("Complete your sign up!") -> 6 OTP boxes -> logged in
+         (session persists in the camofox profile, so this is a one-time step).
+       * logged in -> "Send application" opens a 3-STEP flow:
+           1 of 3  Contact: First/Last/Email PREFILLED; Phone (config); CV UPLOAD
+                   (click the "Upload CV" widget, attach to #resume-upload, fire change).
+           2 of 3  Employer queries: an address text, an optional Cover letter + Salary
+                   (from salary-cache), and Yes/No RADIO screeners (values "1"=True/Yes,
+                   "0"=False/No). Answered from the screener bank + a London-office rule.
+           3 of 3  Review + a Cloudflare TURNSTILE ("Verify you are human") gating a disabled
+                   "Send application".
 
-So hermes never gets stuck: this driver auto-detects (a)/(b), self-logs-in via the emailed code
-(reusing the OTP mailbox path), fills the form from config, sends, and verifies the confirmation.
+⚠️ TURNSTILE = HALT, by repo policy (references/captcha-policy.md): Cloudflare Turnstile is NOT
+auto-solved (auto-clicking it just trips "Verification failed" and compounds the risk score). The
+driver fills EVERYTHING, then when it reaches the Turnstile it prints TALENT_TURNSTILE_HALT + the
+VNC URL, leaves the tab filled, and POLLS for the turnstile token. A human solves it once in VNC;
+the driver detects the token, clicks Send, verifies the confirmation, and captures proof. That is
+the sanctioned "autonomous up to the human captcha" wiring.
 
-INTEGRITY: no PII is hardcoded here. Phone is read at runtime from apply-defaults.json (fill.Phone);
-name/email come prefilled from the account. Never fabricates. Captures a confirmation screenshot as
---proof so log-application can log strict Applied.
+INTEGRITY: no PII hardcoded — phone/address from apply-defaults.json (fill.*), email = the account
+email, salary from salary-cache.csv, radio answers from the screener bank (never fabricated: an
+employer question with no truthful answer HALTS as needs_human).
 
 CLI:
-  CFX_KEY=.. CFX_TAB=.. python3 sites/talent.com/scripts/apply.py <view-url-or-id> [<id> ...] [--dry]
-    --dry   fill everything but STOP before "Send application" (safe verification)
-Exit: 0 sent / --dry ready · 3 login-captcha handoff (run recaptcha.py, re-run) · 2 error/blocked.
+  CFX_KEY=.. CFX_TAB=.. python3 sites/talent.com/scripts/apply.py <view-url-or-id> [...] [--dry]
+    --dry   fill everything but STOP before the final Send.
+Exit: 0 sent · 3 turnstile/login handoff (solve in VNC, re-run) · 2 error/blocked.
 """
 import json
 import os
@@ -40,55 +46,61 @@ _COMMON = os.path.join(HERE, "..", "..", "_common", "scripts")
 _ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 sys.path.insert(0, _COMMON)
 sys.path.insert(0, os.path.join(_ROOT, "scripts"))
-import cfx  # noqa: E402
+import cfx        # noqa: E402
+import atsform    # noqa: E402
+import screener   # noqa: E402
+
+VNC = "http://nasirjones:6080/vnc.html"
+_CONF_RE = (r"application (sent|submitted|complete|received)|thank you for|has been sent|"
+            r"successfully applied|we.?ve received|your application (has|is|was)")
 
 
-def _cfg_phone():
-    """The applicant's phone from the gitignored config (fill.Phone) — never hardcoded here."""
+def _cfg():
     try:
-        cfg = json.load(open(os.path.join(_COMMON, "apply-defaults.json"), encoding="utf-8"))
-        return str((cfg.get("fill") or {}).get("Phone") or "").strip()
+        return json.load(open(os.path.join(_COMMON, "apply-defaults.json"), encoding="utf-8"))
     except Exception:  # noqa: BLE001
-        return ""
+        return {}
 
 
-def _ev(expr):
-    try:
-        return cfx.evaluate(expr)
-    except cfx.CfxError:
-        return None
+def _ev(expr, tries=4):
+    for _ in range(tries):
+        try:
+            r = cfx.evaluate(expr)
+            if r is not None:
+                return r
+        except cfx.CfxError:
+            pass
+        time.sleep(1)
+    return None
 
 
 def _job_url(a):
     a = a.strip()
-    if a.startswith("http"):
-        return a
-    return f"https://uk.talent.com/view?id={a}"
+    return a if a.startswith("http") else f"https://uk.talent.com/view?id={a}"
 
 
-def _click_quick_apply():
-    return _ev("""(function(){
-      var b=[...document.querySelectorAll('a,button')].find(function(e){return /quick apply/i.test(e.innerText||'');});
-      if(!b) return 'NO_QUICKAPPLY';
-      b.removeAttribute('target');   // keep it same-tab so we can drive it
-      b.click(); return 'clicked';
-    })()""")
+def _salary_median(role, location="London"):
+    """Cached market-median desired salary for the role (salary-cache.csv), or '' if absent."""
+    path = os.path.join(_ROOT, "salary-cache.csv")
+    try:
+        import csv
+        best = ""
+        for row in csv.DictReader(open(path, encoding="utf-8")):
+            if (role or "").lower() in (row.get("Role") or "").lower() and (row.get("Median") or "").strip():
+                best = (row.get("Median") or "").strip()
+        return best
+    except Exception:  # noqa: BLE001
+        return ""
 
 
-def _apply_state():
-    """Which screen is the /apply page on? 'form' (logged in), 'login' (sign-in wall), or 'other'."""
-    return _ev("""(function(){
-      var body=(document.body?document.body.innerText:'')||'';
-      if(document.querySelector('input')&&[...document.querySelectorAll('label,input')].some(function(e){return /first name/i.test((e.innerText||e.getAttribute('aria-label')||e.placeholder||''));})) return 'form';
-      if(/sign in to apply/i.test(body)||document.querySelector('input[type=email],input[name=email]')) return 'login';
-      return 'other:'+body.replace(/\\s+/g,' ').trim().slice(0,60);
-    })()""")
+# ── login (one-time; session persists in the camofox profile) ──────────────────────────────
+def _account_email():
+    return str((_cfg().get("fill") or {}).get("Email") or "").strip()
 
 
-def _login_code_from_mailbox(wait_s=120):
-    """The freshest talent.com 6-digit login code from the applicant mailbox (the IMAP host
-    configured in ats-credentials.csv), reusing email_ingest's IMAP connection. The template
-    repeats a constant 6-digit string, so the OTP is the \\d{6} that appears exactly ONCE."""
+def _login_code(wait_s=120):
+    """Freshest talent.com 6-digit code from the applicant mailbox (email_ingest IMAP). The
+    template repeats a constant 6-digit string, so the OTP is the \\d{6} that appears once."""
     import email as emaillib
     import email_ingest as ei
     from datetime import datetime
@@ -98,14 +110,12 @@ def _login_code_from_mailbox(wait_s=120):
             M = ei._connect()
             M.select("INBOX", readonly=True)
             typ, data = M.search(None, "(SINCE %s)" % datetime.now().strftime("%d-%b-%Y"))
-            nums = data[0].split() if (typ == "OK" and data and data[0]) else []
-            for n in reversed(nums[-30:]):
+            for n in reversed((data[0].split() if (typ == "OK" and data and data[0]) else [])[-30:]):
                 t, md = M.fetch(n, "(RFC822)")
                 if t != "OK" or not md or not md[0]:
                     continue
                 m = emaillib.message_from_bytes(md[0][1])
-                frm = (m.get("From") or "").lower()
-                if "talent" not in frm:
+                if "talent" not in (m.get("From") or "").lower():
                     continue
                 body = ""
                 if m.is_multipart():
@@ -134,132 +144,154 @@ def _login_code_from_mailbox(wait_s=120):
 
 
 def _do_login():
-    """Handle the sign-in wall: email -> emailed 6-digit code -> OTP boxes. Returns True if the
-    account session is established (a quick-apply form should now render). If a reCAPTCHA blocks
-    the send, returns 'CAPTCHA' so the caller hands off (recaptcha.py) instead of looping."""
     print("  talent: sign-in wall — logging in via emailed code")
-    _ev("""(function(){
-      var b=[...document.querySelectorAll('button')].find(function(e){return /^i accept$|accept all/i.test((e.innerText||'').trim());});if(b)b.click();
-      var e=document.querySelector('input[type=email],input[name=email]');
-      if(e){e.focus();var s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;s.call(e,%s);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));}
-      var c=[...document.querySelectorAll('button,input[type=submit]')].find(function(x){return /^continue$/i.test((x.innerText||x.value||'').trim());});if(c)c.click();
-      return 'sent';
-    })()""" % json.dumps(_account_email()))
+    _ev("""(function(){var b=[...document.querySelectorAll('button')].find(function(e){return /^i accept$|accept all/i.test((e.innerText||'').trim());});if(b)b.click();return 'ok';})()""")
+    _ev("""(function(){var e=document.querySelector('input[type=email],input[name=email]');if(e){e.focus();var s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;s.call(e,%s);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));}var c=[...document.querySelectorAll('button,input[type=submit]')].find(function(x){return /^continue$/i.test((x.innerText||x.value||'').trim());});if(c)c.click();return 'ok';})()""" % json.dumps(_account_email()))
     time.sleep(5)
-    if _ev("!!document.querySelector('iframe[src*=recaptcha]') && !document.querySelector('input[maxlength=\"1\"]')"):
-        print("  TALENT_LOGIN_CAPTCHA — solve the reCAPTCHA (recaptcha.py) then re-run", file=sys.stderr)
-        return "CAPTCHA"
-    code = _login_code_from_mailbox()
+    code = _login_code()
     if not code:
-        print("  TALENT_NO_CODE — no login code arrived in the mailbox", file=sys.stderr)
         return False
-    r = _ev("""(function(c){
-      var boxes=[...document.querySelectorAll('input[type=tel],input[maxlength="1"],input[autocomplete*=one-time]')].filter(function(e){return e.offsetParent&&(e.maxLength===1||e.type==='tel');});
-      var set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
-      if(boxes.length>=6){for(var i=0;i<6;i++){var e=boxes[i];e.focus();set.call(e,c[i]);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));}return 'FILLED';}
-      var one=[...document.querySelectorAll('input')].find(function(e){return e.offsetParent&&/code|otp|verif|one-time/i.test((e.name||e.placeholder||e.autocomplete||''));});
-      if(one){one.focus();set.call(one,c);one.dispatchEvent(new Event('input',{bubbles:true}));return 'FILLED1';}
-      return 'NO_BOXES';
-    })(""" + json.dumps(code) + ")")
-    print(f"  talent: entered login code -> {r}")
+    _ev("""(function(c){var boxes=[...document.querySelectorAll('input[type=tel],input[maxlength="1"],input[autocomplete*=one-time]')].filter(function(e){return e.offsetParent&&(e.maxLength===1||e.type==='tel');});var set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;if(boxes.length>=6){for(var i=0;i<6;i++){var e=boxes[i];e.focus();set.call(e,c[i]);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));}return 'ok';}var one=[...document.querySelectorAll('input')].find(function(e){return e.offsetParent&&/code|otp|verif|one-time/i.test((e.name||e.placeholder||e.autocomplete||''));});if(one){one.focus();set.call(one,c);one.dispatchEvent(new Event('input',{bubbles:true}));}return 'ok';})(""" + json.dumps(code) + ")")
     time.sleep(2)
     _ev("""(function(){var b=[...document.querySelectorAll('button,input[type=submit]')].find(function(x){return /verify|continue|submit|confirm/i.test((x.innerText||x.value||'').trim());});if(b)b.click();return 'ok';})()""")
     time.sleep(6)
     return not _ev("/sign in to apply/i.test(document.body.innerText||'')")
 
 
-def _account_email():
-    """The talent.com account email = the applicant's config email (fill/applicant), never hardcoded."""
-    try:
-        cfg = json.load(open(os.path.join(_COMMON, "apply-defaults.json"), encoding="utf-8"))
-        return str((cfg.get("fill") or {}).get("Email") or "").strip()
-    except Exception:  # noqa: BLE001
-        return ""
-
-
-_CONF_JS = ("/application sent|thank you|has been sent|successfully applied|we.?ve received|"
-            "application (submitted|complete)|your application/i.test(document.body.innerText||'')")
-
-
-def _fill_and_send(dry):
-    """Walk the MULTI-STEP quick-apply (contact -> CV -> submit): fill phone + tick consent +
-    upload the CV, then click each step's advance button and loop until a confirmation shows.
-    Name/email are prefilled from the account. dry=True stops before advancing. Stops with STUCK
-    (needs_human) if a step stops advancing — a required question the driver can't answer is NOT
-    fabricated."""
-    import atsform
-    phone = _cfg_phone()
-    _ev("""(function(p){
-      var tel=document.querySelector('input[type=tel],input[name*=phone],#phone-input');
-      if(tel && p){tel.focus();var s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;s.call(tel,p);tel.dispatchEvent(new Event('input',{bubbles:true}));tel.dispatchEvent(new Event('change',{bubbles:true}));}
-      var cb=document.querySelector('input[name=user_consent],input[type=checkbox]');
-      if(cb && !cb.checked){cb.click();}
-      return 'filled';
-    })(""" + json.dumps(phone) + ")")
-    # CV upload (VERIFIED): the file input (#resume-upload) is inert/absent until the "Upload CV"
-    # widget is clicked; the GENERIC input[type=file] selector misses it. Click the widget, then
-    # attach to the specific id and fire change so React registers the file (advances past step 1).
+# ── per-step filling ───────────────────────────────────────────────────────────────────────
+def _upload_cv():
+    """Click the "Upload CV" widget (the file input #resume-upload is inert until then), attach the
+    resume, and fire change so React registers it."""
     _ev("""(function(){var t=[...document.querySelectorAll('div,label,button')].find(function(e){return e.offsetParent&&/^upload cv$/i.test((e.innerText||'').trim());});if(t)t.click();return 'ok';})()""")
     time.sleep(1.5)
     if _ev("!!document.getElementById('resume-upload')"):
         cv = os.environ.get("TALENT_CV", "base-resume.pdf")
         try:
-            print("  talent: CV upload ->", atsform.upload("#resume-upload", cv))
+            print("  talent: CV ->", atsform.upload("#resume-upload", cv))
             _ev("""(function(){var e=document.getElementById('resume-upload');if(e){e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));}return 'ok';})()""")
         except Exception as e:  # noqa: BLE001
             print(f"  talent: CV upload warn {e}", file=sys.stderr)
-    time.sleep(1)
-    if dry:
-        return "DRY_READY"
-    try:
-        cfgfill = (json.load(open(os.path.join(_COMMON, "apply-defaults.json"), encoding="utf-8")).get("fill") or {})
-    except Exception:  # noqa: BLE001
-        cfgfill = {}
-    last = ""
-    for _ in range(8):
-        # each step may add employer-query fields (e.g. "address", "salary expectations") — fill any
-        # that match a config value by label (best-effort, quiet), and keep the consent box ticked.
-        for lab, val in cfgfill.items():
+
+
+def _fill_text_fields(role):
+    """Fill visible text/textarea fields on the current step: phone/address from config (by label),
+    salary from salary-cache, cover letter from config if present. Plain inputs — value-set is fine."""
+    fill = _cfg().get("fill") or {}
+    # phone + address via atsform (label resolution)
+    for lab, val in fill.items():
+        if not isinstance(val, str) or not val:
+            continue
+        if re.search(r"phone|address|town|post ?code|city|first|last|name", lab, re.I):
             try:
-                atsform.fill(lab, val, quiet_notfound=True)
+                atsform.fill(lab if not lab.lower().startswith("address") else "address", val, quiet_notfound=True)
             except Exception:  # noqa: BLE001
                 pass
-        _ev("(function(){var cb=document.querySelector('input[name=user_consent]');if(cb&&!cb.checked)cb.click();return 'ok';})()")
-        _ev("""(function(){var b=[...document.querySelectorAll('button,input[type=submit]')].filter(function(e){return e.offsetParent;}).find(function(x){return /send application|submit application|^submit$|^continue$|^next$|^apply$/i.test((x.innerText||x.value||'').trim());});if(b)b.click();return 'ok';})()""")
-        time.sleep(4)
-        if _ev(_CONF_JS):
+    # salary expectations -> cached median
+    med = _salary_median(role)
+    if med:
+        _ev("""(function(v){var e=[...document.querySelectorAll('input[type=text]')].find(function(x){return x.offsetParent&&/salary/i.test((x.labels&&x.labels[0]?x.labels[0].innerText:'')||(x.closest('div')||{}).textContent||'');});if(e&&!e.value){e.focus();var s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;s.call(e,v);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));}return 'ok';})(""" + json.dumps(re.sub(r"[^0-9]", "", med)) + ")")
+    # cover letter (optional) from config, if a textarea + config value exist
+    cover = str(fill.get("Cover letter") or fill.get("cover_letter") or "").strip()
+    if cover:
+        _ev("""(function(v){var e=[...document.querySelectorAll('textarea')].find(function(x){return x.offsetParent&&!x.value&&/cover/i.test((x.labels&&x.labels[0]?x.labels[0].innerText:'')||(x.closest('div')||{}).textContent||'');});if(e){e.focus();var s=Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value').set;s.call(e,v);e.dispatchEvent(new Event('input',{bubbles:true}));e.dispatchEvent(new Event('change',{bubbles:true}));}return 'ok';})(""" + json.dumps(cover) + ")")
+
+
+def _answer_radios():
+    """Answer Yes/No employer radio screeners from the screener bank (values 1=Yes/True, 0=No/False).
+    London-office/on-site questions -> Yes (the applicant is London-based, accepts hybrid). An
+    UNKNOWN question is left BLANK (never guessed) so the step won't advance -> surfaces as STUCK."""
+    groups = json.loads(_ev("""(function(){var g={};[...document.querySelectorAll('input[type=radio]')].forEach(function(r){(g[r.name]=g[r.name]||[]).push(r);});return JSON.stringify(Object.keys(g).map(function(n){var rs=g[n];var box=rs[0].closest('fieldset,div,li');var q=box?[...box.querySelectorAll('label,legend,p,span')].map(function(x){return (x.innerText||'').trim();}).filter(function(t){return t&&t.length<80&&!/^(yes|no|true|false)$/i.test(t);})[0]:'';return {name:n,q:q||'',answered:rs.some(function(x){return x.checked;})};}));})()""") or "[]")
+    unresolved = []
+    for grp in groups:
+        if grp["answered"]:
+            continue
+        q = grp["q"]
+        ans = screener.lookup(q)
+        want = ans["answer"] if ans else None
+        if not want and re.search(r"office|on.?site|days a week|commute|based in", q, re.I):
+            want = "Yes" if re.search(r"london", q, re.I) else ("No" if re.search(r"manchester|leeds|bristol|birmingham|edinburgh|glasgow|cardiff", q, re.I) else None)
+        if not want:
+            unresolved.append(q[:50])
+            continue
+        val = "1" if want.strip().lower() in ("yes", "true", "y") else "0"
+        _ev("""(function(name,val){var rs=[...document.querySelectorAll('input[name="'+name+'"]')];var one=rs.find(function(r){return r.value===val;});if(one){var l=(one.labels&&one.labels[0])||one.closest('label')||document.querySelector('label[for="'+one.id+'"]');if(l)l.click();else one.click();one.checked=true;one.dispatchEvent(new Event('click',{bubbles:true}));one.dispatchEvent(new Event('change',{bubbles:true}));}return 'ok';})(""" + json.dumps(grp["name"]) + "," + json.dumps(val) + ")")
+        time.sleep(0.4)
+    return unresolved
+
+
+# ── the Turnstile-gated final submit ───────────────────────────────────────────────────────
+def _turnstile_present():
+    return _ev("(function(){var t=document.querySelector('[name*=turnstile]');return !!t && !t.value;})()")
+
+
+def _send_enabled():
+    return _ev("(function(){var b=[...document.querySelectorAll('button')].filter(function(e){return e.offsetParent;}).find(function(x){return /send application/i.test(x.innerText||'');});return b?!b.disabled:false;})()")
+
+
+def _final_submit(job, company, role, dry):
+    if dry:
+        return "DRY_READY (at Turnstile/Send)"
+    # HALT for a human VNC Turnstile solve — do NOT auto-click it (policy: compounds risk score).
+    if _turnstile_present() and not _send_enabled():
+        print(f"\nTALENT_TURNSTILE_HALT — {company or job} | {role} needs the Cloudflare 'Verify you "
+              f"are human' checkbox solved. Held; tab left filled. Solve in VNC: {VNC}", file=sys.stderr)
+        deadline = time.time() + 900   # poll up to 15 min for the human solve
+        while time.time() < deadline:
+            if _send_enabled():
+                print("  talent: Turnstile cleared — sending")
+                break
+            time.sleep(5)
+        else:
+            return "TURNSTILE_HELD (solve in VNC, re-run)"
+    # send + verify
+    _ev("""(function(){[...document.querySelectorAll('input[type=checkbox]')].filter(function(e){return e.offsetParent&&!e.checked;}).forEach(function(c){c.click();});var b=[...document.querySelectorAll('button,input[type=submit]')].filter(function(e){return e.offsetParent&&!e.disabled;}).find(function(x){return /send application/i.test(x.innerText||x.value||'');});if(b)b.click();return 'ok';})()""")
+    for _ in range(12):
+        time.sleep(2)
+        if _ev("/%s/i.test(document.body.innerText||'')" % _CONF_RE):
             return "SENT"
-        cur = _ev("((document.body.innerText.match(/\\d of \\d/)||[''])[0])+'|'+location.pathname")
-        cur = cur if isinstance(cur, str) else ""
-        if cur and cur == last:
-            return f"STUCK ({cur[:40]}) — a step needs input the driver can't supply; needs_human"
-        last = cur
     return "SENT_UNCONFIRMED"
 
 
 def apply(job, dry=False):
+    cfg_role = ""
     url = _job_url(job)
     cfx.navigate(url)
     time.sleep(7)
-    if _click_quick_apply() == "NO_QUICKAPPLY":
-        return f"[{job}] NO_QUICKAPPLY (external/expired listing)"
+    role = _ev("(function(){var h=document.querySelector('h1,[class*=title]');return h?h.innerText.trim().slice(0,50):'';})()") or ""
+    company = _ev("(function(){var c=[...document.querySelectorAll('[class*=company],a[href*=company]')].map(function(e){return (e.innerText||'').trim();}).filter(Boolean);return c[0]||'';})()") or ""
+    cfg_role = role
+    if _ev("""(function(){var b=[...document.querySelectorAll('a,button')].find(function(e){return /quick apply/i.test(e.innerText||'');});if(b){b.removeAttribute('target');b.click();return true;}return false;})()""") is not True:
+        return f"[{job}] NO_QUICKAPPLY (external/expired)"
     time.sleep(7)
-    st = _apply_state()
-    if st == "login":
-        r = _do_login()
-        if r == "CAPTCHA":
-            return f"[{job}] LOGIN_CAPTCHA — run recaptcha.py then re-run"
-        if not r:
-            return f"[{job}] LOGIN_FAILED"
-        # after login, re-open the job + quick apply (now authenticated)
+    if _ev("/sign in to apply/i.test(document.body.innerText||'')"):
+        if not _do_login():
+            return f"[{job}] LOGIN_HANDOFF (talent sign-in — check mailbox / VNC {VNC})"
         cfx.navigate(url)
         time.sleep(6)
-        _click_quick_apply()
+        _ev("""(function(){var b=[...document.querySelectorAll('a,button')].find(function(e){return /quick apply/i.test(e.innerText||'');});if(b){b.removeAttribute('target');b.click();}return 'ok';})()""")
         time.sleep(6)
-        st = _apply_state()
-    if st != "form":
-        return f"[{job}] NO_FORM ({st})"
-    return f"[{job}] {_fill_and_send(dry)}"
+    # open the 3-step flow
+    _ev("""(function(){var b=[...document.querySelectorAll('button,input[type=submit]')].find(function(x){return /send application/i.test((x.innerText||x.value||'').trim());});if(b)b.click();return 'ok';})()""")
+    time.sleep(6)
+    # walk the steps
+    last = ""
+    for _ in range(6):
+        _upload_cv()
+        _fill_text_fields(cfg_role)
+        unresolved = _answer_radios()
+        _ev("(function(){var cb=document.querySelector('input[name=user_consent]');if(cb&&!cb.checked)cb.click();return 'ok';})()")
+        step = _ev("((document.body.innerText.match(/(\\d) of (\\d)/)||['','',''])[0])") or ""
+        if re.match(r"3 of 3|review", str(step), re.I) or _ev("!!document.querySelector('[name*=turnstile]')"):
+            return f"[{job}] {_final_submit(job, company, role, dry)}"
+        _ev("""(function(){var b=[...document.querySelectorAll('button,input[type=submit]')].filter(function(e){return e.offsetParent&&!e.disabled;}).find(function(x){return /^continue$|^next$/i.test((x.innerText||x.value||'').trim());});if(b)b.click();return 'ok';})()""")
+        time.sleep(4)
+        cur = _ev("((document.body.innerText.match(/\\d of \\d/)||[''])[0])+'|'+location.pathname") or ""
+        if cur and cur == last:
+            if unresolved:
+                return f"[{job}] STUCK — unanswerable employer query (needs_human): {unresolved[:2]}"
+            return f"[{job}] STUCK ({cur[:30]}) — needs_human"
+        last = cur
+    return f"[{job}] SENT_UNCONFIRMED"
 
 
 def main():
