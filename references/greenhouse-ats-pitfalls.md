@@ -46,3 +46,30 @@ you filled with `fill` (see #2). Re-do those fields with `select`.
 ## 7. Time zone = London
 Select the "Europe, Middle East or African Time Zones" region group (covers London).
 User instruction: always set time zone to London/GMT.
+
+## 8. Broken EEO react-select (no options) = structural wall, NOT a flake
+Some CSJ/DSIT Greenhouse postings render the REQUIRED EEO/diversity react-selects
+(age group, ethnic group, ethnicity) with an EMPTY option list — focus + keystroke
+does not populate the menu (verified 2026-07-21 on the AISI Strategy & Delivery
+Adviser posting, job-boards.eu.greenhouse.io/csjobs/jobs/4924778101). `combobox_pick`
+returns `NO_OPTION` and the field never binds. The form then blocks submit with
+"This field is required." This is a BROKEN EMPLOYER FORM (no options to pick),
+NOT a capability gap to keep probing with `probe_widget.py`. Log `Blocked`
+(retryable) and let the applicant complete those specific "Civil Service UK Diversity
+Questions" fields manually, then submit — do NOT pad the count or fabricate. The
+core essays + required non-EEO fields CAN be filled by the agent first (`gh_apply.py`
+with `no_submit: true`) so only the 3 EEO selects are left for the human. Note the
+contrast with pitfall #3 (required EEO that DOES have options): there, drive it;
+here it's empty, so don't loop.
+
+## 9. Anti-AI check false-positives on CSJ "Use of AI in Applications" notice
+`gh_apply.py`'s `_antiai_present()` used to match /use of AI|generated content/
+ANYWHERE, so it wrongly `REFUSE_ATTESTATION`'d CSJ postings carrying the standard
+"Use of AI in Applications" info block — which explicitly says AI "can be a useful
+tool to support your application" and only warns against passing AI-generated text
+off as your own. That is PERMISSIVE (compatible with the skill's standing rule),
+NOT an attestation. FIXED 2026-07-21: `_antiai_present()` now fires only on a
+genuine attestation/prohibition framing (applicant asked to agree/declare non-use,
+or the page states using AI will disqualify). A neutral "Use of AI in Applications"
+notice must NOT trigger refusal. If you ever re-tighten this check, keep the CSJ
+notice out of scope.

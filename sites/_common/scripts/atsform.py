@@ -292,13 +292,17 @@ def fill(label, value, quiet_notfound=False):
 _COMBO_READ_OPTS = r"""
 (() => {
   const inp = document.querySelector('[data-ats-target]');
-  let els = [];
-  if (inp) { const ac = inp.getAttribute('aria-controls'); const box = ac && document.getElementById(ac);
-    if (box) els = [...box.querySelectorAll('[role=option],[class*="option"]')]; }
-  if (!els.length) { const m = document.querySelector('[class*="select__menu"],[class*="-menu"]');
-    if (m) els = [...m.querySelectorAll('[class*="option"],[role=option]')]; }
-  if (!els.length) els = [...document.querySelectorAll('[class*="select__option"]')];
-  if (!els.length) els = [...document.querySelectorAll('[role=option]')];
+  if (!inp) return '[]';
+  // SCOPE to THIS field's own listbox via aria-controls — never the first .select__menu or a
+  // global [role=option] scan, which catches OTHER react-selects' still-rendered menus (e.g. a
+  // country-dialing list bleeding into a sexual-orientation pick). Verified live 2026-07-21:
+  // an opened Greenhouse combobox exposes aria-controls="react-select-<id>-listbox" populated
+  // with exactly its own options; the global [role=option] pool is 25x larger and wrong.
+  const ac = inp.getAttribute('aria-controls');
+  const box = ac && document.getElementById(ac);
+  let els = box ? [...box.querySelectorAll('[role=option],[class*="option"]')] : [];
+  if (!els.length) { const m = inp.closest('[class*="control"]'); if (m) { const mm = m.querySelector('[class*="menu"]'); if (mm) els = [...mm.querySelectorAll('[class*="option"],[role=option]')]; } }
+  if (!els.length) { const pm = inp.parentElement && inp.parentElement.querySelector('[class*="menu"]'); if (pm) els = [...pm.querySelectorAll('[class*="option"],[role=option]')]; }
   return JSON.stringify(els.map(e => (e.textContent||'').replace(/\s+/g,' ').trim()).filter(Boolean).slice(0,80));
 })()
 """
@@ -319,11 +323,14 @@ _COMBO_CLICK = r"""
 (() => {
   const t = __OPT__.replace(/\s+/g,' ').trim().toLowerCase();
   const inp = document.querySelector('[data-ats-target]');
-  let els = [];
-  const ac = inp && inp.getAttribute('aria-controls'); const box = ac && document.getElementById(ac);
-  if (box) els = [...box.querySelectorAll('[role=option],[class*="option"]')];
-  if (!els.length) { const m = document.querySelector('[class*="select__menu"],[class*="-menu"]'); if (m) els = [...m.querySelectorAll('[class*="option"],[role=option]')]; }
-  if (!els.length) els = [...document.querySelectorAll('[class*="select__option"],[role=option]')];
+  if (!inp) return 'NO_INPUT';
+  // SCOPE to THIS field's own listbox (aria-controls) — never the global [role=option] pool,
+  // which bleeds other react-selects' menus (e.g. country dialing) into the match.
+  const ac = inp.getAttribute('aria-controls');
+  const box = ac && document.getElementById(ac);
+  let els = box ? [...box.querySelectorAll('[role=option],[class*="option"]')] : [];
+  if (!els.length) { const m = inp.closest('[class*="control"]'); if (m) { const mm = m.querySelector('[class*="menu"]'); if (mm) els = [...mm.querySelectorAll('[class*="option"],[role=option]')]; } }
+  if (!els.length) { const pm = inp.parentElement && inp.parentElement.querySelector('[class*="menu"]'); if (pm) els = [...pm.querySelectorAll('[class*="option"],[role=option]')]; }
   const norm = e => (e.textContent||'').replace(/\s+/g,' ').trim().toLowerCase();
   // exact first; else SCORE word-boundary matches (never mid-word, so "No" can't match
   // "Monaco") and pick the BEST: target at the start followed by a separator/end scores

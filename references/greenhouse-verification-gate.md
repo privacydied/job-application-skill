@@ -66,6 +66,65 @@ So the truthful convertible ceiling on proven channels is **single digits**, not
 State the honest ceiling ONCE after genuine multi-channel attempts, then stop — never
 fabricate `Applied` rows or pad with off-profile/senior roles to hit a number.
 
+## How to actually fill the OTP (verified live, 2026-07-20)
+
+The email says *"Copy and paste this code into the security code field"* — but the field is
+**NOT a single paste-able input**. It is a **multi-box React OTP**: `security-input-0` … `security-input-7`
+(8 boxes). Naive fills fail:
+
+- `cfx.post('/tabs/<tab>/type', {text: <8-char>})` (what `atsform.fill` uses) → lands only the
+  **first character** (`fieldVal:'n'`). The controlled component resets on each render.
+- `cfx.press(ch)` per char → also lands only 1 char. Keystrokes don't accumulate into the box.
+- `atsform.fill("Security code", code)` → reports `OK`/rc=0 but the value reads back **EMPTY**
+  (`CODE_TYPED len=1`). Do not trust its return code — verify by reading `el.value` after.
+
+**Working method (the only one that commits all 8 chars):** set each box's value via the
+**native prototype setter** (bypasses React's overridden `.value`) + dispatch `input`+`change`
+events. Per-box, so the auto-advance works. In `gh_apply.py` this is `_react_set(sel, char)`
+called once per box inside `_type_code`:
+
+```js
+function reactSet(sel, v){
+  var el = document.querySelector(sel);
+  var proto = el.tagName==='TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto,'value').set.call(el, v);
+  el.focus();
+  el.dispatchEvent(new Event('input',{bubbles:true}));
+  el.dispatchEvent(new Event('change',{bubbles:true}));
+}
+// 8 boxes: for i in code: reactSet('#security-input-'+i, code[i])
+```
+
+The driver detects sibling boxes (`security-input-0..N`) and fills each; if only one box exists
+it sets the full string on that one. **Verify with `CODE_TYPED len=8`** before the second Submit.
+
+### Label-resolution pitfall (cost real turns)
+Do NOT scan `label,span,div,p` for `/security code/` to find the field — the page has a
+**banner** ("A verification code was sent to …") that matches that regex and resolves to the
+whole form's first input (`#first_name`), not the OTP box. Match each **input's OWN**
+`<label for=id>` / `aria-label` / `placeholder` / `name`, never container text:
+
+```js
+function ownLabel(e){
+  if(e.id){var l=document.querySelector('label[for="'+e.id+'"]'); if(l) return l.innerText;}
+  var p=e.closest('label'); if(p) return p.innerText;
+  return e.getAttribute('aria-label')||e.getAttribute('placeholder')||e.getAttribute('name')||'';
+}
+// match ownLabel(e) against /security code|verification code|enter the code|one.?time code/
+```
+
+### Per-vendor React-commit regression (Monzo, 2026-07-20)
+`atsform.fill` commits fine on **GoCardless** (`first_name` → value binds) but reports `OK` while
+reading back **EMPTY** on **Monzo**'s `candidate-location` / `question_67742539` / `question_67742538`
+controlled inputs. Even `_react_set` can't bind Monzo's `question_67742539` ("Where would you like
+to be based?") — it is a **Places-autocomplete** input that rejects typed text and needs a
+dropdown selection. So a Monzo submission additionally needs: (a) the two **react-select**
+consent fields (`UK Right to Work` / `privacy notice`) driven via `combobox_pick` (NOT `radios` —
+those silently no-op), and (b) the "based" autocomplete handled specially. Treat each
+Greenhouse company's required fields as potentially unique — don't assume GoCardless's fill path
+generalizes. GoCardless SRE was the first proven end-to-end submission through this gate
+(356→357, real `confirmation.txt` = "Thank you for applying!").
+
 ## Reusable technique notes (engine already has these — do not re-implement)
 
 - react-select menus open on `mousedown` (synthetic `.click()` does NOT open them).

@@ -83,3 +83,4 @@ one-shot — and note it here so the next run finds it.
   actual ATS (Workday, Applied, etc.). (See `sites/civilservicejobs/NOTES.md` for the
   advertiser-site external-ATS handling this extends.)
 - **combobox** `Will you require Visa Sponsorship` @ `job-boards.greenhouse.io` (role=combobox, aria-controls=None, ctrl=select__control remix-css-13cymwt-control) → opened via **pointer-mousedown**; tried pointer-mousedown=ok, arrowdown=ok, trusted-click=ok [2026-07-19]
+- **combobox** `right to work` @ `job-boards.greenhouse.io` (role=combobox, aria-controls=None, ctrl=select__control remix-css-13cymwt-control) → opened via **pointer-mousedown**; tried pointer-mousedown=ok, arrowdown=ok, trusted-click=no [2026-07-20]

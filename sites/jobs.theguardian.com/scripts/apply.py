@@ -32,10 +32,11 @@ any posting already logged Applied BEFORE opening a thing — no wasted fill, no
 If a duplicate still slips through, the post-Send banner is detected, the tracker is backfilled,
 and it exits clean (Applied, not a failure). `--force` re-drives a tracked posting anyway.
 
-⚠️ PURPOSE-BUILT for the REVIVA SOFTWORKS "Product Designer" posting (id 10126456): the
-company/role logged and the applications/<slug> proof dir are HARDCODED. To retarget another
-Guardian job, edit those hardcodes (search REVIVA) — otherwise a submit would be MISLOGGED
-under REVIVA's identity. (The tracker pre-check itself is url-id-exact, so it won't false-skip.)
+⚠️ Previously PURPOSE-BUILT for the REVIVA SOFTWORKS "Product Designer" posting (id 10126456)
+with a HARDCODED company/role + proof dir. GENERALISED 2026-07-20: the driver now derives
+Company+Role from the live Guardian job page (og:title / <h1>) and a slug from the URL, so ANY
+in-platform Guardian posting drives + logs correctly without mislogging under REVIVA. The
+tracker pre-check is still url-id-exact, so it won't false-skip.
 
 Usage:
     CFX_KEY=.. CFX_TAB=.. python3 sites/jobs.theguardian.com/scripts/apply.py <job-url> \
@@ -156,11 +157,35 @@ def _already_applied():
                     "(job|position|role)/i.test(b)?1:0;})()"))
 
 
-def _log_applied(url, proof_rel):
-    """Backfill the tracker as Applied (in-place update if a row exists) with a proof artifact."""
+def _derive_identity(url):
+    """Derive (company, role, slug) from the live Guardian job page so we never mislog under a
+    hardcoded identity. Falls back to the job-id if the DOM has no title."""
+    title = _ev("(function(){"
+                "var m=document.querySelector('meta[property=\"og:title\"]');"
+                "var t=m?m.getAttribute('content'):'';"
+                "if(!t){var h=document.querySelector('h1');t=h?h.innerText:'';}"
+                "return (t||'').trim();})()") or ""
+    # Guardian og:title is usually "<Role> | <Company> jobs" or "<Company>: <Role>"
+    company, role = "", title
+    if " | " in title:
+        role, company = title.split(" | ", 1)
+        company = company.replace(" jobs", "").strip()
+    elif ": " in title and len(title.split(": ", 1)[1]) < 80:
+        company, role = title.split(": ", 1)
+    jid = _job_id(url) or "guardian"
+    slug = re.sub(r"[^a-z0-9]+", "-", f"{company}-{role}".lower() or jid).strip("-")[:80]
+    return company.strip(), role.strip(), slug
+
+
+def _log_applied(url, proof_rel, company="", role=""):
+    """Backfill the tracker as Applied (in-place update if a row exists) with a proof artifact.
+    Identity is derived from the page, never hardcoded."""
+    if not company or not role:
+        c, r, _ = _derive_identity(url)
+        company, role = company or c, role or r
     logger = os.path.join(_here, "..", "..", "_common", "scripts", "log-application.py")
-    subprocess.run([sys.executable, logger, "REVIVA SOFTWORKS", "Product Designer", "Guardian",
-                    url, "Applied", "--proof", proof_rel,
+    subprocess.run([sys.executable, logger, company or "Guardian", role or "Unknown",
+                    "Guardian", url, "Applied", "--proof", proof_rel,
                     "--notes", "auto: 'You have already applied for this job' banner detected on "
                     "Send — duplicate, backfilled by apply.py."],
                    cwd=_ROOT, env=os.environ, capture_output=True)
@@ -277,7 +302,8 @@ def main():
     #    replies "You have already applied for this job" — NOT a failure. Save proof, backfill the
     #    tracker (so pre-check #1 catches it next time), and exit clean (no captcha/blocker churn).
     if _already_applied():
-        pdir = os.path.join(_ROOT, "applications", "reviva-product-designer")
+        _, _, slug = _derive_identity(url)
+        pdir = os.path.join(_ROOT, "applications", slug or "guardian-unknown")
         os.makedirs(pdir, exist_ok=True)
         txt = os.path.join(pdir, "already-applied.txt")
         try:

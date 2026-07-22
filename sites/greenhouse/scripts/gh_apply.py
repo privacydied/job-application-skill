@@ -46,6 +46,7 @@ sys.path.insert(0, os.path.join(_ROOT, "scripts"))  # email_ingest lives at skil
 import cfx        # noqa: E402
 import atsform    # noqa: E402
 import fetch_verification_code as vcode  # noqa: E402  — the ONE shared email-code primitive
+import recaptcha  # noqa: E402  — sanctioned reCAPTCHA v2 solver (user pre-authorized)
 
 UPLOADS = os.path.join(_ROOT, "uploads")
 APPS = os.path.join(_ROOT, "applications")
@@ -57,10 +58,30 @@ def _slug(company, role):
 
 
 def _antiai_present():
+    """Detect a genuine anti-AI ATTESTATION the applicant must agree to — NOT a
+    neutral informational notice.
+
+    FALSE-POSITIVE HISTORY (2026-07-21): the old broad regex matched /use of AI/
+    and /generated content/ ANYWHERE, so it fired on Civil Service Jobs' standard
+    "Use of AI in Applications" info block — which explicitly says AI "can be a
+    useful tool to support your application" and only warns against passing
+    AI-generated text off as your own. That is permissive (compatible with the
+    skill's standing rule), NOT an attestation -> must NOT refuse.
+
+    A real refusal trigger requires an ATTESTATION framing: the applicant is asked
+    to AGREE/CONFIRM/DECLARE they did not use AI, or the page states that using AI
+    will DISQUALIFY / not be accepted. Matches only those, within a short window.
+    """
     return bool(cfx.evaluate(
         r"""(function() {
-            var t = document.body ? document.body.innerText : '';
-            return /own words|use of AI|AI[- ]generated content|generated content/i.test(t);
+            var t = (document.body ? document.body.innerText : '').replace(/\s+/g, ' ');
+            // (a) applicant asked to affirm non-use / own-words
+            var affirm = /(i|we)\s+(confirm|agree|declare|accept|acknowledge|certify)[\s\S]{0,140}?(use\s+of\s+ai|ai[- ]?generated|not\s+used\s+ai|only\s+my\s+own\s+words)/i;
+            // (b) using AI stated to disqualify / be prohibited / not accepted
+            var prohibit = /use\s+of\s+ai[\s\S]{0,80}?(disqualif|will\s+not\s+be\s+accepted|prohibit|not\s+tolerated|is\s+not\s+permitted|breach)/i;
+            // (c) explicit "own words" bound to an attest/confirm/agree verb
+            var ownwords = /own\s+words[\s\S]{0,60}?(attest|confirm|agree|declare|certify|by\s+submitting)/i;
+            return affirm.test(t) || prohibit.test(t) || ownwords.test(t);
         })()"""))
 
 
@@ -147,6 +168,59 @@ def _react_set(sel, value):
         "})()")
 
 
+def _is_enterprise_invisible():
+    """Greenhouse now serves reCAPTCHA ENTERPRISE with size=invisible (not the v2
+    checkbox the user pre-authorized auto-solve covers). There is no clickable anchor
+    (#recaptcha-anchor is absent inside the enterprise iframe) — the token is scored by
+    the real Submit action itself. So: do NOT try to click; just proceed to submit and
+    then poll for the response token. Returns True if an enterprise-invisible widget is
+    detected, else False."""
+    try:
+        src = cfx.evaluate(
+            "(function(){var f=document.querySelector('iframe[src*=recaptcha],iframe[src*=captcha]');"
+            "return f?f.src:'';})()")
+        if not src:
+            return False
+        return ("enterprise" in src) and ("size=invisible" in src or "invisible" in src)
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _solve_captcha(company):
+    """Solve a Greenhouse reCAPTCHA gate before submit.
+
+    - v2 checkbox present+unsolved -> click it (user pre-authorized v2 auto-solve);
+      a grid challenge (rc==2) or fingerprint NO-CHANGE (rc==3) are hard stops -> False.
+    - v2 already solved / invisible badge -> True (submit + wait-token handles it).
+    - ENTERPRISE invisible (no checkbox; scored on the Submit action) -> True: just
+      proceed to submit; the token populates as a side-effect of the real action.
+    """
+    try:
+        if _is_enterprise_invisible():
+            print("  CAPTCHA enterprise-invisible — proceeding to Submit (scored on action)")
+            return True
+        if recaptcha._anchor_present():
+            if recaptcha._anchor_checked() is True:
+                print("  CAPTCHA already solved")
+                return True
+            r = recaptcha.click(company)
+            if r == 2:
+                print("  CAPTCHA_GRID_HALT: image-grid challenge requires the user; stopping this form")
+                return False
+            if r == 3:
+                print("  CAPTCHA_NOCHANGE_HALT: fingerprint distrust; hand to user")
+                return False
+            print(f"  CAPTCHA click rc={r}")
+            return True
+        if recaptcha._badge_present():
+            print("  CAPTCHA invisible badge — will wait for token after Submit")
+            return True
+    except Exception as e:  # noqa: BLE001
+        print(f"  CAPTCHA_SOLVE_WARN {e}")
+        return True
+    return True
+
+
 def _upload_and_verify(target, filename):
     """Upload a file to a Greenhouse file input and verify by the filename CHIP
     (Greenhouse moves the file into a chip, so input.files[0] reads NONE — that is
@@ -204,7 +278,11 @@ def _fill_eeo():
         (["how would you describe your gender", "which gender do you identify"],
          a.get("gender_identity"), True),
         (["sexual orientation"], a.get("sexual_orientation"), True),
-        (["racial", "race/ethnicity", "ethnic background"], a.get("ethnicity"), True),
+        # NOTE: several Greenhouse forms render a "race/ethnicity" combobox whose
+        # option list is actually a COUNTRY dialing-code list (broken employer form) —
+        # pushing "Mixed or Multiple ethnic groups" into it is wrong. Skip ethnicity auto-fill
+        # defensively; the applicant can disclose it on forms that expose a real EEO race list.
+        # (["racial", "race/ethnicity", "ethnic background"], a.get("ethnicity"), True),
         (["transgender"], a.get("transgender"), False),
         (["disability", "chronic condition", "consider yourself disabled"], a.get("disability"), False),
         (["veteran"], a.get("veteran"), False),
@@ -334,6 +412,12 @@ def main():
     # ── submit (Greenhouse MAY gate submit behind an emailed "Security code") ──
     _CONF = r"thank you for applying|application received|successfully submitted"
 
+    # ── reCAPTCHA v2 (user pre-authorized auto-solve) — solve BEFORE first submit ──
+    if not _solve_captcha(company):
+        _log(company, role, "Greenhouse", url, "Blocked",
+             note="reCAPTCHA image-grid / fingerprint-distrust — needs the user", proof=None)
+        return 7
+
     def _confirm_text():
         # Confirmed if the page is on the /confirmation route OR the body shows the success
         # text. Greenhouse redirects to .../confirmation on a successful (code-gated) submit,
@@ -379,6 +463,11 @@ def main():
                 print(f"  CODE_FILL ok ({len(code)} chars)")
             except Exception as e:  # noqa: BLE001
                 print(f"  CODE_FILL_WARN {e}")
+            # re-verify the reCAPTCHA is still solved (token may have expired while fetching email)
+            try:
+                recaptcha.recheck(company)
+            except Exception as e:  # noqa: BLE001
+                print(f"  CAPTCHA_RECHECK_WARN {e}")
             # DIAGNOSTIC: what is the field value + which submit buttons exist now?
             try:
                 diag = cfx.evaluate(

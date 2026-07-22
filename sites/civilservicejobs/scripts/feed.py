@@ -107,6 +107,12 @@ def mint_sid(what, where=DEFAULT_WHERE, timeout=6):
     """
     cfx.navigate(CSJ_HOME)
     time.sleep(4)
+    # Fresh sessions land on the ALTCHA "Quick check needed" gate (sanctioned
+    # CSJ-only auto-solve). The search FORM IS NOT RENDERED behind the gate, so
+    # filling what/where/clicking search_button silently no-ops and the form
+    # yields no SID (feed reported "returned no SID"). Clear the gate FIRST.
+    solve_altcha()
+    time.sleep(1)
     setter = (
         '(name,val)=>{const e=document.querySelector(\'input[name="\'+name+\'"]\');'
         "if(!e)return 'NO:'+name;"

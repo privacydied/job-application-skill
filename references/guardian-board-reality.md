@@ -91,6 +91,30 @@ active session and no-ops), then test the logged-in in-platform apply: re-open 2
 URLs and check whether "Apply" stays on `jobs.theguardian.com` or still bounces to an employer ATS.
 - Until that human test is done, Guardian yields ~0 confirmable submissions through the agent.
   Do not re-conclude "wall" every firing, and do not assume a logged-in unblock exists.
+## reCAPTCHA v2 image-grid is UNREADABLE by the agent (2026-07-21, confirmed)
+When a logged-in in-platform Guardian Send fires the v2 **image-grid** (live instruction seen:
+"Select all squares with motorcycles"), `recaptcha.py solve-grid` Phase A captures the challenge
+but the crop is a **1280×163 blank strip, NOT the 4×4 tiles**. Root cause: the real image
+grid lives in a SECOND nested cross-domain iframe (`/api2/bframe` → inner frame) that the
+driver's crop/screenshot geometry cannot reach for this camofox fingerprint. So:
+- `vision_analyze` on the crop returns the *form behind* the iframe, not the grid — useless.
+- A blind `--tiles "<idx>"` click is a coin-flip; reCAPTCHA rejects and RECYCLES the same
+  tiles (the documented low-trust-fingerprint loop). Do NOT grind it.
+- `browser_vision` cannot help either (it needs `browser_navigate`, a separate engine from camofox).
+**Operational rule (refines the 2026-07-18 STAGE-AND-HALT):** for a Guardian in-platform
+job, the agent fills + uploads + opts-out + clicks Send, then MUST hand the OPEN grid to the
+user on VNC (`http://nasirjones:6080/vnc.html`) with the exact instruction text
+("Select all squares with <X>"). The user solves + clicks Send; ONLY THEN does the agent
+capture the "Application sent" proof + log `Applied`. Never log `Applied` off an un-confirmed Send,
+and never fabricate a tile click. This is the legitimate human-in-the-loop gate, not a skip.
+## Guardian `apply.py` GENERALISED 2026-07-21 (was hardcoded REVIVA)
+The driver was PURPOSE-BUILT for REVIVA SOFTWORKS "Product Designer" (10126456) with a
+HARDCODED company/role + proof dir — driving ANY other Guardian posting would MISLOG it under
+REVIVA's identity. Fixed: it now derives Company/Role/slug from the live `og:title`/`<h1>`
+(`_derive_identity`) and logs under the real identity. Verified on SEARCHLIGHT (10130380,
+"Mid-Level Graphic Designer"): `--no-submit` fills firstName/lastName/email + binds CV correctly
+with no mislog. Always sanity-check a new Guardian target with `--no-submit` (fills, does NOT
+fire Send) before handing the grid to the user — confirms identity + fill without burning a captcha.
 
 ## Sourcing still works
 The Guardian **feed** (`sites/jobs.theguardian.com/scripts/feed.py`) still sources

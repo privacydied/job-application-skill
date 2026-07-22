@@ -210,4 +210,23 @@ just diagnosing the aftermath, not the actual event.
 form). **Any posting logged `Blocked` for "dead click on external Apply" is not actually
 stuck — retry it.**
 
+## Greenhouse required react-selects rendering with NO options (broken employer form, 2026-07-20)
+
+When driving `gh_apply.py` on a subset of LIVE greenhouse postings, several **required**
+react-select fields open with an empty option list (`combobox_pick` → `NO_OPTION:No options`,
+and `document.querySelectorAll('.select__option')` returns `[]` after clicking). Confirmed on
+**Monzo** (`Please confirm your UK Right to Work status`), **GoCardless** (`Your privacy at
+GoCardless`, `Pay range transparency`), and **Vercel** (`Your authorization to work in the
+country where you will be based`) — three independent employers, so this is an employer-side
+broken/async-loaded form, NOT a camofox/driver bug (camofox health was `ok:true`,
+`consecutiveFailures:0`; the page titles + other fields loaded fine). `gh_apply.py` correctly
+logs these `Blocked` (validation error at submit, no email code fires).
+
+**Implication for the convertible pool:** a meaningful fraction of cached greenhouse candidates
+have forms that are currently undrivable walls. Do NOT assume the `convertible_pool.py` count
+of greenhouse candidates = submittable. Before crediting a greenhouse role as drivable, open the
+form and confirm its required react-selects actually populate options. If a fresh re-source (after
+the 12h cooldown) still shows empty options, it's a genuinely broken posting → `Blocked`, move on.
+Do not burn the 2-attempt budget re-trying the same empty-option field.
+
 ## (add further gaps here as they're discovered)
