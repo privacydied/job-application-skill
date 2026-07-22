@@ -45,6 +45,7 @@ import time
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_here, "..", "..", "_common", "scripts"))
 import cfx  # noqa: E402
+import atsform  # noqa: E402  — universal combobox_pick primitive (react-select fallback)
 
 # Reuse the exact section/culprit probes the diagnostic ships — one detector, no drift.
 import importlib.util  # noqa: E402
@@ -161,7 +162,13 @@ def _fill_radio(name, token):
     return cfx.evaluate(js)
 
 
-def _fill_select(name, token):
+def _fill_select(name, token, label=None):
+    """Set a native <select>; if there IS no such native select (NO_FIELD) or the option
+    isn't in it (NO_OPTION), fall back to atsform.combobox_pick — the universal primitive that
+    also drives REACT-SELECT comboboxes (incl. the MI5 'Additional Current Nationalities'
+    multi-select that plain <select> setting can't touch). Targets by the question label (most
+    reliable — react-selects have visible labels), else by the field name as a CSS selector.
+    combobox_pick auto-detects multi-select, so mark-all-that-apply works too."""
     js = (
         "(function(){var s=document.querySelector(\"select[name='%s']\");if(!s)return 'NO_FIELD';"
         "var tok=%s.toLowerCase();"
@@ -173,7 +180,22 @@ def _fill_select(name, token):
         "s.dispatchEvent(new Event('change',{bubbles:true}));"
         "return s.value===opt.value?'OK':'SET_NOEFFECT';})()"
     ) % (name, json.dumps(token))
-    return cfx.evaluate(js)
+    try:
+        r = cfx.evaluate(js)
+    except cfx.CfxError:
+        r = "EVAL_ERR"
+    if isinstance(r, str) and r.startswith("OK"):
+        return "OK"
+    # native <select> path didn't take it → try the react-select-capable primitive
+    if r in ("NO_FIELD", "NO_OPTION", "EVAL_ERR") and token:
+        m = re.search(r"datafield_(\d+)", name or "")
+        target = label or ('[name*="%s"]' % m.group(1) if m else name)
+        try:
+            if atsform.combobox_pick(target, token, quiet_notfound=True) == 0:
+                return "OK"
+        except Exception:  # noqa: BLE001
+            pass
+    return r
 
 
 def _fill_text(name, value):
@@ -299,7 +321,7 @@ def process_section(section, dry=False, rounds=3):
             if typ == "radio":
                 r = _fill_radio(field, token)
             elif c.get("tag") == "SELECT" or typ in ("select-one", "select"):
-                r = _fill_select(field, token)
+                r = _fill_select(field, token, label=q)
             elif typ == "text" and resolve_value(q) is not None and resolve_answer(q) is None:
                 # A config-resolved STRUCTURED text field (e.g. town of birth) — never an
                 # arbitrary free-text culprit (those stay user-only below).

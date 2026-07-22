@@ -8,6 +8,7 @@ references/applicant-profile.md
 references/target-roles.md
 references/resume-assets.md
 references/interview-prep.md
+references/prep.py
 profile.local.json
 profile.local.md
 .profile.local
@@ -157,3 +158,6 @@ state.db-shm
 config_*.json
 scripts/convertible_pool.py
 references/convertible-pool-*.md
+references/interview-prep-index.md
+references/interview-prep.html
+references/interview-prep-README.md
