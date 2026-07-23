@@ -347,6 +347,10 @@ _COMBO_CLICK = r"""
     const after = s.charAt(s.indexOf(t) + t.length);
     if (after === '' || /[,)\-–—|/]/.test(after)) sc += 3;   // target is the leading place / whole value
     sc += Math.max(0, 3 - Math.floor(s.length / 25));         // shorter is better
+    // HOME-COUNTRY tiebreaker (applicant is UK/London-based — applicant-profile.md): when several
+    // options share the city name ("London, UK" vs "London, Ontario, Canada"), strongly prefer the
+    // UK one so a location autocomplete never lands the applicant in the wrong country.
+    if (/(^|[^a-z])(uk|gb|united kingdom|great britain|england|scotland|wales|northern ireland)([^a-z]|$)/.test(s)) sc += 6;
     if (sc > best) { best = sc; o = els[ix]; }
   }
   document.querySelectorAll('[data-ats-target]').forEach(e=>e.removeAttribute('data-ats-target'));
