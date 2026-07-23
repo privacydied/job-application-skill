@@ -246,6 +246,11 @@ def salary_band_top(s):
 def precheck(cands):
     by_id, by_pair = load_tracker()
     cache = load_salary_cache()
+    # INTRA-BATCH dedup state: the tracker snapshot above is fixed at load time, so it
+    # cannot catch duplicates that are all NEW this run (a single harvest routinely repeats
+    # the same agency role under many different URLs). Track the canonical-ids and
+    # Company+Role pairs we've already selected THIS batch and collapse the rest.
+    seen_ids, seen_pairs = set(), set()
     out = {"keep": [], "review": [], "drop": []}
     for c in cands:
         if not isinstance(c, dict):
@@ -258,14 +263,14 @@ def precheck(cands):
         # re-running the 10-regex canon_ids sweep on the same URL.
         status = None
         canon = set(c.get("_canon_ids") or ()) or canon_ids(c.get("url") or "")
-        for i in canon | ({str(c.get("id")).lower()} if c.get("id") else set()):
+        bkey_ids = canon | ({str(c.get("id")).lower()} if c.get("id") else set())
+        for i in bkey_ids:
             if i in by_id:
                 status = by_id[i]
                 break
-        if status is None:
-            pair = (_norm(c.get("company")), _norm(title))
-            if pair[0] and pair[1] and pair in by_pair:
-                status = by_pair[pair]
+        bpair = (_norm(c.get("company")), _norm(title))
+        if status is None and bpair[0] and bpair[1] and bpair in by_pair:
+            status = by_pair[bpair]
         if status:
             if status.lower() == "blocked":
                 entry["verdict_reason"] = "tracked as Blocked — retry ONLY if the blocker is cleared"
@@ -274,6 +279,21 @@ def precheck(cands):
                 entry["verdict_reason"] = f"duplicate — already tracked ({status})"
                 out["drop"].append(entry)
             continue
+
+        # 1b) INTRA-BATCH dedup — a single harvest frequently repeats the SAME agency role
+        # under many different URLs (Reed "itol recruit / Business Analyst Trainee" x15,
+        # "IT Career Switch / Trainee Business Analyst" x10). None are in the tracker yet, so
+        # every one passes the id/Company+Role snapshot check above and each gets driven →
+        # duplicate applications to one role in a single day. Collapse to the first occurrence
+        # (keep #1; drop the siblings) using the same canon-id + Company+Role keys.
+        if (bkey_ids & seen_ids) or (bpair[0] and bpair[1] and bpair in seen_pairs):
+            entry["verdict_reason"] = ("duplicate — same Company+Role already selected earlier "
+                                       "in this batch (agency repost under a different URL)")
+            out["drop"].append(entry)
+            continue
+        seen_ids |= bkey_ids
+        if bpair[0] and bpair[1]:
+            seen_pairs.add(bpair)
 
         # 2) title eligibility (code, not memory — full target-roles.md tier list)
         elig = c.get("eligibility") or check_title(title)

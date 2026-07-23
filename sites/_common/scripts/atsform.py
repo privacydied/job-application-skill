@@ -984,7 +984,25 @@ function(question){
   if(lab){const e=document.getElementById(lab.htmlFor); if(e)return e;}
   const h=[...document.querySelectorAll('label,legend,h3,h4,span,div,p')].find(match);
   if(h){const sc=h.closest('fieldset,div,section')||h.parentElement;
-        if(sc) return sc.querySelector('input:not([type=hidden]),select,textarea,[role=radiogroup],[role=combobox]');}
+        if(sc){const c2=sc.querySelector('input:not([type=hidden]),select,textarea,[role=radiogroup],[role=combobox]');
+               if(c2) return c2;}}
+  // FIELD-ANCHORED fallback — Ashby (+ similar) render a location/typeahead as
+  // <input role=combobox placeholder="Start typing..."> with NO label[for] and NO
+  // aria-label; the question text ("Where are you located?") sits in a SIBLING div, so the
+  // scans above miss it (h.closest('div') resolves to the label div itself, which holds no
+  // control → the documented `no select/combobox for 'located'` FAIL). Anchor on each
+  // control and test ITS OWN field-group text (walking up a few ancestors) against the
+  // question — mirrors select()'s inp.closest(...).innerText route. Last resort, so it can
+  // only ever convert a FAIL into a hit.
+  const CTRLS='[role=combobox],input[aria-autocomplete=list],select,textarea,'+
+              'input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=submit]):not([type=button])';
+  for (const ctl of [...document.querySelectorAll(CTRLS)]){
+    let g=ctl.parentElement;
+    for(let i=0;i<4 && g;i++,g=g.parentElement){
+      const gt=norm(g.textContent);
+      if(gt.includes(w) && gt.length < w.length+90) return ctl;
+    }
+  }
   return null;
 }
 """
