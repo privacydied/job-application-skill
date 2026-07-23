@@ -1,0 +1,13 @@
+{
+  "url": "https://job-boards.greenhouse.io/gocardless/jobs/8613591002",
+  "company": "GoCardless",
+  "role": "Site Reliability Engineer",
+  "fill": {
+    "Why are you interested": "I run a self-hosted Linux homelab (Docker, CI/CD, monitoring, backups, hardening) and shipped production infra at CryptoKnowledge — an SRE role on payments infra is exactly where I want to be."
+  },
+  "select": {},
+  "radios": {
+    "Right to work": "Yes"
+  },
+  "eeo": true
+}

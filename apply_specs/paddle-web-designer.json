@@ -1,0 +1,23 @@
+{
+  "url": "https://jobs.ashbyhq.com/paddle/64e101ff-8964-4cdb-942c-93efbd0e19ca",
+  "company": "Paddle",
+  "role": "Web Designer",
+  "cv": "base-resume.pdf",
+  "fill": {
+    "Full Name": "Jane Doe",
+    "Email": "you@example.com",
+    "Phone": "+44 7700 900000",
+    "Preferred Pronouns (Optional)": "He/Him",
+    "What are your annual salary expectations?": "60000"
+  },
+  "location": "London",
+  "radios": {
+    "gender": "Man",
+    "sexual orientation": "Straight",
+    "ethnicity": "Mixed / Multiple ethnic groups",
+    "age group": "26-34",
+    "disability": "No, I don’t have a disability",
+    "protected Veteran": "No, I am not a protected veteran"
+  },
+  "submit": true
+}

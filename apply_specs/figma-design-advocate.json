@@ -1,0 +1,21 @@
+{
+  "url": "https://boards.greenhouse.io/figma/jobs/6122399004?gh_jid=6122399004",
+  "company": "Figma",
+  "role": "Designer Advocate",
+  "fill": {
+    "First Name": "Jane",
+    "Last Name": "Doe",
+    "Email": "you@example.com",
+    "Country": "United Kingdom",
+    "Location (City)": "London",
+    "Phone": "+447700900000",
+    "Why do you want to join Figma?": "As a product designer who ships code, Figma is the canvas I live in daily. I want to help the UK design community get more from it — turning workflows into content, events, and advocacy that makes great design accessible.",
+    "From where do you intend to work?": "London, United Kingdom",
+    "Are you authorized to work in the country": "Yes",
+    "LinkedIn Profile": "https://www.linkedin.com/in/janedoe",
+    "Other Website": "https://example.com"
+  },
+  "select": {},
+  "radios": {},
+  "eeo": true
+}

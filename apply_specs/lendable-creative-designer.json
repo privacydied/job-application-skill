@@ -1,0 +1,21 @@
+{
+  "url": "https://jobs.ashbyhq.com/lendable/42176bd7-78f8-422a-9187-f97131806ab2",
+  "company": "Lendable",
+  "role": "Creative Designer",
+  "cv": "base-resume.pdf",
+  "fill": {
+    "Name": "Jane Doe",
+    "Email": "you@example.com",
+    "Please provide a link to your portfolio": "https://example.com",
+    "What is your salary expectation?": "60000",
+    "What is your notice period?": "Immediately"
+  },
+  "location": "London",
+  "radios": {
+    "right to work": "I am a British or Irish Citizen",
+    "in the office 3 days": "Yes",
+    "loan/credit card/auto loan": "Not applicable",
+    "your data will be processed": "Yes"
+  },
+  "submit": true
+}

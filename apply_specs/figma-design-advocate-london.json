@@ -1,0 +1,21 @@
+{
+  "url": "https://boards.greenhouse.io/figma/jobs/6122399004?gh_jid=6122399004",
+  "company": "Figma",
+  "role": "Designer Advocate (London, United Kingdom)",
+  "cv": "base-resume.pdf",
+  "fill": {
+    "First Name": "Jane",
+    "Last Name": "Doe",
+    "Email": "you@example.com",
+    "Phone": "+44 7700 900000",
+    "Why do you want to join Figma?": "Figma is where design actually happens for the people I care about - designers, engineers, and the curious builders in between. As a product designer and creative technologist who runs his own site (example.com) and teaches himself new tools weekly, I live in the design-engineering seam Figma owns. I'd join to help that community go further: turning real workflows into clear, reproducible examples, and making the harder parts of the tool feel learnable. My background spans gov-scale accessibility (NHS COVID-19 App) and startup growth design, so I can speak to both enterprise and indie makers - and I'm a daily power-user of agentic AI tooling, which I'd use to scale advocacy content without losing the human voice."
+  },
+  "combo": {
+    "Location (City)": "London",
+    "Are you authorized to work": "Yes",
+    "Have you ever worked for Figma": "No",
+    "From where do you intend to work": "London",
+    "Country": "United Kingdom"
+  },
+  "eeo": true
+}

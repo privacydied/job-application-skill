@@ -1,0 +1,15 @@
+{
+  "url": "https://jobs.ashbyhq.com/paddle/39358ffd-7b34-4336-8e49-54ac703e0323",
+  "company": "Paddle",
+  "role": "Site Reliability Engineer",
+  "cv": "base-resume.pdf",
+  "fill": {
+    "Full Name": "Jane Doe",
+    "Email": "you@example.com",
+    "Phone": "+447700900000",
+    "salary expectations": "£75,000"
+  },
+  "location": "London",
+  "radios": {},
+  "submit": true
+}

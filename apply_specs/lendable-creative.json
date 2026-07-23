@@ -1,0 +1,17 @@
+{
+  "company": "Lendable",
+  "cv": "base-resume.pdf",
+  "fill": {
+    "Name": "Jane Doe",
+    "Email": "you@example.com",
+    "portfolio": "https://example.com",
+    "salary expectation": "£60,000",
+    "notice period": "Immediately"
+  },
+  "radios": {
+    "right to work status": "I am a British or Irish Citizen",
+    "able to be in the office 3 days": "Yes",
+    "loan/credit card/auto loan": "Not applicable",
+    "understand that": "Yes"
+  }
+}
