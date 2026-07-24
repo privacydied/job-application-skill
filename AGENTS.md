@@ -78,6 +78,16 @@ Root-level entrypoints (the ONLY scripts that live at repo root):
    (e.g. `scripts/amazon_apply.py`); delete anything it supersedes.
 5. Before adding a script, check it doesn't already exist:
    `git ls-files | grep <name>` and `find . -name '<name>'`.
+6. **Form-widget binding is shared infra — one home only: `sites/_common/scripts/atsform.py`.**
+   Text fill, dropdown/react-select pick (`combobox_pick`), radios, checkboxes, upload, review
+   all live there; board adapters **delegate** (`sites/ashbyhq/scripts/ashby.py`:
+   `set_checkbox = atsform.set_checkbox`, `combobox_commit = …combobox_pick`). If a board's
+   widget won't bind, **extend the shared engine — never grow a board-local copy** (the ashby
+   `combobox_commit` react-select fork, 2026-07-24). Two guard tests make this non-optional:
+   `tests/test_core.py::TestNoDivergentTitleScreen` (title wordlists → `check_title.py` only) and
+   `::TestNoDivergentFormWidgets` (react-select pick engine → `atsform.py` only). A build that
+   re-forks either turns **red**. That is the point: prose rules were ignored twice; a failing
+   test is the only thing that reliably stops the locally-cheap fork.
 
 ## 🔒 PII & the config-routing model (never commit the applicant's data)
 

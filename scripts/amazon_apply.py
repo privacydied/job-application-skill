@@ -18,6 +18,7 @@ Yes/No questions default to Yes for "do you have experience…" (qualifying) and
 import json
 import os
 import re
+import subprocess
 import sys
 import time
 
@@ -25,6 +26,27 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(_HERE, "..", "sites", "_common", "scripts"))
 import cfx        # noqa: E402
 import atsform    # noqa: E402
+import precheck   # noqa: E402  (mandatory pre-submit dedup gate + atomic log)
+
+LOGAPP = os.path.join(_HERE, "..", "sites", "_common", "scripts", "log-application.py")
+
+
+def _log_applied(url, jid, role, status):
+    """ATOMIC submit->log: write the tracker row in THIS process right after the submit so a
+    successful amazon.jobs submit can never leave an unlogged posting for the next pass to
+    re-apply to. Company is always 'Amazon'; the URL id (amazon.jobs/…/jobs/<jid>) is the
+    durable dedup key. Status is caller-decided: 'Applied?' when the applicant-list check
+    confirms the submission, 'Unverified' otherwise — both log without a --proof file."""
+    role = role or f"amazon.jobs {jid}"
+    try:
+        r = subprocess.run(
+            [sys.executable, LOGAPP, "Amazon", role, "amazon.jobs", url, status,
+             "--notes", "auto-logged by amazon_apply on SUBMIT"],
+            capture_output=True, text=True, timeout=30)
+        out = (r.stdout or r.stderr).strip()
+        print("  log:", out.splitlines()[-1][:160] if out else f"rc={r.returncode}")
+    except Exception as e:  # noqa: BLE001
+        print("  log FAILED (submit stands — log by hand):", str(e)[:120])
 
 
 def _applicant_facts():
@@ -162,8 +184,15 @@ def _fill_step():
 def run(job, resume="am-uxd.pdf", no_submit=False):
     jid = re.sub(r".*/jobs/(\d+).*", r"\1", job) if "/jobs/" in job else job
     url = f"https://www.amazon.jobs/en/jobs/{jid}"
+    # MANDATORY pre-submit dedup gate (item 1): never re-drive a posting already Applied.
+    if precheck.guard(url=url, label="amazon"):
+        return 0
     tab = cfx.ensure_tab(persist=True); cfx.set_tab(tab)
     cfx.navigate(url); time.sleep(11)   # amazon.jobs SPA is slow to paint the Apply CTA
+    try:
+        role_title = cfx.evaluate("((document.querySelector('h1')||{}).innerText||'').trim()") or ""
+    except Exception:  # noqa: BLE001
+        role_title = ""
     # RESUME: a logged-in + already-started application redirects the job URL straight to
     # `/applicant/jobs/<id>/apply` (the wizard). In that case there's no "Apply now" CTA to
     # click — we're already on the form. Only click Apply when NOT already on the wizard.
@@ -231,6 +260,9 @@ def run(job, resume="am-uxd.pdf", no_submit=False):
     cfx.navigate("https://account.amazon.jobs/en-US/applicant"); time.sleep(7)
     ok = cfx.evaluate("(()=>/%s/.test(document.body.innerText))" % jid) or \
         cfx.evaluate(r"""(()=>{const t=document.body.innerText;const m=t.match(/active\s*\((\d+)\)/i);return m&&+m[1]>0;})()""")
+    # ATOMIC submit->log (item 4): record the row now so a confirmed submit is never left
+    # unlogged. Applied? when the applicant list confirms it, Unverified otherwise.
+    _log_applied(url, jid, role_title, "Applied?" if ok is True else "Unverified")
     print("SUBMITTED_VERIFIED" if ok is True else "SUBMIT_UNVERIFIED")
     return 0 if ok is True else 2
 

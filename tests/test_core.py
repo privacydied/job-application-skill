@@ -188,6 +188,34 @@ class TestNoDivergentTitleScreen(unittest.TestCase):
         self.assertEqual(offenders, [], "re-implemented title screen -> " + " | ".join(offenders))
 
 
+class TestNoDivergentFormWidgets(unittest.TestCase):
+    """React-select / dropdown BINDING is shared infra: it lives ONLY in
+    sites/_common/scripts/ (atsform.combobox_pick — THE universal engine, which already covers
+    Greenhouse/Lever/Ashby/WTTJ/SmartRecruiters). A board that re-rolls the open-type-pick dance
+    is the duplicate-infra drift AGENTS.md bans and that cost a re-solve on 2026-07-24 (the ashby
+    `combobox_commit` fork). This fails the build the moment that engine reappears outside the
+    shared home — so the cheap path (fork it locally) stops being cheaper than the right path
+    (extend combobox_pick + delegate).
+
+    Deliberately PRECISE, not blanket: a bare native value-setter
+    (`getOwnPropertyDescriptor(...,'value').set`) is NOT flagged — it's a legitimate, ubiquitous
+    idiom used in ~15 places for OTP/login/search/CAPTCHA-token/salary fields that have nothing
+    to do with dropdown binding. Only the full react-select PICK engine — a combobox INPUT
+    selector AND an option-MENU iteration in the same file — is the reimplementation signal.
+
+    The scan itself lives in sites/_common/scripts/infra_guard.py (ONE definition), shared with
+    loop-preflight.py so the same rule also fires at the top of every loop firing — including the
+    Hermes loop, which never runs this suite. (Inlining the scan here AND in preflight would be
+    the very drift this test exists to stop.)"""
+
+    def test_no_board_local_react_select_engine(self):
+        import infra_guard  # noqa: E402 — sites/_common/scripts is on sys.path (see precheck import)
+        offenders = infra_guard.scan_form_widgets()
+        self.assertEqual(offenders, [], "react-select PICK engine re-implemented outside "
+                         "sites/_common/scripts/ — use atsform.combobox_pick and delegate:\n  "
+                         + "\n  ".join(offenders))
+
+
 class TestBoardCooldown(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
@@ -274,6 +302,68 @@ class TestPrecheckPure(unittest.TestCase):
         self.assertIn("4012345678",
                       precheck.canon_ids("https://www.linkedin.com/jobs/view/4012345678"))
         self.assertIn("abc123", precheck.canon_ids("https://uk.indeed.com/viewjob?jk=abc123"))
+
+    def test_canon_ids_noncanon_boards_dedup_on_native_id(self):
+        # REGRESSION (2026-07-24): the sourced non-canon boards used to fall through to the
+        # full-URL-with-query fallback, so the SAME posting re-sourced with a different
+        # utm/redirect param produced a NEW dedup key and got re-applied. Each must now
+        # canonicalise to its board-native id (mirrors that board's feed.py load_seen).
+        cases = {
+            "https://www.adzuna.co.uk/details/5209871234?utm_source=x": "5209871234",
+            "https://uk.talent.com/view?id=987654": "987654",
+            "https://www.jobs.nhs.uk/candidate/jobadvert/C9289-SC-388?keyword=x": "c9289-sc-388",
+            "https://www.careerjet.co.uk/jobad/uk_ab-12": "uk_ab-12",
+            "https://uk.jooble.org/away/1234567890abcdef": "1234567890abcdef",
+            "https://www.amazon.jobs/en/jobs/2812345/some-title": "2812345",
+            "https://www.cv-library.co.uk/job/221234567-ux": "221234567",
+        }
+        for url, want in cases.items():
+            self.assertIn(want, precheck.canon_ids(url), url)
+
+    def test_canon_ids_same_posting_two_sources_one_key(self):
+        # utm/redirect drift must NOT create a second key for the same adzuna posting.
+        a = precheck.canon_ids("https://www.adzuna.co.uk/details/5209871234?utm_source=a&ref=1")
+        b = precheck.canon_ids("https://www.adzuna.co.uk/details/5209871234?utm_source=b")
+        self.assertEqual(a, b)
+
+    def test_canonical_url_rejects_malformed(self):
+        # The JSON-blob that landed in the URL column (`…/jobs/{"ok":true`) made that posting
+        # invisible to dedup and it was Applied twice. '' is the reject signal.
+        self.assertEqual(precheck.canonical_url('https://www.reed.co.uk/jobs/{"ok":true'), "")
+        self.assertEqual(precheck.canonical_url("just a note, not a url"), "")
+        self.assertEqual(precheck.canonical_url(""), "")
+
+    def test_canonical_url_strips_tracking_keeps_id(self):
+        self.assertEqual(
+            precheck.canonical_url("https://uk.indeed.com/viewjob?jk=abc123&utm_source=x&from=serp"),
+            "https://uk.indeed.com/viewjob?jk=abc123")
+        # trailing slash removed; id-bearing path preserved
+        self.assertEqual(
+            precheck.canonical_url("https://www.reed.co.uk/jobs/ux-designer/57108922/"),
+            "https://www.reed.co.uk/jobs/ux-designer/57108922")
+
+    def test_guard_refuses_second_submit_of_applied(self):
+        # The mandatory pre-submit gate: a driver MUST skip a posting already Applied — even
+        # when re-sourced with a tracking param that differs from the logged URL.
+        applied_url = "https://www.reed.co.uk/jobs/ux-designer/99001122"
+        lt = precheck.load_tracker
+        precheck.load_tracker = lambda: ({"99001122": "Applied"}, {})
+        try:
+            self.assertTrue(precheck.guard(url=applied_url))
+            self.assertTrue(precheck.guard(url=applied_url + "?utm_source=x"))
+            # a genuinely different posting is NOT blocked
+            self.assertFalse(precheck.guard(url="https://www.reed.co.uk/jobs/ux-designer/77001122"))
+        finally:
+            precheck.load_tracker = lt
+
+    def test_guard_allows_blocked_and_skipped(self):
+        # Blocked/Skipped are deliberately re-drivable (retry) — guard must return False.
+        lt = precheck.load_tracker
+        precheck.load_tracker = lambda: ({"55001122": "Blocked"}, {})
+        try:
+            self.assertFalse(precheck.guard(url="https://www.reed.co.uk/jobs/x/55001122"))
+        finally:
+            precheck.load_tracker = lt
 
 
 class TestPrecheckScreen(unittest.TestCase):

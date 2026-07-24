@@ -44,6 +44,7 @@ import json
 import os
 import re
 import sys
+import urllib.parse
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from check_title import check_title  # noqa: E402
@@ -65,6 +66,72 @@ def _root():
         d = parent
 
 
+# Board-native id patterns for canon_ids: each is a host-scoped regex with ONE capture
+# group = that board's stable posting id. Matched against a LOWERCASED url, so keep them
+# lowercase. Kept as a module constant so the whole dedup key space is auditable in one
+# place. Each entry MUST mirror the same board's feed.py re-source pattern
+# (sites/<board>/scripts/feed.py `load_seen`/`seen_pattern`) — otherwise the sourcing
+# funnel and the apply/log/queue funnel key on different things and the same posting slips
+# through one of them. Extended 2026-07-24 to cover every SOURCED non-canon board
+# (adzuna/nhs/talent/jooble/careerjet/…): those used to hit the full-URL fallback below, so
+# the same posting re-sourced with a different utm/redirect/query param produced a NEW key
+# and got re-applied. Now they dedup on native id like the canon boards.
+_CANON_PATTERNS = (
+    r"linkedin\.com/jobs/view/(\d+)",
+    r"currentjobid=(\d+)",
+    r"[?&]jk=([0-9a-z]+)",
+    r"welcometothejungle\.com/jobs/([a-z0-9_-]+)",
+    r"civilservicejobs[^\"]*?(?:jcode=|joblist_view_vac=)(\d+)",
+    r"recruitment\.hackney\.gov\.uk/vacancy/([a-z0-9-]+)",
+    # Reed: canonical URL is `…/jobs/<slug>/<id>` but tracker rows are BARE `…/jobs/<id>`
+    # (and some slugs) — all three shapes must dedup to the same numeric id or re-sources
+    # report ~100% "fresh" (false-exhaustion).
+    r"reed\.co\.uk/jobs/(?:[^/]+/)?(\d{5,8})",
+    r"greenhouse\.io/[^/]+/jobs/(\d+)",
+    r"jobs\.lever\.co/[^/]+/([0-9a-f-]{8,})",
+    r"ashbyhq\.com/[^/]+/([0-9a-f-]{8,})",
+    r"myworkdayjobs\.com/.*/job/[^/]+/([^/?]+)",
+    r"jobs\.theguardian\.com/job/(\d+)",
+    # amazon.jobs — driver board (amazon_apply.py) with NO id pattern until now, so a
+    # re-drive of the same jid only fallback-matched on exact URL → re-applied.
+    r"amazon\.jobs/(?:[a-z-]+/)?jobs/(\d+)",
+    # --- sourced non-canon boards (each mirrors that board's feed.py load_seen id) ---
+    r"adzuna\.co\.uk/details/(\d+)",
+    r"talent\.com/view\?id=(\d+)",
+    r"jobs\.nhs\.uk/candidate/jobadvert/([a-z0-9][a-z0-9-]+)",
+    r"careerjet\.co\.uk/jobad/([a-z0-9_-]+)",
+    r"jooble\.org/(?:away|jdp)/([a-z0-9_-]+)",
+    r"jobserve\.com/[^\"'\s]*?-([a-f0-9]{16,})",
+    r"cv-library\.co\.uk/job/(\d{6,})",
+    r"totaljobs\.com/job/[^\"'\s]*?-job(\d{6,})",
+    r"the-dots\.com/jobs/[a-z0-9-]*?(\d+)\b",
+    r"charityjob\.co\.uk/jobs/[^,\s]+?/(\d{5,})",
+    r"applicationtrack\.com/[^,\s]*?/opp/(\d+)-",
+    r"cybersecurityjobsite\.com/job/(\d+)",
+    r"efinancialcareers\.co\.uk/jobs-[^\"'\s]*\.id(\d+)",
+    r"hackajob\.com/job/([0-9a-f-]{36})",
+    r"(?:jobsgopublic|lgjobs)\.com/job/(?:[^/,\s]*-)?(\d+)",
+    r"thirdsector\.co\.uk/jobdetail/(\d+)",
+    r"news\.ycombinator\.com/item\?id=(\d+)",
+    r"careers\.bbc\.co\.uk/job/(?:[^/,\s]*/)?(\d+)",
+    r"creativepool\.com/jobs/[^\s\"',]*\.(\d+)",
+    r"designweek\.co\.uk/job/([a-z0-9-]+)",
+    r"dezeenjobs\.com/job/[a-z0-9-]*?(\d+)",
+    r"dribbble\.com/jobs/(\d+)",
+    r"escapethecity\.org/opportunity/([^/?\s,\"]+)",
+    r"findapprenticeship\.service\.gov\.uk/apprenticeship/(vac\d+)",
+    r"himalayas\.app/companies/([a-z0-9._-]+/jobs/[a-z0-9._-]+)",
+    r"ifyoucouldjobs\.com/jobs/(\d+)",
+    r"jobicy\.com/jobs/(\d+)",
+    r"jobs\.ac\.uk/job/([a-z0-9]+)",
+    r"musicbusinessworldwide\.com/jobs/job/(\d+)",
+    r"remotive\.com/remote-jobs/[^/\"]+/[a-z0-9-]+-(\d+)",
+    r"jobs2web\.com/tfl/job/(?:[^/,\s]*/)?(\d+)",
+    r"gchq-careers\.co\.uk/(?:job|vacancy)/[^,\s]*?(\d{4,})",
+    r"parliament\.uk/[^,\s]*?vacancy_id=([a-z0-9]+)",
+)
+
+
 def canon_ids(url):
     """Stable, board-agnostic ids for a posting URL — dedup on canonical id, not
     URL equality (carousel params like ?theme=/?query= defeat URL matching)."""
@@ -72,17 +139,7 @@ def canon_ids(url):
     if not url:
         return ids
     u = url.strip().lower()
-    for pat in (r"linkedin\.com/jobs/view/(\d+)", r"currentjobid=(\d+)",
-                r"[?&]jk=([0-9a-f]+)", r"welcometothejungle\.com/jobs/([a-z0-9_-]+)",
-                r"civilservicejobs[^\"]*?(?:jcode=|joblist_view_vac=)(\d+)",
-                r"recruitment\.hackney\.gov\.uk/vacancy/([a-z0-9-]+)",
-                # Reed: canonical URL is `…/jobs/<slug>/<id>` but tracker rows are BARE
-                # `…/jobs/<id>` (and some slugs) — all three shapes must dedup to the
-                # same numeric id or re-sources report ~100% "fresh" (false-exhaustion).
-                r"reed\.co\.uk/jobs/(?:[^/]+/)?(\d{5,8})",
-                r"greenhouse\.io/[^/]+/jobs/(\d+)", r"jobs\.lever\.co/[^/]+/([0-9a-f-]{8,})",
-                r"ashbyhq\.com/[^/]+/([0-9a-f-]{8,})", r"myworkdayjobs\.com/.*/job/[^/]+/([^/?]+)",
-                r"jobs\.theguardian\.com/job/(\d+)"):
+    for pat in _CANON_PATTERNS:
         m = re.search(pat, u)
         if m:
             ids.add(m.group(1))
@@ -146,6 +203,64 @@ def is_applied(status):
     """True if a tracker status means 'already submitted — do not re-drive' (Applied / Applied?).
     Blocked/Saved/Unverified are deliberately NOT applied (a driver may legitimately proceed)."""
     return (status or "").strip().lower().startswith("applied")
+
+
+# Query params that are pure tracking/attribution noise — safe to drop when STORING a URL so
+# the same posting logged from two sources (utm_source=…, gh_src=…, ?ref=…) collapses to one
+# dedup key. Id-bearing params (jk/id/currentjobid/jcode/vacancy_id/…) are NEVER listed here.
+_TRACKING_PARAM = re.compile(
+    r"^(utm_[a-z_]+|gh_src|gh_jid|src|source|ref|referer|referrer|origin|from|trk|trackingid|"
+    r"mc_cid|mc_eid|fbclid|gclid|cid|ito|cmpid|_ga|wt\.mc_id)$", re.I)
+
+
+def canonical_url(url):
+    """Return a stable, storable form of a posting URL for the tracker, or '' if `url` is not
+    a plausible http(s) posting URL. Drops the #fragment, strips known tracking/attribution
+    query params (utm_*, gh_src, ref, fbclid, …) so two sources of the same posting collapse to
+    one dedup key, and removes a trailing slash. Case and id-bearing params are preserved
+    (WTTJ/Workday ids are case-sensitive; jk/id/jcode carry the id).
+
+    Returning '' is the REJECT signal log-application.py uses to refuse a malformed value — the
+    `https://www.reed.co.uk/jobs/{"ok":true` JSON-blob row that landed in the URL column and
+    made that posting invisible to canon_ids dedup (so it was Applied twice). Anything carrying
+    a character that never appears unescaped in a real posting URL ({ } " < > backtick,
+    whitespace, backslash) is rejected outright."""
+    s = (url or "").strip()
+    if not s:
+        return ""
+    if re.search(r'[\s{}"<>`\\]', s):        # JSON blob / shell fragment / note text
+        return ""
+    if not re.match(r"https?://[^/]+\.[^/]", s, re.I):  # must be http(s)://host.tld…
+        return ""
+    try:
+        parts = urllib.parse.urlsplit(s)
+    except ValueError:
+        return ""
+    if not parts.netloc:
+        return ""
+    kept = [(k, v) for k, v in urllib.parse.parse_qsl(parts.query, keep_blank_values=True)
+            if not _TRACKING_PARAM.match(k)]
+    query = urllib.parse.urlencode(kept)
+    path = parts.path.rstrip("/") or parts.path
+    return urllib.parse.urlunsplit((parts.scheme, parts.netloc, path, query, ""))
+
+
+def guard(url=None, company=None, role=None, label=""):
+    """MANDATORY pre-submit duplicate gate — the ONE call every apply driver makes immediately
+    before it submits. Returns True (having printed a standard ALREADY_APPLIED line) when this
+    posting is already 'Applied'/'Applied?' in the tracker and the driver MUST skip; False to
+    proceed. Non-exiting on purpose, so a batch driver can skip ONE posting and keep going
+    (sys.exit would abort the whole run on the first dup). Matches on canon_ids(url) first, then
+    Company+Role — see already_applied(). Blocked/Saved/Skipped/Unverified are NOT treated as
+    applied, so a legitimate retry still proceeds."""
+    hit = already_applied(url, company, role)
+    if hit and is_applied(hit[0]):
+        who = url or (f"{company} | {role}" if (company or role) else "?")
+        tag = f" [{label}]" if label else ""
+        print(f"ALREADY_APPLIED status={hit[0]!r} matched={hit[1]}{tag} — "
+              f"refusing duplicate submit: {who}")
+        return True
+    return False
 
 
 def load_seen(pattern, tracker=None):

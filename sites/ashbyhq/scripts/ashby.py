@@ -277,6 +277,13 @@ def upload_cv(filename: str) -> int:
 # Generic form primitives live in the shared engine (atsform.py) — single source of
 # truth reused by every ATS adapter. Ashby-specific bits (reveal, set_toggle,
 # upload_cv, submit, apply, check, set_radio) stay in this file.
+#
+# ⛔ DO NOT re-roll react-select / dropdown BINDING here. If an Ashby combobox won't bind,
+# EXTEND atsform.combobox_pick (it already names Ashby + has the free-text fallback) and
+# DELEGATE from this file — as combobox_commit() below does. A board-local combobox engine
+# (find combobox input + iterate the option menu) is the duplicate-infra drift that cost a
+# re-solve on 2026-07-24; the guard test tests/test_core.py::TestNoDivergentFormWidgets now
+# fails the build if it reappears outside atsform.py.
 upload = atsform.upload
 set_checkbox = atsform.set_checkbox
 fill = atsform.fill
@@ -300,6 +307,7 @@ _ASHBY_RADIO_JS = r"""(function(q, o){
     var d=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el),'checked');
     if(d&&d.set){ d.set.call(el,true); } else { el.checked=true; }
   }
+  // Pass 1: labelled <label> options (standard Ashby radio widgets)
   var labels=[].slice.call(document.querySelectorAll('label'));
   for(var i=0;i<labels.length;i++){
     if(!(labels[i].innerText||'').toLowerCase().includes(q)) continue;
@@ -317,6 +325,34 @@ _ASHBY_RADIO_JS = r"""(function(q, o){
       }
     }
   }
+  // Pass 2 (2026-07-24): fieldset-anchored radios whose options are NOT wrapped in
+  // <label> (e.g. right-to-work status) — the option TEXT lives in a sibling span while
+  // the bare <input type=radio> sits beside it with empty label text. Match the <fieldset>
+  // by question text, then find the text-bearing element containing the option and use its
+  // NEAREST preceding/ancestor <input type=radio> as the control to commit.
+  var fsets=[].slice.call(document.querySelectorAll('fieldset'));
+  for(var f=0;f<fsets.length;f++){
+    if(!(fsets[f].innerText||'').toLowerCase().includes(q)) continue;
+    var all=fsets[f].querySelectorAll('*');
+    for(var k=0;k<all.length;k++){
+      var ot=(all[k].innerText||'').trim().toLowerCase();
+      if(!ot) continue;
+      if(ot===o || (o.length>2 && ot.includes(o))){
+        // nearest preceding radio sibling, else a radio inside this element, else by id
+        var r2=null;
+        var sib=all[k].previousElementSibling;
+        while(sib){ var rr=sib.querySelector&&sib.querySelector('input[type=radio]'); if(rr){r2=rr;break;} if(sib.tagName==='INPUT'&&sib.type==='radio'){r2=sib;break;} sib=sib.previousElementSibling; }
+        if(!r2) r2=all[k].querySelector('input[type=radio]');
+        if(!r2) r2=document.getElementById(all[k].getAttribute('for'));
+        if(!r2) continue;
+        setNativeChecked(r2);
+        r2.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+        r2.dispatchEvent(new Event('input',{bubbles:true}));
+        r2.dispatchEvent(new Event('change',{bubbles:true}));
+        return r2.checked ? ('OK:'+ot.slice(0,40)) : 'CLICK_FAILED';
+      }
+    }
+  }
   return 'NO_EXACT';
 })(%s, %s)"""
 
@@ -329,6 +365,17 @@ def set_radio(question, option, quiet_notfound=False):
     # Not a labelled Ashby radio group (NO_EXACT / NO_INPUT / CLICK_FAILED) — defer to the
     # shared engine (standard HTML radios + the Workday value=true/false path + quiet_notfound).
     return atsform.set_radio(question, option, quiet_notfound=quiet_notfound)
+
+
+def combobox_commit(label_sub, value):
+    """Commit a required Ashby react-select combobox (location / US-auth) headlessly.
+
+    Delegates to the SHARED atsform.combobox_pick primitive (which already names Ashby
+    and has the free-text fallback + real-keystroke typing + native-setter commit) — do
+    NOT keep a board-local copy of this logic (see user direction 2026-07-24). The shared
+    _FIND_CONTROL resolves Ashby's label-less comboboxes via a field-anchored walk.
+    """
+    return atsform.combobox_pick(label_sub, value)
 
 
 def submit() -> int:
@@ -453,6 +500,20 @@ def apply(config_path: str, do_submit: bool = False) -> int:
         st = st if isinstance(st, str) else ("on" if st else "off")
         if set_checkbox(lbl, st) != 0:
             failures.append(f"checkbox:{lbl}")
+
+    # Required react-select comboboxes (location / US work authorization) MUST be committed
+    # via the native-setter ladder AFTER the text/toggle fills — atsform.combobox_pick does
+    # not bind these headlessly (verified 2026-07-24). Truthful values only:
+    #   location        -> e.g. "London, United Kingdom" (applicant is London-based)
+    #   authorized_in_us -> "No" for a British citizen with no US work authorization.
+    # Match on a SHORT keyword (the ancestor DOM text holds only "Location" / "authorized",
+    # not the full field label), so the matcher actually resolves.
+    if cfg.get("location"):
+        if combobox_commit("location", cfg["location"]) != 0:
+            failures.append("combobox:location")
+    if cfg.get("authorized_in_us") is not None:
+        if combobox_commit("authorized", str(cfg["authorized_in_us"])) != 0:
+            failures.append("combobox:us_auth")
 
     # Auto-tick all unchecked checkboxes (anti-AI attestation oath, etc.)
     # User has authorised auto-ticking — no manual gate.

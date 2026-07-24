@@ -27,12 +27,52 @@ CRITICAL Reed wedge (cost real time this session):
 Usage: python3 reed_apply.py <job_id> [<job_id> ...] [--dry]
   (job_id = the trailing digits in the Reed URL, e.g. 57108922)
 """
+import subprocess
 import sys
 import os
 import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "sites", "_common", "scripts"))
 import cfx  # noqa: E402
+import precheck  # noqa: E402  (mandatory pre-submit dedup gate + atomic log)
+
+LOGAPP = os.path.join(HERE, "..", "sites", "_common", "scripts", "log-application.py")
+
+
+def _scrape_meta():
+    """Best-effort (role, company) from the Reed job page for the atomic tracker log. The
+    canonical dedup key is the URL id, so imperfect company/role text is non-fatal — these
+    only fill the human-readable columns. Falls back to safe placeholders."""
+    import json as _json
+    r = ev("""(function(){
+      var h=document.querySelector('h1');
+      var c=document.querySelector('[data-qa="posterOrganisationName"],[itemprop="hiringOrganization"] [itemprop="name"],.job-header_jobHeader__jobTitle__company,.company');
+      return JSON.stringify({role:(h?h.innerText:'').trim(),company:(c?c.innerText:'').trim()});
+    })()""", tries=3)
+    try:
+        m = _json.loads(r) if isinstance(r, str) else {}
+    except Exception:  # noqa: BLE001
+        m = {}
+    return (m.get("role") or "", m.get("company") or "")
+
+
+def _log_applied(url, job_id, role, company, status="Applied?"):
+    """ATOMIC submit->log: write the tracker row in THIS process the moment a submit is
+    confirmed, so a successful Reed submit can never leave an unlogged posting that the next
+    pass re-applies to. Status is 'Applied?' (submitted, not proof-file-confirmed — Reed's
+    post-submit page 404s; the applications-list badge is the real confirmation) which
+    log-application.py accepts without --proof. The URL id is the durable dedup key."""
+    role = role or f"Reed posting {job_id}"
+    company = company or "(unknown employer — Reed)"
+    try:
+        r = subprocess.run(
+            [sys.executable, LOGAPP, company, role, "Reed", url, status,
+             "--notes", "auto-logged by reed_apply on SUBMIT (unconfirmed — verify on "
+             "/account/jobs/applications)"],
+            capture_output=True, text=True, timeout=30)
+        print("  log:", (r.stdout or r.stderr).strip().splitlines()[-1][:160] if (r.stdout or r.stderr).strip() else f"rc={r.returncode}")
+    except Exception as e:  # noqa: BLE001
+        print("  log FAILED (submit stands — log by hand):", str(e)[:120])
 
 
 def ev(expr, tries=8):
@@ -120,12 +160,16 @@ def apply(job_arg, dry=False):
         job_id = job_arg
         url = f"https://www.reed.co.uk/jobs/ux-designer/{job_id}"
     print(f"[{job_id}] nav {url}")
+    # MANDATORY pre-submit dedup gate (item 1): never re-drive a posting already Applied.
+    if precheck.guard(url=url, label="reed"):
+        return f"[{job_id}] SKIP already-applied"
     if dry:
         return "dry"
     cfx.navigate(url)
     # Reed's job page lazy-renders the "Apply now" button via JS; a 5s settle races it
     # and click_apply_now() returns 'none' -> LOOP-END. Give the SPA time to paint.
     time.sleep(9)
+    role, company = _scrape_meta()   # capture BEFORE submit (job header vanishes on 404 redirect)
     r = click_apply_now()
     if not r or 'clicked' not in str(r):
         time.sleep(4)
@@ -141,6 +185,7 @@ def apply(job_arg, dry=False):
         res = str(answer_yes_and_advance())
         if 'SUBMIT' in res:
             time.sleep(5)
+            _log_applied(url, job_id, role, company)
             return f"[{job_id}] SUBMITTED (url={ev('location.href')})"
         if 'CONTINUE' in res:
             time.sleep(5)
@@ -148,6 +193,7 @@ def apply(job_arg, dry=False):
         if 'NONE' in res:
             if click_by_text("Submit application", timeout=4):
                 time.sleep(5)
+                _log_applied(url, job_id, role, company)
                 return f"[{job_id}] SUBMITTED2 (url={ev('location.href')})"
             return f"[{job_id}] STUCK ({res})"
         time.sleep(4)

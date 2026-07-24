@@ -53,7 +53,7 @@ import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from precheck import canon_ids, _norm  # noqa: E402  (same keys as the dedup)
+from precheck import canon_ids, canonical_url, _norm  # noqa: E402  (same keys as the dedup)
 from fsutil import file_lock  # noqa: E402  (tracker RMW lock, Tier A.4)
 
 COLS = ["Date", "Company", "Role", "Source", "URL", "Status", "Next Action", "Notes"]
@@ -151,6 +151,20 @@ def main():
         print("FAIL: refusing to log a session-bound index.cgi?SID=… URL — log the "
               "stable form instead (CSJ: jobs.cgi?jcode=<id>; see sites/civilservicejobs/NOTES.md)")
         return 2
+
+    # URL CANONICALISATION + REJECT (data-integrity): store the SAME normalized form the dedup
+    # keys on, so read and write share one key space, and REFUSE a malformed value outright. A
+    # JSON blob / note text landing in the URL column (the `…/jobs/{"ok":true` row) makes that
+    # posting invisible to canon_ids — it was Applied twice. Empty URL stays allowed (the row
+    # then dedups on Company+Role); a NON-empty value that isn't a real posting URL is rejected.
+    if url:
+        cu = canonical_url(url)
+        if not cu:
+            print(f"FAIL: refusing to log a malformed/non-URL value in the URL field: {url!r}. "
+                  "Pass the real posting URL (or leave URL empty to match on Company+Role). This "
+                  "guard stops the JSON-blob/garbage rows that poison canon_ids dedup.")
+            return 2
+        url = cu
 
     # HARD RULE: Status "Applied" requires a real confirmation artifact. See module
     # docstring. Unconfirmable submissions must use "Applied?"; no-evidence rows

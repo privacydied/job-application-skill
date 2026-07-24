@@ -92,6 +92,27 @@ def _scrub_pii_guard():
         pass
 
 
+def _divergent_infra_guard():
+    """Surface any duplicate/divergent shared-infra at the top of EVERY firing (incl. the
+    concurrent Hermes loop, which never runs the test suite). A build-time guard test alone
+    isn't enough — the agent that forks a shared engine doesn't run the tests — so we re-run
+    the SAME scan here (from infra_guard, not a second copy) where every firing in both runtimes
+    will see the offenders. Best-effort: never blocks the loop — a code-hygiene smell must not
+    stop real applications — but a persistent `WARN infra:` line keeps the fork visible until a
+    delegation replaces it. Same philosophy as _scrub_pii_guard above."""
+    try:
+        import infra_guard
+        offenders = infra_guard.all_offenders(_here)
+        for o in offenders:
+            print(f"WARN infra: {o}", file=sys.stderr)
+        if offenders:
+            print(f"note: {len(offenders)} duplicate-infra offender(s) — a shared primitive was "
+                  f"re-forked in a board/driver file. Fix by DELEGATING to the shared engine "
+                  f"(AGENTS.md §no-divergent-duplicate); do NOT keep the fork or ship a second copy.")
+    except Exception:  # noqa: BLE001 — a guard hiccup must never block the loop
+        pass
+
+
 def _target(argv):
     if "--target" in argv:
         try:
@@ -112,6 +133,7 @@ def main():
     if not assert_canonical_dir():
         return 2
     _scrub_pii_guard()   # enforce the placeholder convention on tracked files, every firing
+    _divergent_infra_guard()   # surface any re-forked shared infra (both runtimes), every firing
     try:
         searches = sp.read_searches()
     except FileNotFoundError:

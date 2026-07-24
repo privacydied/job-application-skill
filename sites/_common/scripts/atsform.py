@@ -287,7 +287,20 @@ def fill(label, value, quiet_notfound=False):
 # a fix here fixes every ATS at once. A widget that won't drive is a CAPABILITY GAP to debug
 # (probe_widget.py), never a "structural limit" — only an eligibility question with no truthful
 # answer is a legitimate stop.
+#
+# ⛔ DO NOT FORK THIS ENGINE PER BOARD. If a board's react-select won't bind, EXTEND the ladder
+# HERE — never grow a board-local combobox (find combobox input + iterate the option menu) in a
+# sites/<board>/ file. That is the exact duplicate-infra drift AGENTS.md bans and that cost a
+# re-solve on 2026-07-24 (the ashby `combobox_commit` fork, since collapsed to a delegation).
+# Board adapters DELEGATE: `combobox_commit = ...combobox_pick`, `set_checkbox = atsform.set_checkbox`.
+# Enforced by a guard test: tests/test_core.py::TestNoDivergentFormWidgets fails the build if the
+# react-select PICK engine (combobox input + option-menu iteration) appears outside this module.
 # ═══════════════════════════════════════════════════════════════════════════
+
+# Printed on every combobox failure so the NEXT agent's nose points at the right file — extend
+# the ladder above, don't reinvent it downstream.
+_EXTEND_HINT = ("  → extend the ladder in atsform.combobox_pick; do NOT fork a per-board "
+                "react-select engine (guard: tests/test_core.py::TestNoDivergentFormWidgets)")
 
 _COMBO_READ_OPTS = r"""
 (() => {
@@ -510,6 +523,7 @@ def _combo_open_and_pick(option, multi=False):
             print(f"OK=freetext:{str(option)[:40]} (async suggestion list empty — committed typed value)")
             return 0
     print(clicked if isinstance(clicked, str) else "FAIL")
+    print(_EXTEND_HINT)
     return 1
 
 
@@ -530,6 +544,7 @@ def combobox_pick(target, option, multi=False, clear_first=False, quiet_notfound
         if quiet_notfound:
             return NOTFOUND
         print(f"FAIL combobox_pick: no select/combobox for {target!r}")
+        print(_EXTEND_HINT)
         return 1
     want = str(option).strip().lower()
     # IDEMPOTENCY: already shows the target → don't disturb it (re-clicking a multi-select
@@ -994,8 +1009,28 @@ function(question){
   // control and test ITS OWN field-group text (walking up a few ancestors) against the
   // question — mirrors select()'s inp.closest(...).innerText route. Last resort, so it can
   // only ever convert a FAIL into a hit.
+  //   DISAMBIGUATION (2026-07-24): prefer a control whose OWN label EXACTLY equals or
+  //   STARTS WITH the keyword (so "Location" -> the Location field, NOT the work-auth
+  //   field "authorized to work in this location?"), then fall back to substring-ancestor
+  //   only if no exact/leading match exists. This stops "location" from resolving to the
+  //   wrong combobox when several fields mention the word in their body text.
   const CTRLS='[role=combobox],input[aria-autocomplete=list],select,textarea,'+
-              'input:not([type=hidden]):not([type=checkbox]):not([type=radio]):not([type=submit]):not([type=button])';
+              'input:not([type=hidden]):not([type=checkbox]):not([radio]):not([type=submit]):not([type=button])';
+  function ownLabel(ctl){
+    let p=ctl.parentElement;
+    for(let i=0;i<3 && p;i++){
+      const t=norm(p.textContent);
+      if(t) return t;
+      p=p.parentElement;
+    }
+    return '';
+  }
+  // pass 1: exact or leading-label match (tightest)
+  for (const ctl of [...document.querySelectorAll(CTRLS)]){
+    const n=ownLabel(ctl).replace(/[^a-z]/g,'');
+    if(n===w || n.indexOf(w)===0) return ctl;
+  }
+  // pass 2: substring anywhere in the field-group (looser, last resort)
   for (const ctl of [...document.querySelectorAll(CTRLS)]){
     let g=ctl.parentElement;
     for(let i=0;i<4 && g;i++,g=g.parentElement){

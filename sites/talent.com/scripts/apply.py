@@ -49,6 +49,7 @@ sys.path.insert(0, os.path.join(_ROOT, "scripts"))
 import cfx        # noqa: E402
 import atsform    # noqa: E402
 import screener   # noqa: E402
+import precheck   # noqa: E402  (mandatory pre-submit dedup gate)
 
 VNC = "http://nasirjones:6080/vnc.html"
 _CONF_RE = (r"application (sent|submitted|complete|received)|thank you for|has been sent|"
@@ -334,6 +335,9 @@ def _final_submit(job, company, role, dry):
 def apply(job, dry=False):
     cfg_role = ""
     url = _job_url(job)
+    # MANDATORY pre-submit dedup gate (item 1): never re-drive a posting already Applied.
+    if precheck.guard(url=url, label="talent"):
+        return f"[{job}] SKIP already-applied"
     cfx.navigate(url)
     time.sleep(7)
     role = _ev("(function(){var h=document.querySelector('h1,[class*=title]');return h?h.innerText.trim().slice(0,50):'';})()") or ""

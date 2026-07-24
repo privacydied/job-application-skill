@@ -57,6 +57,7 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "_common", "scripts"))
 import cfx  # noqa: E402
+import precheck  # noqa: E402  (mandatory pre-submit dedup gate)
 
 
 def _js(s):
@@ -129,6 +130,10 @@ def _send_enabled():
 
 
 def start(url):
+    # MANDATORY pre-submit dedup gate (item 1): never begin an application for a posting
+    # already Applied (WTTJ shows "already applied" only late; the tracker knows up front).
+    if precheck.guard(url=url, label="wttj"):
+        return 2
     cfx.navigate(url)
     time.sleep(5)
     if _click_text("Apply") == "NF":

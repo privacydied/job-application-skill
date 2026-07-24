@@ -56,6 +56,7 @@ CFXSH = os.path.join(COMMON, "cfx.sh")
 sys.path.insert(0, COMMON)
 import cfx  # noqa: E402
 import screener  # noqa: E402  — shared persistent answer bank (screener-answers.csv)
+import precheck  # noqa: E402  (mandatory pre-submit dedup gate)
 
 # Easy-Apply screener answers (label-substring -> value). Source of truth is
 # references/applicant-profile.md + sites/_common/apply-defaults.json — keep in
@@ -204,6 +205,12 @@ def capture_proof_and_log(company, role, url, source, notes, submit_out, post):
 def run(job, company, role, resume, source, notes, max_attempts, dry_run):
     jid = job.rstrip("/").split("/")[-1] if "/" in job else job
     url = f"https://www.linkedin.com/jobs/view/{jid}/"
+
+    # MANDATORY pre-submit dedup gate (item 1): apply_queue._handled() already screens before
+    # dispatch, but a DIRECT invocation of this driver bypasses that — re-check here so no path
+    # can double-submit. dry_run walks to Review without submitting, so let it proceed.
+    if not dry_run and precheck.guard(url=url, company=company, role=role, label="linkedin-ea"):
+        return 0
 
     for attempt in range(1, max_attempts + 1):
         print(f"=== attempt {attempt}/{max_attempts}: {company} — {role} ({jid}) ===")
