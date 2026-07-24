@@ -42,7 +42,7 @@ import re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)                       # skill root (sites/..)
-sys.path.insert(0, os.path.join(ROOT, "_common", "scripts"))
+sys.path.insert(0, os.path.join(ROOT, "sites", "_common", "scripts"))  # shared engines live under sites/
 import cfx  # noqa: E402
 
 QUEUE = sys.argv[1] if len(sys.argv) > 1 else "/tmp/ea_queue.txt"
@@ -113,20 +113,22 @@ def heal_and_nav(url, tries=3):
     return False
 
 
-def already_done(company, role):
+def already_done(company, role, url=None):
+    """Delegate to the ONE canonical dedup (precheck.already_applied): canon-id match on the
+    posting URL first, then normalized Company+Role. The old body here was a naive raw-substring
+    grep (`company in line and role in line and ',Applied'`) that missed title/company variants
+    and 'Applied?' — a divergent, weaker dedup. Best-effort: never raises."""
     try:
-        txt = open(TRACKER, encoding="utf-8", errors="replace").read()
-    except FileNotFoundError:
+        import precheck
+        hit = precheck.already_applied(url=url, company=company, role=role)
+        return bool(hit and precheck.is_applied(hit[0]))
+    except Exception:  # noqa: BLE001
         return False
-    for line in txt.splitlines():
-        if company in line and role in line and ",Applied" in line:
-            return True
-    return False
 
 
 def drive(job_id, company, role):
     url = f"https://www.linkedin.com/jobs/view/{job_id}/"
-    if already_done(company, role):
+    if already_done(company, role, url):
         print(f"  SKIP_DUP {company} {role} (already Applied)"); return "dup"
     if not heal_and_nav(url):
         print(f"  TAB_DEAD {company} {role}"); return "dead"

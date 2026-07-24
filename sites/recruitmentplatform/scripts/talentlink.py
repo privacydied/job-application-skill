@@ -191,6 +191,20 @@ def review(company):
 
 
 def apply(form_url, spec, do_submit=False):
+    # MANDATORY pre-submit dedup gate — talentlink drives an explicit form URL that bypassed the
+    # sourcing precheck, so re-check the live tracker (form URL's canon id, then Company+Role)
+    # before re-applying to a role already Applied. `"force": true` in the spec overrides.
+    if not spec.get("force"):
+        try:
+            import precheck  # noqa: E402 — sites/_common/scripts already on sys.path
+            hit = precheck.already_applied(url=form_url, company=spec.get("company"),
+                                           role=spec.get("role"))
+            if hit and precheck.is_applied(hit[0]):
+                print(f"SKIP_ALREADY_APPLIED {spec.get('company')} | {spec.get('role')} — "
+                      f"tracker={hit[0]} (matched {hit[1]})")
+                return 0
+        except Exception:  # noqa: BLE001 — a guard hiccup must not block a genuine apply
+            pass
     cfx.navigate(form_url)
     time.sleep(1.5)
     cfx.dismiss_cookie_banner()

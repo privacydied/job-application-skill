@@ -71,6 +71,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import cfx  # noqa: E402
 import stagetimer  # noqa: E402  (no-op unless STAGETIMER is set)
+import precheck  # noqa: E402  (apply-time dedup guard; no cycle — precheck doesn't import atsform)
 
 
 def _js(s):
@@ -1555,6 +1556,24 @@ def apply(config_path, do_submit=False):
         print(f"FAIL apply: config must be a JSON object, got {type(cfg).__name__}")
         return 2
 
+    # DEDUP GUARD (the ONE gate for every ATS driven through this generic orchestrator —
+    # lever/recruitee/smartrecruiters/hibob/workable/talentlink/… — none of which have a
+    # board-specific driver that guards). apply() runs on an already-navigated form that bypassed
+    # the sourcing precheck, so re-check the live tracker before filling/submitting a role already
+    # Applied. Matches the current URL's canonical id, then the config's Company+Role. Only
+    # "Applied"/"Applied?" skips (Blocked/Saved stay re-drivable); `"force": true` re-drives.
+    if not cfg.get("force"):
+        try:
+            cur_url = cfx.current_url()
+        except Exception:  # noqa: BLE001
+            cur_url = ""
+        hit = precheck.already_applied(url=cur_url or cfg.get("url"),
+                                       company=cfg.get("company"), role=cfg.get("role"))
+        if hit and precheck.is_applied(hit[0]):
+            print(f"SKIP_ALREADY_APPLIED {cfg.get('company')} | {cfg.get('role')} — "
+                  f"tracker={hit[0]} (matched {hit[1]}). Pass \"force\": true to re-drive.")
+            return 0
+
     import contextlib
     import io as _io
     results = []  # (human label, rc, captured_output) for the final summary
@@ -1621,16 +1640,20 @@ def apply(config_path, do_submit=False):
         print(f"defaults: {n_default_skips} entr{'y' if n_default_skips == 1 else 'ies'} "
               f"skipped (no matching field on this form) — expected, not an error")
 
-    # Auto-tick all unchecked checkboxes (anti-AI attestation oath, etc.)
-    # User has authorised auto-ticking — no manual gate.
+    # Truthful checkbox auto-fill — tick ONLY affirmatively-true boxes; leave marketing / anti-AI
+    # / unknown / false ones unticked (and report them). This REPLACES the old blanket tick-all,
+    # which was both an integrity regression (it ticked anti-AI/marketing/false boxes) AND dead
+    # code (its JS had a misplaced `return` -> SyntaxError, silently swallowed here). The truthful
+    # engine already lives in this module — call it, don't re-roll a click-every-box loop.
     try:
-        ticked = cfx.evaluate(
-            "(()=>{let n=0;var cb=document.querySelectorAll('input[type=checkbox]');for(var i=0;i<cb.length;i++){if(!cb[i].checked){cb[i].click();n++;}}}return n;})()"
-        )
-        if isinstance(ticked, int) and ticked > 0:
-            print(f"OK  auto-ticked {ticked} remaining checkbox(es)")
-    except cfx.CfxError:
-        pass
+        rep = checkboxes_from_profile()
+        if rep.get("ticked"):
+            print(f"OK  truthfully ticked {len(rep['ticked'])} checkbox(es)")
+        for cat in ("left_false", "left_unknown", "left_marketing", "left_antiai"):
+            if rep.get(cat):
+                print(f"  left unticked [{cat[5:]}]: {', '.join(rep[cat])[:120]}")
+    except Exception as e:  # noqa: BLE001 — truthful auto-fill is best-effort, never blocks apply
+        print(f"  checkbox auto-fill note: {str(e)[:80]}")
 
     review_rc = 0
     if cfg.get("review"):
