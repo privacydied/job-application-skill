@@ -61,15 +61,3 @@ core essays + required non-EEO fields CAN be filled by the agent first (`gh_appl
 with `no_submit: true`) so only the 3 EEO selects are left for the human. Note the
 contrast with pitfall #3 (required EEO that DOES have options): there, drive it;
 here it's empty, so don't loop.
-
-## 9. Anti-AI check false-positives on CSJ "Use of AI in Applications" notice
-`gh_apply.py`'s `_antiai_present()` used to match /use of AI|generated content/
-ANYWHERE, so it wrongly `REFUSE_ATTESTATION`'d CSJ postings carrying the standard
-"Use of AI in Applications" info block — which explicitly says AI "can be a useful
-tool to support your application" and only warns against passing AI-generated text
-off as your own. That is PERMISSIVE (compatible with the skill's standing rule),
-NOT an attestation. FIXED 2026-07-21: `_antiai_present()` now fires only on a
-genuine attestation/prohibition framing (applicant asked to agree/declare non-use,
-or the page states using AI will disqualify). A neutral "Use of AI in Applications"
-notice must NOT trigger refusal. If you ever re-tighten this check, keep the CSJ
-notice out of scope.

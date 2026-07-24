@@ -60,7 +60,6 @@ Greenhouse precheck on 635 London+remote roles → ~5 keepers (350 dropped for s
 255 off-tier), and even those are gated by this code. CSJ 161 design roles → 2 keepers
 (both MI5, same code wall). Reed session dies mid-run; its 13 Easy-Apply rows are
 FORBIDDEN and must never count. Ashby/Lever/Workable are spam/hCaptcha/Turnstile walls;
-anti-AI-attestation boards (Canonical etc.) are a hard stop.
 
 So the truthful convertible ceiling on proven channels is **single digits**, not 100.
 State the honest ceiling ONCE after genuine multi-channel attempts, then stop — never

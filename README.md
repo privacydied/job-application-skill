@@ -101,9 +101,7 @@ key, runnable from cron or CI.
 most now gate the submit button with anti-bot: **Greenhouse** submits (reCAPTCHA v2 — handled
 by `recaptcha.py`), while **Lever** (hCaptcha), **Ashby** (spam-flags valid forms) and
 **Workable** (Cloudflare Turnstile) do not. Route submissions to Greenhouse first and treat
-the rest as sourced-only until proven. Some employers also require an **anti-AI attestation**
-("I agree to use only my own words…") — the skill will not tick that box, and skips the role.
-Detail: `references/ats-apply-surface.md`.
+the rest as sourced-only until proven. Detail: `references/ats-apply-surface.md`.
 
 **Deliberately not built** (probed 2026-07-17, all dead — don't re-add): DWP Find a Job
 (`findajob.dwp.gov.uk` — returns HTTP 200 with "This site is now closed"), Technojobs

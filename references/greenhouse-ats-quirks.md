@@ -85,3 +85,22 @@ to the React input (no CDP `setFileInputFiles`). … Until the container-restart
 `uploadViaChooser`, CV upload on Greenhouse/Workable/SR is a hard stop.
 → **Wrong.** The shipped `atsform.upload`/`ashby.py upload_cv` call `/upload` correctly and it
 binds. Do not treat Greenhouse/Ashby CV upload as a wall.
+
+## 6. ⚠️ Embedded Greenhouse forms render inside an IFRAME (driver gap, 2026-07-22)
+Companies that embed the apply form via the `#grnhse_app` anchor (e.g. **Storyblok**
+`www.storyblok.com/job?gh_jid=...`, **GoCardless** `job-boards.greenhouse.io/gocardless/jobs/...`)
+render the actual form inside a cross-origin `<iframe>`:
+- `iframe src="https://job-boards.eu.greenhouse.io/embed/job_app?for=<slug>&validityToken=..."`
+  (Storyblok), or a `content.googleapis.com/static/proxy.html?usegapi=1...` gapi embed (GoCardless).
+- After clicking **Apply Now**, the top document shows `#grnhse_app` but
+  `document.querySelectorAll('input')` on the TOP doc returns **0 form fields** — the fields
+  live inside the iframe `body`, which `atsform.py` / `gh_apply.py` cannot see or fill.
+- **Status: DRIVER GAP, not a flake.** To drive these, switch the driver's document
+  context into the iframe (`contentFrame` / Playwright `frame` selector) BEFORE `atsform`
+  reads/fills. NOT yet implemented. Until then: log `Blocked`
+  ('Greenhouse embedded iframe form — driver cannot reach iframe fields'), never `Applied`.
+- **Contrast — directly-served Greenhouse pages ARE drivable** (no iframe):
+  `job-boards.greenhouse.io/<slug>/jobs/<id>` and `boards-api.greenhouse.io` postings
+  render form fields in the top doc (drivable except for the react-select screener gap in
+  §2/§4). Always check for an `iframe[src*=greenhouse]` / `#grnhse_app` BEFORE concluding
+  a Greenhouse form is empty — if present, it's the iframe gap, not a dead page.

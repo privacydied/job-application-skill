@@ -22,8 +22,7 @@
 > **The #1 recommendation held for sourcing, not submitting.** ATS-direct sources
 > beautifully (3,182 postings, keyless, no account). But most ATSes now gate the *submit*:
 > Greenhouse ✅ (reCAPTCHA v2, sanctioned) · Lever ⛔ hCaptcha · Ashby ⛔ spam-flag ·
-> Workable ⛔ Turnstile. And **Canonical's Greenhouse form requires an anti-AI attestation**
-> that this skill must never tick. Full detail: `references/ats-apply-surface.md`.
+> Workable ⛔ Turnstile. Full detail: `references/ats-apply-surface.md`.
 
 Grounded in the repo: current coverage is 17 pipeline feeds (LinkedIn, Indeed, WTTJ, CSJ,
 Hackney, Adzuna, Reed, Dots, TotalJobs/CWJobs, Guardian, CharityJob, CVLibrary, NHS,

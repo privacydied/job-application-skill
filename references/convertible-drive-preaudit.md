@@ -74,6 +74,18 @@ Drive ONLY the rows whose `driver()` returns a shipped-driver name (greenhouse /
 guardian_direct / wttj_apply / atsdirect_*). Everything else is `NO_DRIVER` (your VNC) or
 `smartrecruiters_NO_DRIVER` (off-site) — do NOT pad the Applied count with them.
 
+## EYEBALL step is MANDATORY — the classifier cannot see grade / in-platform-vs-external
+(2026-07-22 lesson, pairs with `convertible-pool-ceiling.md` §Feed-shape-mismatches.)
+`convertible_pool.py` classifies on TITLE + URL + location only. It **cannot** see:
+- **CSJ grade** (junior-mid EO/HEO/SEO vs G7+/Head/Director) — the CSJ feed row carries no grade for most design/research titles, so `User Researcher` / `Content Designer` / `Service Designer` survive the lane filter but may be senior (verify the JD, or grep the live posting for "Grade").
+- **WTTJ in-platform vs external-only** — the WTTJ feed gives no signal; you must open the row with `apply.py start <url>` and read whether it prints `EXTERNAL-ONLY` (routes to employer ATS, no shipped driver → NO_DRIVER) or in-platform.
+- **off-lane drift** — titles like `Associate Dean School of Design`, `Silicon Physical Design Engineer`, `Technical Sourcer`, `Social Researcher`, `Information Access and Compliance Researcher` pass the loose lane regex but are NOT this applicant's lane (product/UX designer). Drop them by hand; driving them = padding.
+
+So: after the preaudit prints the `convertible` list, **read every surviving row's title + drive a JD/apply probe on each** before counting it toward the ceiling. A raw "convertible: N" number is necessary but NOT sufficient.
+
+## Cross-board dupe that slips past Company+Role dedup (2026-07-22)
+The preaudit's `cr` set keys on `(company_lower, role_lower)`. **WTTJ feed rows have NO `company` field** (only `id/url/title/sources`), so a WTTJ row's key is `("", "product designer - integration")` while the SAME role on atsdirect is `("typeform", "product designer - integration")` — **different keys, so dedup misses it** and the role double-counts as "fresh" in both feeds. Always cross-check the live tracker by Company+Role (not just URL) for any role that appears in two feeds, and prefer dropping the WTTJ copy when the atsdirect/Greenhouse copy already exists or is tracked.
+
 ## Honest-ceiling post-mortem (2026-07-20 "100 more" attempt)
 
 Baseline 358 strict Applied. Full board-set sweep (keyless + tab-bound, CSJ logged in):

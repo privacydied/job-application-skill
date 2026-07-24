@@ -20,33 +20,7 @@ Sourcing and submitting are separate problems. Never infer one from the other.
 
 **Net:** Greenhouse is the one proven account-less submit channel. Source everything; route
 submissions to Greenhouse first, and treat a non-Greenhouse row as sourced-only until its
-vendor is proven.
-
-## ⛔ Employer-level blocker: the anti-AI attestation
-
-**Canonical** (Greenhouse) makes every applicant tick a required box:
-
-> *"During this application process I agree to use only my own words. I understand that
-> plagiarism, the use of AI or other generated content will disqualify my application."*
-
-**This skill must not submit that form.** Ticking it while an agent writes the answers is a
-false attestation, and it is grounds for **disqualifying the application** — so it actively
-harms the user. This is a hard stop that no "just apply to anything" instruction overrides;
-it is not a technical blocker to route around.
-
-That cost the single best-matched role found all session (Linux Desktop Support Associate,
-London — Tier A on both §5 and §13). Correct outcome anyway.
-
-**Check every form for this clause before tailoring.** It is spreading:
-
-```bash
-# on the loaded JD/form page
-cfx.evaluate("/own words|use of AI|AI[- ]generated content/i.test(document.body.innerText)")
-```
-
-If present → skip the role, log `Skipped` with reason `anti-AI attestation`, move on.
-Canonical's other questions are answerable (`Cannot recall` is a real option on the
-high-school grade dropdowns) — the attestation is the blocker, not the questions.
+> Workable ⛔ Turnstile. Route submissions to Greenhouse first, and treat a non-Greenhouse row as sourced-only until its vendor is proven.
 
 ## Form mechanics learned the hard way
 

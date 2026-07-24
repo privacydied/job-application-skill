@@ -59,7 +59,6 @@ through — each ATS gates its submit button differently:
 - SmartRecruiters / Recruitee: untested.
 
 **Route submissions to Greenhouse first**; treat other rows as sourced-only until proven.
-Some employers additionally require an **anti-AI attestation** (Canonical) — never tick it.
 Full detail: `references/ats-apply-surface.md`.
 
 ## searches.csv

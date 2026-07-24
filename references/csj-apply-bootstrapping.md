@@ -83,7 +83,7 @@ tab):
    ```
    `click_and_follow(selector="input[type=submit][value*=Apply]")` reports `no_change` (it
    doesn't capture the SPA transition) — ignore it; the click still fired. After `sleep 4`
-   the URL is now `cshr.tal.net/.../eform/<ID>/page/1` (the TAL Application Guidance page).
+   the URL is now `cshr.tal.net/.../application/<APPID>?instant=apply` (the TAL Application Centre draft). **⚠️ 2026-07-22 DRIFT:** this no longer becomes `…/eform/<ID>/page/1` (that 404s as "Candidate Page Not Found"). The live flow is: draft `…/application/<APPID>?instant=apply` → click **View application** → **Form List** (First Stage Short Form / Full Application Form, each a "View" action) → `…/application/<APPID>/view_form/<FORMID>`. That `view_form` page renders with the WCN `hform` engine (NOT Knockout TAL); `tal_eform.py` cannot drive it. See `references/csj-wcn-hform-drift.md`.
 3. **Advance the SPA via Continue — URL does NOT change.** TAL is a Knockout SPA: each page
    saves on Continue and the URL stays `.../page/1` (per `csj-tal-eform-notes.md`). A minimal
    evaluate finds + clicks the exact Continue button (don't use a `for` loop that `return`s

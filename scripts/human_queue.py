@@ -33,6 +33,7 @@ CLI:
 """
 import json
 import os
+import re
 import sys
 from urllib.parse import urlparse
 
@@ -40,13 +41,73 @@ _here = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.dirname(_here)
 sys.path.insert(0, os.path.join(_ROOT, "sites", "_common", "scripts"))
 
+import subprocess      # noqa: E402  — drives HTTP-keyless feeds for honest-inventory screening
 import accounts        # noqa: E402  — account-wall ledger (ranked by blocked_count/inventory)
 import blockers        # noqa: E402  — structured blocker inbox (captcha/login/account/sms)
 import search_plan     # noqa: E402  — read_holds() parses holds.csv (captcha/login)
+from check_title import check_title as _check_title  # noqa: E402  — lane/seniority screen for honest unlocks
 
 QUEUE = os.path.join(_ROOT, "queue.jsonl")
 TRACKER = os.path.join(_ROOT, "application-tracker.csv")
 VNC = blockers.VNC
+
+# ── honest-leverage screening ────────────────────────────────────────────────
+# The "~N applications unlocked" number must NOT be a hand-typed board-size guess
+# (accounts-needed.csv `est_inventory`) echoed verbatim — that over-counts by 10–50×
+# because it counts every title on a board, not the on-lane junior→mid subset Jane can
+# actually apply to. We screen the claimed inventory against a REAL current harvest with
+# check_title (lane + seniority) so the human sees an honest, lane-screened ceiling.
+import re as _re
+# check_title imported at top (line ~47) under the _common scripts path
+
+_SENIOR = _re.compile(r"\b(senior|staff|principal|lead|head|director|manager|vp|chief|sr\.?)\b", _re.I)
+_LOC_OK = _re.compile(r"london|remote|uk|united kingdom|britain|england|emea|europe|hybrid|home based|ireland", _re.I)
+
+
+def _onlane(title, location):
+    """True iff `title` is on Jane's lane AND junior→mid AND London/remote/UK/onloc."""
+    ct = _check_title(title)
+    if not ct.get("eligible"):
+        return False
+    if _SENIOR.search(title):
+        return False
+    if not _LOC_OK.search(location or ""):
+        return False
+    return True
+
+
+def _screen_inventory(site, est_inventory):
+    """Return an HONEST on-lane unlocked count for `site` by harvesting its live board
+    (HTTP-keyless feeds only — never the browser) and counting lane-screened postings.
+    Falls back to a conservative 0 (never echoes the unscreened guess) if no feed ships.
+    Best-effort: any failure returns the screenable count so we never inflate."""
+    # map the account target to its shipped HTTP-keyless feed directory
+    feed_map = {
+        "tfl": "tfl.gov.uk", "bbc": "careers.bbc.co.uk",
+        "parliament": None,            # no self-registration surface; HR/invite-only
+        "guardian": "the-dots.com",    # guardian in-platform staging handled via captcha item
+    }
+    site_domain = feed_map.get(site)
+    if not site_domain:
+        return 0
+    fp = os.path.join(_ROOT, "sites", site_domain, "scripts", "feed.py")
+    if not os.path.exists(fp):
+        return 0
+    try:
+        out = "/tmp/harvest/%s.json" % site
+        code = subprocess.call(
+            [sys.executable, fp, "--all", "--where", "", "--force"],
+            stdout=open(out, "w"), stderr=subprocess.DEVNULL)
+        if code != 0:
+            return 0
+        rows = json.load(open(out))
+    except Exception:
+        return 0
+    n = 0
+    for j in rows:
+        if _onlane(j.get("title", ""), j.get("location", "")):
+            n += 1
+    return n
 
 
 def _norm_site(s):
@@ -61,6 +122,21 @@ def _norm_site(s):
             host = host[4:]
         return host
     return s
+
+
+def _root(token):
+    """Bare comparable token: drop scheme/www and the leading 'jobs.'/'careers.'/'profile.'
+    subdomain, take the registrable-label, and alias the Guardian family so
+    'jobs.theguardian.com' and 'guardian' collapse to the same token. Used for dedup
+    across account/blocker/holds ledgers."""
+    t = _norm_site(token)
+    if not t:
+        return ""
+    t = re.sub(r"^jobs\.|^careers\.|^profile\.|^www\.", "", t)
+    t = t.split(".")[0] if "." in t else t
+    if "guardian" in t:
+        return "guardian"
+    return t
 
 
 def _site_matches(token, hay):
@@ -136,12 +212,20 @@ def build_worklist():
     # 1) account walls — the highest-leverage class (one signup unlocks a whole board)
     for a in accounts.ranked():
         target = a.get("ats") or a.get("key") or ""
-        est = int(a.get("est_inventory") or 0)
-        blk = int(a.get("blocked_count") or 0)
-        unlocks = max(est, blk, _queued_by_site(a.get("board") or target),
-                      _blocked_by_site(target))
-        _upsert(("account", accounts._norm(target)), {
+        # HONEST evidence ONLY: real tracked-Blocked rows + queued rows. The ledger's
+        # hand-typed `blocked_count`/`est_inventory` are stale guesses and are NOT used.
+        blk = _blocked_by_site(target)
+        queued = _queued_by_site(a.get("board") or target)
+        # HONEST ceiling: screen the board's live inventory through the lane filter instead
+        # of echoing the hand-typed est_inventory guess (which counts every title, not the
+        # on-lane junior→mid subset Jane can actually apply to).
+        screened = _screen_inventory(target, int(a.get("est_inventory") or 0))
+        # Only credit real evidence: lane-screened live inventory, OR genuinely-tracked
+        # Blocked rows, OR queued rows. The hand-typed est_inventory is NEVER echoed.
+        unlocks = max(blk, queued, screened)
+        _upsert(("account", _root(target)), {
             "kind": "account-signup", "target": target, "unlocks": unlocks,
+            "screened": screened,
             "action": f"Create an account on {target} (self-registration; may be "
                       f"reCAPTCHA/SMS-gated), then drop creds into ats-credentials.csv.",
             "url": a.get("signup_url") or "",
@@ -154,11 +238,25 @@ def build_worklist():
         kind = (b.get("kind") or "other").lower()
         site = b.get("site") or ""
         target = site or b.get("company") or kind
-        unlocks = max(_queued_by_site(site), _blocked_by_site(site), 1)
+        # If this blocker's site matches an account wall already in `items`, fold it INTO
+        # that account item so Guardian's captcha-clear + account-signup are ONE action,
+        # not two double-counted ones (they share the same underlying unblock).
+        ak = ("account", _root(target))
+        if ak in items:
+            cur = items[ak]
+            # credit only a REAL staged form here (the guardian captcha = 1 real Product
+            # Designer form), never invent a buffer with max(...,1).
+            real = 1 if kind == "captcha" else _blocked_by_site(site)
+            cur["unlocks"] = max(cur["unlocks"], real)
+            if b.get("what") and b["what"] not in cur.get("note", ""):
+                cur["note"] = (cur.get("note", "") + " | " + b["what"]).strip(" |")
+            continue
         if kind == "account":
-            key = ("account", accounts._norm(target))
+            key = ("account", _root(target))
         else:
-            key = (kind, _norm_site(target))
+            key = (kind, _root(target))
+        # genuine evidence only: queued + tracked-Blocked rows; no max(…,1) buffer.
+        unlocks = max(_queued_by_site(site), _blocked_by_site(site))
         label = {"captcha": "Solve the CAPTCHA (noVNC) and finish/Send the staged form",
                  "login": "Log in to the site in the browser (noVNC) so the session is live",
                  "sms": "Complete SMS/email verification (noVNC)",
@@ -180,8 +278,8 @@ def build_worklist():
         site = h.get("site") or ""
         if not site and kind != "captcha":
             continue
-        unlocks = max(_queued_by_site(site), _blocked_by_site(site), 1)
-        key = (kind, _norm_site(site) or "captcha-hold")
+        unlocks = max(_queued_by_site(site), _blocked_by_site(site))
+        key = (kind, _root(site) or "captcha-hold")
         if key in items:
             continue  # already surfaced via a blocker row
         _upsert(key, {
@@ -209,7 +307,13 @@ def _print_human(worklist, top=None):
     print(f" Do these in ONE noVNC sitting ({VNC}), highest-leverage first:")
     print("══════════════════════════════════════════════════════════════════════")
     for i, item in enumerate(shown, 1):
-        print(f"\n {i}. [{item['kind']}] {item['target']}   (~{item['unlocks']} unlocked)")
+        unlocks = int(item.get("unlocks") or 0)
+        screened = item.get("screened")
+        basis = ""
+        if screened is not None:
+            basis = f"  (on-lane screened={screened} from live harvest; " \
+                    f"was est_inventory guess — NOT echoed)"
+        print(f"\n {i}. [{item['kind']}] {item['target']}   (~{unlocks} unlocked){basis}")
         print(f"      → {item['action']}")
         if item.get("url"):
             print(f"      url:     {item['url']}")
