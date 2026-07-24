@@ -78,3 +78,36 @@ code), Location (City), sponsorship, reasonable-accommodations, and "Point of da
 (single option "I acknowledge this"), plus a required **right-to-work TEXTAREA** (plain — use
 `fill`, not `combo`). A stale "This field is required" can persist after a valid pick; the real
 signal is the redirect to `/confirmation`.
+
+## ⛔ reCAPTCHA-Enterprise SUBMIT wall (invisible, scored-on-action) — NOT a fill/react-select wall (verified 2026-07-24)
+Some Greenhouse orgs (verified: **Monzo** `job-boards.greenhouse.io/monzo/...`) gate submit with
+an **invisible reCAPTCHA Enterprise** that scores the *action* — there is no checkbox/image-grid
+to solve. `recaptcha.py`/`gh_apply` correctly print `CAPTCHA enterprise-invisible — proceeding to
+Submit (scored on action)`; the backend scores the session behaviourally and can **silently
+reject** a low-trust headless fingerprint.
+
+**Low-score-rejection signature:** the form fills 100% (every react-select `rc=0`, **no**
+validation errors), Submit fires, then `UNCLEAR: no success text and no errors after 18s` → **no**
+`/confirmation`, no error banner, no emailed security code → `gh_apply` falls into its code-gate
+branch, hits `CODE_MISSING`, logs `SUBMIT_NO_CONFIRM`/Blocked, and the SPA drops back to the job
+description (Apply button) as the form session expires. Two clean runs on **Monzo Staff Product
+Designer (7622277)** reproduced this identically.
+
+**This is NOT the "react-select renders zero options / won't absorb the value" story.** The exact
+Monzo combos that story blames (Country, Location, US Person, UK Right to Work, data-safety
+consent, cross-functional) ALL filled `rc=0` with no validation errors — the fill layer is fine.
+The wall is purely the **submit-step behaviour score.** Do NOT "fix" `combobox_pick` for this — it
+is working. (Country/RtW are static selects; Location/"How did you hear" are type-to-search and
+look empty on a bare `ArrowDown` until `combobox_pick` *types* — an ArrowDown-only probe
+misreading this as "empty menu" is what produced the false "Greenhouse react-select wall" report.)
+
+**It is org/form-specific, not universal.** The SAME camofox fingerprint PASSED the invisible
+reCAPTCHA on **Butternut Box** (`job-boards.greenhouse.io/butternutbox/8543666002`) the same day →
+reached `/confirmation` → Applied. A silent non-confirmation means *that org's* reCAPTCHA threshold
+is stricter, not that Greenhouse is walled.
+
+**Resolution:** the fill is safe to run headlessly — only the final Submit needs a higher-trust
+session. Leave the filled form staged and hand it to the user's **VNC** for the last click (one
+click from done). There is no headless auto-solve for a behaviour score. Distinguish from (a) the
+checkbox/image-grid reCAPTCHA v2 which `recaptcha.py` DOES solve, and (b) a genuine required-field
+bounce which shows a visible `This field is required`.
