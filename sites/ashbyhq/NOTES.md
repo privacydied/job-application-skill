@@ -78,5 +78,21 @@ let box=inp; for(let i=0;i<6;i++){box=box.parentElement; if(box&&/Yes/.test(box.
   checkbox** (`set-checkbox`), not always a toggle pair.
 - **Invisible reCAPTCHA** (`iframe[title=reCAPTCHA]`, `grecaptcha` undefined in page scope) —
   ran transparently on submit both runs, no visible challenge; `submit` polls ~18s for it.
-- EEO (age/gender/transgender/orientation/ethnicity/disability) all **optional** — "I prefer
-  not to answer" or blank is fine.
+- EEO (age/gender/transgender/orientation/ethnicity/disability) are **optional to the form** —
+  but ⚠️ **do NOT answer "I prefer not to answer" by default.** The applicant's standing
+  instruction (`references/applicant-profile.md` §Demographics, 2026-07-19) is to **DISCLOSE**
+  gender / orientation / transgender / veteran / disability; only age stays "prefer not to say".
+  `ashby.py apply` fills these via the SHARED `atsform.fill_eeo()` (values from
+  `apply-defaults.json → applicant`). Don't hand-answer them and never re-add a board-local EEO
+  filler — a bespoke one (`scripts/drive_ashby.py`, deleted 2026-07-24) blanket-answered "I
+  don't wish to answer" and so inverted that instruction on every application it submitted.
+- **Right-to-work option TEXT varies a lot** between Ashby postings — seen: `British/ UK
+  Citizen`, `British or Irish Citizen`, `I am a British or Irish Citizen`, `I am a citizen or
+  have indefinite leave to remain.` (one employer form even misspells it "indenfinite"). The
+  question label is stable ("right to work"), so match on the question and let `set_radio`'s
+  substring pass find the option; keep the answer in `apply-defaults.json → radios` rather than
+  per-config.
+- `ashby.py apply` now runs **defaults** (contact fields + right-to-work from
+  `apply-defaults.json`, same mechanism as `atsform.apply`) and **auto-captures proof + logs**
+  on a confirmed submit. Put `company`/`role`/`url` in the config so the row is logged
+  identified; without them it prints NOT LOGGED instead of writing a half row.

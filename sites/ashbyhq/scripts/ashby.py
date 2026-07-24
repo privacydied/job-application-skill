@@ -58,6 +58,7 @@ Subcommands:
 `apply --submit`) are the only irreversible ones.
 """
 import os
+import re
 import sys
 import time
 
@@ -353,6 +354,29 @@ _ASHBY_RADIO_JS = r"""(function(q, o){
       }
     }
   }
+  // Pass 3 (2026-07-24): div-anchored radios whose question + options live in a <div>
+  // container (not a <fieldset>) — the common Ashby variant (right-to-work, office
+  // attendance, visa sponsorship, neurodivergent). Match the nearest ancestor <div> whose
+  // text contains the question, then commit the radio whose option span/text matches.
+  var divs=[].slice.call(document.querySelectorAll('div'));
+  for(var d3=0; d3<divs.length; d3++){
+    if(!(divs[d3].innerText||'').toLowerCase().includes(q)) continue;
+    var opts=divs[d3].querySelectorAll('input[type=radio]');
+    for(var oi=0; oi<opts.length; oi++){
+      var r3=opts[oi];
+      var ot3='';
+      var pl=r3.closest('label'); if(pl) ot3=pl.innerText.trim();
+      if(!ot3){ var sp=r3.parentElement?r3.parentElement.innerText:''; ot3=(sp||'').trim(); }
+      ot3=ot3.toLowerCase();
+      if(ot3===o || (o.length>2 && ot3.includes(o))){
+        setNativeChecked(r3);
+        r3.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+        r3.dispatchEvent(new Event('input',{bubbles:true}));
+        r3.dispatchEvent(new Event('change',{bubbles:true}));
+        return r3.checked ? ('OK:'+ot3.slice(0,40)) : 'CLICK_FAILED';
+      }
+    }
+  }
   return 'NO_EXACT';
 })(%s, %s)"""
 
@@ -476,12 +500,35 @@ def apply(config_path: str, do_submit: bool = False) -> int:
         print("ABORT: form did not reveal.")
         return 2
 
+    # DEFAULTS (2026-07-24) — the standing applicant facts (contact fields, right-to-work, …)
+    # from sites/_common/apply-defaults.json, same mechanism atsform.apply() uses. Delegated to
+    # the shared helpers, never re-implemented. This gap is WHY a bespoke board script existed:
+    # without defaults, every Ashby run had to restate name/email/phone/RTW in its config (or
+    # hardcode them), so an ad-hoc driver grew to do it. `"defaults": false` opts out; an
+    # explicit config key always wins (overlapping defaults are suppressed by _default_entries).
+    defaults = atsform._load_defaults(cfg.get("defaults", True)) if cfg.get("defaults", True) else {}
+    n_default_skips = 0
+
+    def _run_defaults(section, kind, fn, coerce=lambda v: (v,)):
+        nonlocal n_default_skips
+        for label, value in atsform._default_entries(defaults, section, cfg.get(section)):
+            try:
+                rc = fn(label, *coerce(value), quiet_notfound=True)
+            except cfx.CfxError as e:
+                print(f"FAIL {kind} {label!r} (default): {e}")
+                rc = 1
+            if rc == atsform.NOTFOUND:
+                n_default_skips += 1      # not on THIS form — expected, not an error
+            elif rc != 0:
+                failures.append(f"{kind}:{label} (default)")
+
     if cfg.get("cv"):
         if upload_cv(cfg["cv"]) != 0:
             failures.append("cv upload")
     for target, fn in (cfg.get("files") or {}).items():
         if upload(target, fn) != 0:
             failures.append(f"file:{target}")
+    _run_defaults("fill", "fill", fill)
     for label, val in (cfg.get("fill") or {}).items():
         try:
             if fill(label, resolve(val)) != 0:
@@ -493,6 +540,7 @@ def apply(config_path: str, do_submit: bool = False) -> int:
     for q, ans in (cfg.get("toggles") or {}).items():
         if set_toggle(q, ans) != 0:
             failures.append(f"toggle:{q}")
+    _run_defaults("radios", "radio", set_radio)
     for q, opt in (cfg.get("radios") or {}).items():
         if set_radio(q, opt) != 0:
             failures.append(f"radio:{q}")
@@ -517,6 +565,20 @@ def apply(config_path: str, do_submit: bool = False) -> int:
         if combobox_commit("authorized", str(cfg["authorized_in_us"])) != 0:
             failures.append("combobox:us_auth")
 
+    # EEO / diversity — the SHARED filler (atsform.fill_eeo), values from apply-defaults.json ->
+    # applicant per the applicant's standing instruction (profile §Demographics, 2026-07-19:
+    # DISCLOSE gender/orientation/transgender/veteran/disability; only age stays "prefer not to
+    # say"). ⛔ Do NOT re-add a board-local EEO answerer: the bespoke one this replaced blanket-
+    # answered "I don't wish to answer", i.e. it INVERTED the applicant's instruction. Optional
+    # by nature — a field absent from this form is skipped and never blocks the submit.
+    if cfg.get("eeo", True):
+        try:
+            for field, val, rc in atsform.fill_eeo():
+                if rc == "FAIL":
+                    print(f"  EEO {field!r}: FAILED to set (field present but wouldn't bind)")
+        except Exception as e:  # noqa: BLE001 — EEO is optional, never blocks an application
+            print(f"  EEO note: {str(e)[:90]}")
+
     # Truthful checkbox auto-fill — tick ONLY affirmatively-true boxes; leave marketing / anti-AI /
     # unknown / false ones unticked (and report them). Delegates to the shared engine
     # (atsform.checkboxes_from_profile), which REPLACED blanket tick-all repo-wide (commit
@@ -534,6 +596,10 @@ def apply(config_path: str, do_submit: bool = False) -> int:
                 print(f"  left unticked [{cat[5:]}]: {', '.join(rep[cat])[:120]}")
     except Exception as e:  # noqa: BLE001 — truthful auto-fill is best-effort, never blocks apply
         print(f"  checkbox auto-fill note: {str(e)[:80]}")
+
+    if defaults and n_default_skips:
+        print(f"defaults: {n_default_skips} entr{'y' if n_default_skips == 1 else 'ies'} "
+              f"skipped (no matching field on this form) — expected, not an error")
 
     print("\n===== pre-submit check =====")
     chk = check()
@@ -560,7 +626,53 @@ def apply(config_path: str, do_submit: bool = False) -> int:
         print("ABORT --submit: unresolved failures / validation / content-review issues — nothing submitted.")
         return 1
     print("\nAll clear → auto-submitting. (User authorised.)")
-    return submit()
+    rc = submit()
+    if rc == 0:
+        _capture_and_log(cfg)
+    return rc
+
+
+def _capture_and_log(cfg):
+    """ATOMIC submit->proof->log. On a CONFIRMED submit, screenshot the confirmation into
+    applications/<slug>/ and write the tracker row in THIS process.
+
+    Why it's here (2026-07-24): ashby.apply() used to submit and stop, leaving capture+log to
+    the caller — and callers forget. That is exactly how today's run produced confirmed Ashby
+    submissions the close-out never counted, and it's the ORPHAN_SUCCESS class
+    scripts/close_out.py now reports. A bespoke board script grew partly to add this; folding it
+    in here removes that reason to fork. Needs `company` + `role` (+ `url`) in the config;
+    without them it says so rather than logging a half-identified row. Best-effort — the
+    submission already stands, so a logging hiccup must never raise."""
+    import subprocess
+    company, role = cfg.get("company"), cfg.get("role")
+    url = cfg.get("url") or (cfx.current_url() or "")
+    if not (company and role):
+        print("  NOT LOGGED: config has no 'company'/'role' — log by hand with "
+              "log-application.py (SKILL step 8), or add them to the config.")
+        return
+    root = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                        "..", "..", ".."))
+    slug = re.sub(r"[^a-z0-9]+", "-", f"{company}-{role}".lower()).strip("-")[:80]
+    appdir = os.path.join(root, "applications", slug)
+    os.makedirs(appdir, exist_ok=True)
+    proof = os.path.join(appdir, "confirmation.png")
+    try:
+        cfx.shot(proof)
+    except Exception as e:  # noqa: BLE001
+        print(f"  proof screenshot failed ({str(e)[:60]}) — logging Applied? instead")
+    ok = os.path.isfile(proof) and os.path.getsize(proof) > 0
+    cmd = ["python3", os.path.join(root, "sites", "_common", "scripts", "log-application.py"),
+           company, role, cfg.get("source", "Ashby"), url,
+           "Applied" if ok else "Applied?"]
+    if ok:
+        cmd += ["--proof", proof]
+    cmd += ["--notes", "auto-logged by ashby.apply on confirmed submit"]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=40, cwd=root)
+        out = (r.stdout or r.stderr).strip()
+        print("  log:", out.splitlines()[-1][:150] if out else f"rc={r.returncode}")
+    except Exception as e:  # noqa: BLE001
+        print(f"  log FAILED (submission stands — log by hand): {str(e)[:90]}")
 
 
 def check() -> int:

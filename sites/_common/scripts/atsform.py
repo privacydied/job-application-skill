@@ -1518,6 +1518,68 @@ def checkboxes_from_profile(config=None, do_tick=True):
     return rep
 
 
+def fill_eeo(config=None):
+    """Fill OPTIONAL EEO/diversity fields from apply-defaults.json -> `applicant`. THE one
+    EEO filler for every ATS (promoted from gh_apply._fill_eeo 2026-07-24; Greenhouse delegates
+    here and Ashby now uses it too — do NOT re-roll a per-board EEO answerer).
+
+    WHY IT'S SHARED. `ashby.py` had no EEO capability, so a bespoke board script grew one that
+    answered "I don't wish to answer" to gender / LGBTQ+ / sexual orientation / ethnicity —
+    the exact OPPOSITE of the applicant's standing instruction (applicant-profile.md
+    §Demographics, 2026-07-19: DISCLOSE these; only age stays "prefer not to say"). A second
+    copy didn't just duplicate logic, it inverted the policy. One implementation, reading the
+    profile, is the fix.
+
+    WIDGET-AGNOSTIC: each field is tried as a react-select combobox FIRST (Greenhouse renders
+    these as multi-selects) and then as a radio group (Ashby's usual rendering), so one plan
+    covers both. A field absent from this form returns NOTFOUND and is skipped — EEO is
+    optional and must never block a submit. Honours `disclose_demographics`: a value starting
+    with "no" skips the whole pass. Returns [(field, value, result)]."""
+    try:
+        defaults = config if isinstance(config, dict) else (_load_defaults(True) or {})
+    except Exception:  # noqa: BLE001
+        defaults = {}
+    a = defaults.get("applicant", {}) or {}
+    if str(a.get("disclose_demographics", "")).strip().lower().startswith("no"):
+        return [("(disclose_demographics=No)", "", "SKIP")]
+    # (label alternates, value, mark-all-that-apply). Gender phrasings are SPECIFIC so they
+    # can't collide with "is your gender identity the same as sex assigned at birth?" (a Yes/No
+    # question) — matching that would put "Man" on the wrong field.
+    plan = [
+        (["how would you describe your gender", "which gender do you identify",
+          "best describes your gender"], a.get("gender_identity") or a.get("gender"), True),
+        (["sexual orientation", "lgbtq"], a.get("sexual_orientation"), True),
+        # Ethnicity is deliberately NOT auto-filled: several forms render a "race/ethnicity"
+        # combobox whose option list is actually a COUNTRY dialing-code list (broken employer
+        # form), and pushing an ethnicity into it is wrong. Disclose it by hand where the form
+        # exposes a real EEO race list.
+        (["transgender"], a.get("transgender"), False),
+        (["disability", "chronic condition", "consider yourself disabled"], a.get("disability"), False),
+        (["veteran"], a.get("veteran"), False),
+    ]
+    done = []
+    for labels, val, multi in plan:
+        if not val:
+            continue
+        rc = "NO_FIELD"
+        for lab in labels:
+            r = combobox_pick(lab, val, multi=multi, clear_first=multi, quiet_notfound=True)
+            if r == NOTFOUND:
+                r = set_radio(lab, val, quiet_notfound=True)   # Ashby-style radio rendering
+                if r == NOTFOUND:
+                    continue                                    # not on this form — next phrasing
+            rc = "OK" if r == 0 else "FAIL"
+            break
+        done.append((labels[0], val, rc))
+    pronoun = (defaults.get("select") or {}).get("Pronouns")
+    if pronoun:
+        try:
+            combobox_pick("pronoun", pronoun, quiet_notfound=True)
+        except Exception:  # noqa: BLE001
+            pass
+    return done
+
+
 def _default_entries(defaults, section, cfg_section):
     """Yield (label, value) defaults for `section`, minus any that overlap an
     explicit config key (case-insensitive substring either way — a config 'Name'

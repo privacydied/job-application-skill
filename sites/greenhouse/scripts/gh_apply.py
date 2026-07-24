@@ -229,54 +229,12 @@ def _upload_and_verify(target, filename):
 
 
 def _fill_eeo():
-    """Fill OPTIONAL EEO/diversity comboboxes via the ONE engine (atsform.combobox_pick),
-    which drives every react-select variant through the interaction ladder. Values come from
-    apply-defaults.json -> applicant (the user's 2026-07-19 disclose instruction). A field
-    that's absent returns NOTFOUND and is skipped — EEO is optional. Tries several label
-    phrasings per field because Greenhouse EEO wording varies by company. The gender /
-    orientation / ethnicity fields are usually "mark all that apply" multi-selects -> driven
-    with multi=True + clear_first (replace any stale chip). Returns [(field, value, result)].
-
-    Label care: the gender phrasings are SPECIFIC ("how would you describe your gender" /
-    "which gender do you identify") so they do NOT collide with a "is your gender identity the
-    same as sex assigned at birth?" Yes/No question — matching that would put "Man" on the
-    wrong field. The transgender question uses the word "transgender" for the same reason."""
-    defaults = json.load(open(os.path.join(_ROOT, "sites", "_common", "apply-defaults.json")))
-    a = defaults.get("applicant", {})
-    if str(a.get("disclose_demographics", "")).strip().lower().startswith("no"):
-        return [("(disclose_demographics=No)", "", "SKIP")]
-    # (label alternates, value, multi/mark-all-that-apply)
-    plan = [
-        (["how would you describe your gender", "which gender do you identify"],
-         a.get("gender_identity"), True),
-        (["sexual orientation"], a.get("sexual_orientation"), True),
-        # NOTE: several Greenhouse forms render a "race/ethnicity" combobox whose
-        # option list is actually a COUNTRY dialing-code list (broken employer form) —
-        # pushing "Mixed or Multiple ethnic groups" into it is wrong. Skip ethnicity auto-fill
-        # defensively; the applicant can disclose it on forms that expose a real EEO race list.
-        # (["racial", "race/ethnicity", "ethnic background"], a.get("ethnicity"), True),
-        (["transgender"], a.get("transgender"), False),
-        (["disability", "chronic condition", "consider yourself disabled"], a.get("disability"), False),
-        (["veteran"], a.get("veteran"), False),
-    ]
-    done = []
-    for labels, val, multi in plan:
-        if not val:
-            continue
-        rc = "NO_FIELD"
-        for lab in labels:
-            r = atsform.combobox_pick(lab, val, multi=multi, clear_first=multi, quiet_notfound=True)
-            if r == atsform.NOTFOUND:
-                continue           # this phrasing isn't on the form — try the next alternate
-            rc = "OK" if r == 0 else "FAIL"   # a FAIL surfaces a real gap (e.g. a US race list
-            break                              # with no "Mixed" option — handle via config)
-        done.append((labels[0], val, rc))
-    try:
-        atsform.combobox_pick("pronoun", defaults.get("select", {}).get("Pronouns", "He/him"),
-                              quiet_notfound=True)
-    except Exception:  # noqa: BLE001
-        pass
-    return done
+    """Delegate to the ONE shared EEO filler (atsform.fill_eeo) — this logic was promoted there
+    2026-07-24 so Ashby (which had no EEO capability, and grew a bespoke one that inverted the
+    applicant's disclose instruction) uses the SAME implementation. Do NOT re-add a local copy:
+    values come from apply-defaults.json -> applicant, label alternates and the
+    combobox-then-radio fallback all live in the shared engine now."""
+    return atsform.fill_eeo()
 
 
 def _log(company, role, source, url, status, note=None, proof=None):

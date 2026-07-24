@@ -17,7 +17,14 @@ false "no-AI" attestation). Same root cause as the `Applied`→`Blocked` variant
 `Skipped`/`Blocked` directions were NOT covered by the original guard.
 
 **Required durable guard (apply to EVERY driver that logs on a no-confirm submit):**
-`gh_apply.main()`, `ashby drive_ashby.py`, `wttj apply.py send`, `fill_csj_eeo.py`.
+`gh_apply.main()`, `ashby.py apply()`, `wttj apply.py send`, `fill_csj_eeo.py`.
+(Was `drive_ashby.py` — that bespoke driver was **deleted 2026-07-24** and consolidated into
+`ashby.py apply`, which carries the guard. Don't re-create it.)
+
+**⚠️ Since 2026-07-24 you do NOT hand-roll this guard** — it is the shared
+`precheck.guard(url, company, role)` / `precheck.already_applied(...)`, wired into every apply
+driver *and* the generic `atsform.apply()` orchestrator. Call that; the snippet below is kept
+only to document the original failure mode.
 At entry, before any fill/submit:
 
 ```python

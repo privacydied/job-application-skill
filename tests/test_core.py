@@ -19,6 +19,7 @@ import contextlib
 import csv
 import io
 import os
+import re
 import sys
 import tempfile
 import types
@@ -352,6 +353,84 @@ class TestCloseOutReconcile(unittest.TestCase):
         res = self.co.reconcile(date="2026-07-24")
         self.assertNotIn("ORPHAN_SUCCESS", self._classes(res))
         self.assertNotIn("NO_ARTIFACT", self._classes(res))
+
+
+class TestSharedEeoFiller(unittest.TestCase):
+    """EEO answering must live ONCE (atsform.fill_eeo) and must DISCLOSE.
+
+    The scar (2026-07-24): ashby.py had no EEO capability, so a bespoke board driver
+    (scripts/drive_ashby.py, now deleted) grew one that answered "I don't wish to answer" to
+    gender / LGBTQ+ / sexual orientation / ethnicity — the exact OPPOSITE of the applicant's
+    standing instruction (applicant-profile.md §Demographics, 2026-07-19: DISCLOSE these; only
+    age stays "prefer not to say"). A duplicate implementation didn't merely repeat logic, it
+    INVERTED policy on every application it submitted. These lock both properties."""
+
+    def _stub(self, atsform, calls):
+        def fake(label, val, multi=False, clear_first=False, quiet_notfound=False):
+            calls.append((label, val))
+            return 0
+        return fake
+
+    def test_discloses_rather_than_declining(self):
+        import atsform
+        calls = []
+        orig = atsform.combobox_pick
+        atsform.combobox_pick = self._stub(atsform, calls)
+        try:
+            atsform.fill_eeo({"applicant": {"disclose_demographics": "Yes",
+                                            "gender_identity": "Man",
+                                            "sexual_orientation": "Heterosexual",
+                                            "transgender": "No", "disability": "No",
+                                            "veteran": "No"}})
+        finally:
+            atsform.combobox_pick = orig
+        vals = [v.strip().lower() for _l, v in calls]
+        self.assertTrue(vals, "fill_eeo set nothing")
+        for bad in ("i don't wish to answer", "prefer not to say", "decline to self identify"):
+            self.assertNotIn(bad, vals,
+                             f"EEO filler chose a NON-disclosure ({bad!r}) — the applicant's "
+                             f"standing instruction is to DISCLOSE these fields")
+        self.assertIn("man", vals)
+
+    def test_disclose_demographics_no_is_honoured(self):
+        """The inverse must also hold: if the applicant opts OUT, fill nothing."""
+        import atsform
+        calls = []
+        orig = atsform.combobox_pick
+        atsform.combobox_pick = self._stub(atsform, calls)
+        try:
+            res = atsform.fill_eeo({"applicant": {"disclose_demographics": "No",
+                                                  "gender_identity": "Man"}})
+        finally:
+            atsform.combobox_pick = orig
+        self.assertEqual(calls, [], "opted out of demographics but fields were still filled")
+        self.assertEqual(res[0][2], "SKIP")
+
+    def test_eeo_filler_is_not_duplicated_per_board(self):
+        """One implementation. gh_apply must DELEGATE, and no board may grow its own
+        blanket-decline EEO answerer again."""
+        root = os.path.dirname(_HERE)
+        gh = os.path.join(root, "sites", "greenhouse", "scripts", "gh_apply.py")
+        with open(gh, encoding="utf-8", errors="replace") as fh:
+            txt = fh.read()
+        self.assertIn("atsform.fill_eeo", txt, "gh_apply no longer delegates to the shared filler")
+        offenders = []
+        for dirpath, _d, files in os.walk(os.path.join(root, "sites")):
+            if "__pycache__" in dirpath or "_common" in dirpath:
+                continue
+            for fn in files:
+                if not fn.endswith(".py"):
+                    continue
+                p = os.path.join(dirpath, fn)
+                with open(p, encoding="utf-8", errors="replace") as fh:
+                    body = fh.read()
+                # a board file listing several EEO questions AND a decline answer = a local filler
+                eeo_qs = sum(k in body.lower() for k in
+                             ("gender identity", "sexual orientation", "lgbtq", "neurodivergent"))
+                if eeo_qs >= 2 and re.search(r"i don'?t wish to answer|prefer not to say", body, re.I):
+                    offenders.append(os.path.relpath(p, root))
+        self.assertEqual(offenders, [], "board-local EEO answerer re-introduced (must use "
+                                        f"atsform.fill_eeo): {offenders}")
 
 
 class TestBoardCooldown(unittest.TestCase):
