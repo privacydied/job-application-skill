@@ -461,6 +461,61 @@ class TestSharedEeoFiller(unittest.TestCase):
                                         f"atsform.fill_eeo): {offenders}")
 
 
+class TestDedupTracker(unittest.TestCase):
+    """Repairs rows already written when a canon_ids gap let the same posting be logged twice
+    (2026-07-24: Reed's search-URL `?jobId=` shape vs reed_apply's synthesized
+    `/jobs/ux-designer/<id>` — jobs 57050584 and 57067097 each got two rows and were reported
+    as four applications). The keeper must be the authoritative row, and the discarded row's
+    URL must survive in Notes so BOTH id shapes keep deduping to the surviving row."""
+
+    def _rows(self):
+        return [
+            {"Date": "2026-07-24", "Company": "(unknown employer — Reed)",
+             "Role": "HV Design Engineer", "Source": "Reed",
+             "URL": "https://www.reed.co.uk/jobs/ux-designer/57050584",
+             "Status": "Applied?", "Next Action": "", "Notes": "auto-logged"},
+            {"Date": "2026-07-24", "Company": "Timely Recruit Ltd",
+             "Role": "HV Design Engineer", "Source": "Reed",
+             "URL": "https://www.reed.co.uk/jobs/hv-design-engineer-jobs-in-london?q=x&jobId=57050584",
+             "Status": "Applied", "Next Action": "", "Notes": "proof=confirmation.png"},
+        ]
+
+    def _merge(self):
+        sys.path.insert(0, os.path.join(_HERE, "..", "scripts"))
+        import dedup_tracker
+        rows = self._rows()
+        plan, merged = dedup_tracker.merge(rows, date="2026-07-24")
+        return plan, merged
+
+    def test_keeps_the_authoritative_row(self):
+        plan, merged = self._merge()
+        self.assertEqual(len(plan), 1, "the two rows are one posting and must group")
+        self.assertEqual(len(merged), 1)
+        kept = merged[0]
+        self.assertEqual(kept["Status"], "Applied")            # Applied outranks Applied?
+        self.assertEqual(kept["Company"], "Timely Recruit Ltd")  # real name over placeholder
+        self.assertIn("proof=", kept["Notes"])                  # proof citation survives
+
+    def test_dropped_url_survives_so_both_ids_still_dedup(self):
+        _plan, merged = self._merge()
+        notes = merged[0]["Notes"]
+        self.assertIn("/jobs/ux-designer/57050584", notes,
+                      "the dropped row's URL must stay greppable in Notes")
+        # both URL shapes must still resolve to the same canonical id
+        self.assertEqual(precheck.canon_ids(merged[0]["URL"]),
+                         precheck.canon_ids("https://www.reed.co.uk/jobs/ux-designer/57050584"))
+
+    def test_distinct_postings_are_never_merged(self):
+        """Different ids must NEVER be merged — and a shared job title alone is not evidence."""
+        sys.path.insert(0, os.path.join(_HERE, "..", "scripts"))
+        import dedup_tracker
+        rows = self._rows()
+        rows[0]["URL"] = "https://www.reed.co.uk/jobs/ux-designer/99999999"   # a different job
+        plan, merged = dedup_tracker.merge(rows, date="2026-07-24")
+        self.assertEqual(plan, [])
+        self.assertEqual(len(merged), 2)
+
+
 class TestBoardCooldown(unittest.TestCase):
     def setUp(self):
         self._tmp = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
