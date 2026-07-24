@@ -14,8 +14,13 @@ ethnicity options map correctly. EEO questions default to "Prefer not to disclos
 where offered, per the standing rule.
 
 Usage:
-  python3 tal_eform.py <eform_base_url_without_/page/N> <spec.json> [--submit] [--max N]
+  python3 tal_eform.py <eform_base_url_without_/page/N> <spec.json> [--submit] [--max N] \
+                       --jcode <id>   [--company "<dept>"] [--role "<title>"]
     eform_base = https://cshr.tal.net/vx/.../eform/<ID>   (no trailing slash)
+    --jcode <id>  ALWAYS pass this: the CSJ vacancy jcode you sourced. The eform URL carries no
+                  jcode, but the tracker keys CSJ on jobs.cgi?jcode=<id>, so this is the ONLY way
+                  the driver can dedup — without it, apply-time dedup is skipped (and WARNs). It
+                  refuses to re-drive a vacancy already Applied. (--url / spec.jcode also accepted.)
     spec keys:
       radio:   {fieldName: "Yes"|"No"|"label substring"}
       select:  {fieldName: "label substring"|"<exact option text>"}
@@ -223,16 +228,52 @@ def walk(spec, submit=False, max_page=99):
     return results
 
 
+def csj_dedup_guard(jcode=None, url=None, company=None, role=None):
+    """LAUNCHER-SIDE CSJ apply dedup — the fix for the one gap the other drivers couldn't cover.
+
+    The eform runs on a `cshr.tal.net/.../eform/<ID>` URL that carries NO jcode, but the tracker
+    keys CSJ on `jobs.cgi?jcode=<id>` (see NOTES.md §"SID links…"). So the eform driver alone
+    can't dedup. The CALLER (which knows the jcode from sourcing / the queue) passes it here and
+    we guard on the canonical jobs.cgi URL BEFORE driving the eform. Returns True if the driver
+    must STOP (vacancy already Applied). Shared by tal_eform / tal_eform_mon so there is ONE CSJ
+    dedup, not a copy per script. Reuses the canonical precheck.guard (canon-id then Company+Role).
+
+    No jcode/url given => dedup can't run: WARN loudly (never silently skip) and proceed."""
+    if not (jcode or url):
+        print("WARN: CSJ apply-time dedup SKIPPED — pass --jcode <id> (the launcher knows it from "
+              "sourcing) so a re-apply to an already-Applied vacancy is caught. See NOTES.md "
+              "§Applying.", file=sys.stderr)
+        return False
+    if jcode and not url:
+        url = f"https://www.civilservicejobs.service.gov.uk/csr/jobs.cgi?jcode={jcode}"
+    try:
+        import precheck  # noqa: E402 — sites/_common/scripts already on sys.path
+        return precheck.guard(url=url, company=company or None, role=role or None, label="csj")
+    except Exception:  # noqa: BLE001 — a guard hiccup must never block a genuine apply
+        return False
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("eform_base")  # .../eform/<ID>
     ap.add_argument("spec")
     ap.add_argument("--submit", action="store_true")
     ap.add_argument("--max", type=int, default=99)
+    # Apply-time dedup keys — the launcher passes the jcode it already knows (or --url, or embeds
+    # jcode/url/company/role in the spec). Without one, dedup can't run and WARNs.
+    ap.add_argument("--jcode", default="", help="CSJ vacancy jcode -> dedup on jobs.cgi?jcode=<id>")
+    ap.add_argument("--url", default="", help="alt to --jcode: the jobs.cgi?jcode= posting URL")
+    ap.add_argument("--company", default="")
+    ap.add_argument("--role", default="")
     a = ap.parse_args()
+    spec = json.load(open(a.spec))
+    # DEDUP GUARD (launcher-side): stop before touching the eform if this vacancy is already
+    # Applied. Keys come from the flag OR the spec (whichever the launcher supplied).
+    if csj_dedup_guard(jcode=a.jcode or spec.get("jcode"), url=a.url or spec.get("url"),
+                       company=a.company or spec.get("company"), role=a.role or spec.get("role")):
+        return 0
     global _EOFORM_BASE
     _EOFORM_BASE = a.eform_base.rstrip("/")
-    spec = json.load(open(a.spec))
     cfx.navigate(a.eform_base.rstrip("/") + "/page/1")
     time.sleep(2)
     res = walk(spec, submit=a.submit, max_page=a.max)

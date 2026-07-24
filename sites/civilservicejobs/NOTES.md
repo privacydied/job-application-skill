@@ -97,6 +97,22 @@ Two mechanisms, per posting (both visible on the advert page):
    should confirm/extend it for the per-page advance flow rather than assume it works
    end-to-end.
 
+**Apply-time dedup (do NOT skip):** the eform runs on a `cshr.tal.net/.../eform/<ID>` URL that
+carries NO jcode, but the tracker keys CSJ on `jobs.cgi?jcode=<id>` — so the eform driver can't
+dedup on its own. When you drive **`tal_eform.py` (S1), `tal_sec2.py` (S2 — the FINAL submit), or
+`tal_eform_mon.py`**, **ALWAYS pass the jcode you sourced**:
+
+```bash
+python3 tal_eform.py <eform_base> <spec.json> --submit --jcode <id> --company "<dept>" --role "<title>"
+python3 tal_sec2.py  <eform_base> <spec_s2.json>  --jcode <id>          # S2 = the completing submit
+```
+
+(or embed `jcode`/`url`/`company`/`role` in the spec JSON — the drivers read either). Each then
+guards via the shared `tal_eform.csj_dedup_guard` → `precheck.guard` and refuses to re-drive a
+vacancy already Applied. Omit it and dedup is SKIPPED (the driver WARNs to stderr) — that is
+exactly the gap that let jcode 2005473 be Applied twice. `tal_sec2.py --force` overrides the guard,
+for the one legitimate case: a row mis-logged `Applied` after S1 while S2 is genuinely pending.
+
 ## Misc
 
 - Cookie banner ("additional cookies") can overlay and eat trusted clicks on the

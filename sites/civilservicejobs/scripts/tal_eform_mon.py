@@ -61,10 +61,18 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("eform_base")
     ap.add_argument("spec")
+    ap.add_argument("--jcode", default="", help="CSJ jcode -> apply-time dedup (jobs.cgi?jcode=<id>)")
+    ap.add_argument("--url", default="")
+    ap.add_argument("--company", default="")
+    ap.add_argument("--role", default="")
     a = ap.parse_args()
+    spec = json.load(open(a.spec))
+    # Launcher-side CSJ dedup — one shared helper (tal_eform.csj_dedup_guard), not a copy.
+    if T.csj_dedup_guard(jcode=a.jcode or spec.get("jcode"), url=a.url or spec.get("url"),
+                         company=a.company or spec.get("company"), role=a.role or spec.get("role")):
+        return
     global _EOFORM
     _EOFORM = a.eform_base.rstrip("/")
-    spec = json.load(open(a.spec))
     pages = spec.get("_pages", [1, 2, 3, 4, 5])
     for pg in pages:
         res = fill_page(pg, spec)

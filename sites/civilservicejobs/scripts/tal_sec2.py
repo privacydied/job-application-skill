@@ -174,10 +174,28 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("eform_base")
     ap.add_argument("spec")
+    # Apply-time dedup keys — S2 is the FINAL CSJ submit, so this is the most important place to
+    # guard. The eform URL carries no jcode; the launcher passes the one it sourced.
+    ap.add_argument("--jcode", default="", help="CSJ jcode -> dedup on jobs.cgi?jcode=<id>")
+    ap.add_argument("--url", default="")
+    ap.add_argument("--company", default="")
+    ap.add_argument("--role", default="")
+    ap.add_argument("--force", action="store_true",
+                    help="re-drive even if the tracker says Applied (use only when a row was "
+                         "mis-logged Applied after S1 while S2 is genuinely still pending)")
     a = ap.parse_args()
+    spec = json.load(open(a.spec))
+    # DEDUP GUARD (launcher-side): S2 completes+submits the application, so refuse to re-drive a
+    # vacancy already Applied. Shared helper (tal_eform.csj_dedup_guard) — one CSJ dedup, no copy.
+    if not a.force:
+        sys.path.insert(0, HERE)
+        import tal_eform as _T  # noqa: E402
+        if _T.csj_dedup_guard(jcode=a.jcode or spec.get("jcode"), url=a.url or spec.get("url"),
+                              company=a.company or spec.get("company"),
+                              role=a.role or spec.get("role")):
+            return 0
     global _EOFORM
     _EOFORM = a.eform_base.rstrip("/")
-    spec = json.load(open(a.spec))
     pages = spec.get("pages", [1, 2, 3])
     last = max(pages)
 

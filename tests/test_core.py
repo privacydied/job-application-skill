@@ -16,6 +16,7 @@ The browser layer (cfx) is stubbed at import time so atsform/jd load without a l
 camofox; the pure modules (check_title/precheck/board_cooldown) don't import cfx.
 """
 import contextlib
+import io
 import os
 import sys
 import tempfile
@@ -214,6 +215,60 @@ class TestNoDivergentFormWidgets(unittest.TestCase):
         self.assertEqual(offenders, [], "react-select PICK engine re-implemented outside "
                          "sites/_common/scripts/ — use atsform.combobox_pick and delegate:\n  "
                          + "\n  ".join(offenders))
+
+
+class TestCsjApplyDedup(unittest.TestCase):
+    """CSJ was the LAST apply path with no dedup gate: its eform URL
+    (cshr.tal.net/.../eform/<ID>) carries no jcode, but the tracker keys CSJ on
+    `jobs.cgi?jcode=<id>` — so the driver can only dedup if the LAUNCHER passes the jcode it
+    sourced. That gap let jcode 2005473 be Applied twice. These lock in both halves: the guard
+    logic, and the CLI plumbing that feeds it (a silent removal of `--jcode` would restore the
+    gap without any test noticing)."""
+
+    def _tal(self):
+        sys.path.insert(0, os.path.join(_HERE, "..", "sites", "civilservicejobs", "scripts"))
+        import tal_eform
+        return tal_eform
+
+    def test_guard_blocks_already_applied_jcode(self):
+        T = self._tal()
+        lt = precheck.load_tracker
+        precheck.load_tracker = lambda: ({"2005473": "Applied"}, {})
+        try:
+            self.assertTrue(T.csj_dedup_guard(jcode="2005473"))
+            self.assertFalse(T.csj_dedup_guard(jcode="9999999"))
+        finally:
+            precheck.load_tracker = lt
+
+    def test_guard_warns_and_proceeds_without_jcode(self):
+        """No jcode => dedup CANNOT run. It must WARN loudly and proceed — never silently skip
+        (a silent skip reads as 'deduped' when nothing was checked)."""
+        T = self._tal()
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            proceeded = T.csj_dedup_guard()
+        self.assertFalse(proceeded)
+        self.assertIn("dedup SKIPPED", err.getvalue())
+
+    def test_all_csj_drivers_wire_the_guard(self):
+        """Every CSJ driver that fills/submits must call the shared guard from its main() and
+        expose --jcode. tal_sec2 is the FINAL submit, so it matters most."""
+        root = os.path.dirname(_HERE)
+        for fn in ("tal_eform.py", "tal_sec2.py", "tal_eform_mon.py"):
+            p = os.path.join(root, "sites", "civilservicejobs", "scripts", fn)
+            with open(p, encoding="utf-8", errors="replace") as fh:
+                txt = fh.read()
+            self.assertIn("csj_dedup_guard", txt, f"{fn} no longer calls the CSJ dedup guard")
+            self.assertIn("--jcode", txt, f"{fn} no longer accepts --jcode (dedup can't run)")
+        # exactly ONE definition of the guard (no per-script copy)
+        defs = []
+        for fn in ("tal_eform.py", "tal_sec2.py", "tal_eform_mon.py"):
+            p = os.path.join(root, "sites", "civilservicejobs", "scripts", fn)
+            with open(p, encoding="utf-8", errors="replace") as fh:
+                if "def csj_dedup_guard" in fh.read():
+                    defs.append(fn)
+        self.assertEqual(defs, ["tal_eform.py"],
+                         f"csj_dedup_guard must be defined ONCE (tal_eform.py); found in {defs}")
 
 
 class TestBoardCooldown(unittest.TestCase):
