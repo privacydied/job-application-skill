@@ -275,12 +275,59 @@ def upload_cv(filename: str) -> int:
 
 # Generic form primitives live in the shared engine (atsform.py) — single source of
 # truth reused by every ATS adapter. Ashby-specific bits (reveal, set_toggle,
-# upload_cv, submit, apply, check) stay in this file.
+# upload_cv, submit, apply, check, set_radio) stay in this file.
 upload = atsform.upload
-set_radio = atsform.set_radio
 set_checkbox = atsform.set_checkbox
 fill = atsform.fill
 review = atsform.review
+
+
+# Ashby's labelled multi-option radios are custom React widgets: atsform.set_radio's bare
+# r.click() flips the native <input>.checked but does NOT commit React state, so submit bounces
+# "Missing entry for required field: <question>" even though the driver printed OK. (set_toggle
+# handles the Yes/No BUTTON toggles; this handles the <input type=radio> groups — right-to-work
+# status, EEO, etc.) Fix — folded here from the former apply_specs/drive_ashby.py set_radio_native,
+# verified to clear the validator (references/ashby-radio-label-click-fix.md): find the option
+# <label> by text within the question block, set the bound input's `checked` via the prototype
+# setter so React's onChange fires, then dispatch click/input/change. ALL radios on an Ashby form
+# share ONE `name`, so match by exact option-label text (fall back to a >=3-char substring), never
+# a bare "Yes"/"No" that would grab the wrong group. Defers to the shared atsform.set_radio for
+# standard HTML / Workday radio groups this label path can't resolve.
+_ASHBY_RADIO_JS = r"""(function(q, o){
+  q=q.toLowerCase(); o=o.toLowerCase();
+  function setNativeChecked(el){
+    var d=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el),'checked');
+    if(d&&d.set){ d.set.call(el,true); } else { el.checked=true; }
+  }
+  var labels=[].slice.call(document.querySelectorAll('label'));
+  for(var i=0;i<labels.length;i++){
+    if(!(labels[i].innerText||'').toLowerCase().includes(q)) continue;
+    for(var j=i;j<Math.min(labels.length,i+14);j++){
+      var ol=labels[j], t=(ol.innerText||'').trim().toLowerCase();
+      if(!t) continue;
+      if(t===o || (o.length>2 && t.includes(o))){
+        var r=document.getElementById(ol.getAttribute('for'))||ol.querySelector('input[type=radio]');
+        if(!r) return 'NO_INPUT';
+        setNativeChecked(r);
+        r.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+        r.dispatchEvent(new Event('input',{bubbles:true}));
+        r.dispatchEvent(new Event('change',{bubbles:true}));
+        return r.checked ? ('OK:'+ol.innerText.trim().slice(0,40)) : 'CLICK_FAILED';
+      }
+    }
+  }
+  return 'NO_EXACT';
+})(%s, %s)"""
+
+
+def set_radio(question, option, quiet_notfound=False):
+    res = cfx.evaluate(_ASHBY_RADIO_JS % (_js(question), _js(option)))
+    if isinstance(res, str) and res.startswith("OK"):
+        print(f"OK (Ashby native-set) {question[:44]!r} <- {option!r}: {res[3:]}")
+        return 0
+    # Not a labelled Ashby radio group (NO_EXACT / NO_INPUT / CLICK_FAILED) — defer to the
+    # shared engine (standard HTML radios + the Workday value=true/false path + quiet_notfound).
+    return atsform.set_radio(question, option, quiet_notfound=quiet_notfound)
 
 
 def submit() -> int:
