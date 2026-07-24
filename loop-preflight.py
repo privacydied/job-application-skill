@@ -114,6 +114,30 @@ def _divergent_infra_guard():
         pass
 
 
+def _close_out_guard():
+    """Surface any REPORT-vs-DISK conflict for today at the top of every firing.
+
+    A close-out report is written at the END of a run, when nothing re-checks it — that's how
+    2026-07-24's report claimed "Miro → Blocked (driver gap), 0 new submissions" while Miro's own
+    confirmation.txt said "Your application was successfully submitted". Running the same
+    reconciliation at the START of the next firing catches that within one cycle: an
+    UNDER_REPORTED row is a real submission being treated as a failure, so it would otherwise be
+    re-driven (a duplicate) and never counted. Best-effort, never blocks the loop — same
+    philosophy as _scrub_pii_guard / _divergent_infra_guard above."""
+    try:
+        sys.path.insert(0, os.path.join(_here, "scripts"))
+        import close_out
+        res = close_out.reconcile()
+        for c in res.get("conflicts", []):
+            print(f"WARN close-out: [{c['cls']}] {c['who']} — {c['detail']}", file=sys.stderr)
+        if res.get("conflicts"):
+            print(f"note: {len(res['conflicts'])} tracker-vs-disk conflict(s) from a previous "
+                  f"firing — run `python3 scripts/close_out.py` and fix before reporting counts "
+                  f"(an UNDER_REPORTED row is a REAL submission logged as a failure).")
+    except Exception:  # noqa: BLE001 — a reconciliation hiccup must never block the loop
+        pass
+
+
 def _target(argv):
     if "--target" in argv:
         try:
@@ -135,6 +159,7 @@ def main():
         return 2
     _scrub_pii_guard()   # enforce the placeholder convention on tracked files, every firing
     _divergent_infra_guard()   # surface any re-forked shared infra (both runtimes), every firing
+    _close_out_guard()         # surface any report-vs-disk conflict left by a previous firing
     try:
         searches = sp.read_searches()
     except FileNotFoundError:

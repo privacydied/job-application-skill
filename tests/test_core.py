@@ -16,6 +16,7 @@ The browser layer (cfx) is stubbed at import time so atsform/jd load without a l
 camofox; the pure modules (check_title/precheck/board_cooldown) don't import cfx.
 """
 import contextlib
+import csv
 import io
 import os
 import sys
@@ -269,6 +270,88 @@ class TestCsjApplyDedup(unittest.TestCase):
                     defs.append(fn)
         self.assertEqual(defs, ["tal_eform.py"],
                          f"csj_dedup_guard must be defined ONCE (tal_eform.py); found in {defs}")
+
+
+class TestCloseOutReconcile(unittest.TestCase):
+    """The 2026-07-24 scar: a close-out report claimed Miro was "logged Blocked (Ashby driver
+    gap)" and "0 new verified submissions", while
+    applications/miro-content-editor/confirmation.txt said "Your application was successfully
+    submitted" — a REAL submission reported as a failure (so it never counts, and gets
+    re-driven). audit_proofs.py cannot see that: it only scans `Applied` rows, and only checks
+    that an artifact EXISTS, never what it SAYS. These lock in the two directions close_out adds."""
+
+    def setUp(self):
+        sys.path.insert(0, os.path.join(_HERE, "..", "scripts"))
+        import close_out
+        self.co = close_out
+        self.tmp = tempfile.mkdtemp()
+        self.apps = os.path.join(self.tmp, "applications")
+        os.makedirs(self.apps)
+        self.tracker = os.path.join(self.tmp, "t.csv")
+        self._orig = (close_out.TRACKER, close_out.APPS)
+        close_out.TRACKER, close_out.APPS = self.tracker, self.apps
+
+    def tearDown(self):
+        self.co.TRACKER, self.co.APPS = self._orig
+
+    def _write(self, status, confirm_text, company="Miro", role="Content Editor"):
+        with open(self.tracker, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["Date", "Company", "Role", "Source", "URL", "Status", "Next Action", "Notes"])
+            w.writerow(["2026-07-24", company, role, "Ashby", "https://jobs.ashbyhq.com/x/1",
+                        status, "", "proof=confirmation.txt"])
+        import journal
+        d = os.path.join(self.apps, journal.slugify(company, role))
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "confirmation.txt"), "w", encoding="utf-8") as fh:
+            fh.write(confirm_text)
+
+    def _classes(self, res):
+        return {c["cls"] for c in res["conflicts"]}
+
+    def test_under_reported_success_is_caught(self):
+        """THE Miro case: artifact says submitted, row says Blocked."""
+        self._write("Blocked", "Your application was successfully submitted. We'll contact you.")
+        res = self.co.reconcile(date="2026-07-24")
+        self.assertIn("UNDER_REPORTED", self._classes(res))
+
+    def test_over_reported_failure_is_caught(self):
+        """The inverse: an artifact exists (so audit_proofs passes it) but SAYS the submit
+        failed — Lendable's red 'We couldn't submit your application' banner."""
+        self._write("Applied", "We couldn't submit your application. Please submit again.")
+        res = self.co.reconcile(date="2026-07-24")
+        self.assertIn("OVER_REPORTED", self._classes(res))
+
+    def test_genuine_success_is_clean(self):
+        self._write("Applied", "Your application was successfully submitted.")
+        res = self.co.reconcile(date="2026-07-24")
+        self.assertEqual(res["conflicts"], [])
+        self.assertEqual(res["counts"]["verified_success"], 1)
+
+    def test_applied_with_no_artifact_is_caught(self):
+        with open(self.tracker, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["Date", "Company", "Role", "Source", "URL", "Status", "Next Action", "Notes"])
+            w.writerow(["2026-07-24", "Ghost", "Designer", "X", "https://x/1", "Applied", "", ""])
+        res = self.co.reconcile(date="2026-07-24")
+        self.assertIn("NO_ARTIFACT", self._classes(res))
+
+    def test_slug_drift_does_not_create_phantom_orphans(self):
+        """Drivers save `figma-designer-advocate-london-united-kingdom` while the tracker Role
+        yields `figma-designer-advocate`. Matching must tolerate that suffix/separator drift, or
+        every run reports phantom 'unlogged applications' and the checker gets ignored."""
+        with open(self.tracker, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(["Date", "Company", "Role", "Source", "URL", "Status", "Next Action", "Notes"])
+            w.writerow(["2026-07-24", "Figma", "Designer Advocate", "X", "https://x/1",
+                        "Applied", "", "proof=confirmation.txt"])
+        d = os.path.join(self.apps, "figma-designer-advocate-london-united-kingdom")
+        os.makedirs(d)
+        with open(os.path.join(d, "confirmation.txt"), "w", encoding="utf-8") as fh:
+            fh.write("Thank you for applying")
+        res = self.co.reconcile(date="2026-07-24")
+        self.assertNotIn("ORPHAN_SUCCESS", self._classes(res))
+        self.assertNotIn("NO_ARTIFACT", self._classes(res))
 
 
 class TestBoardCooldown(unittest.TestCase):
