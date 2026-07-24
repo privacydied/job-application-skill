@@ -378,6 +378,20 @@ def main():
             return 6
         print(f"  combo {label_sub!r}={val!r} -> {rc}")
 
+    # Truthful checkbox auto-fill (replaces a blanket tick-all): post-fill steps can render NEW
+    # checkboxes, so tick ONLY those whose statement is affirmatively true for the applicant
+    # (accuracy / consent-to-apply + eligibility facts from apply-defaults.json checkbox_truths);
+    # leave unknown / false / marketing / anti-AI boxes UNCHECKED and report them for the human.
+    try:
+        rep = atsform.checkboxes_from_profile()
+        if rep.get("ticked"):
+            print(f"OK  truthful-checkboxes ticked {len(rep['ticked'])}: {rep['ticked']}")
+        for k in ("left_unknown", "left_antiai", "left_false", "left_marketing"):
+            if rep.get(k):
+                print(f"  checkbox left for you ({k[5:]}): {rep[k]}")
+    except cfx.CfxError:
+        pass
+
     if cfg.get("no_submit"):
         print(f"FILLED_ONLY {company} {role}")
         return 0

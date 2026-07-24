@@ -1373,6 +1373,115 @@ def _load_defaults(spec):
         return {}
 
 
+# ── Truthful checkbox auto-fill ─────────────────────────────────────────────────────────────
+# The SAFE alternative to a blanket "tick every unchecked box before submit" — that would assert
+# untrue things (veteran/disability self-ID, eligibility, consents, the anti-AI oath) as the
+# applicant's answers. This enumerates each checkbox, classifies its label, and ticks ONLY boxes
+# whose statement is affirmatively TRUE for the applicant. DEFAULT-DENY: anything it can't
+# positively verify — an unknown label, a false eligibility fact, a marketing opt-in, the anti-AI
+# oath — is LEFT UNCHECKED and reported, never guessed.
+_ENUM_CHECKBOXES = r"""
+(() => {
+  const cbs = [...document.querySelectorAll('input[type=checkbox]')];
+  const lab = c => {
+    if (c.labels && c.labels[0]) return c.labels[0].innerText;
+    if (c.id){ const l=document.querySelector('label[for="'+c.id+'"]'); if(l) return l.innerText; }
+    const p = c.closest('label'); if (p) return p.innerText;
+    let a=c.parentElement; for(let k=0;k<3&&a;k++,a=a.parentElement){ const t=(a.innerText||'').trim(); if(t && t.length<300) return t; }
+    return c.getAttribute('aria-label') || c.name || '';
+  };
+  cbs.forEach((c,i)=>c.setAttribute('data-ats-cb', i));
+  return JSON.stringify(cbs.map((c,i)=>({i, checked: c.checked,
+    label: (lab(c)||'').replace(/\s+/g,' ').trim()})));
+})()
+"""
+
+_TICK_CB_BY_INDEX = r"""
+(() => {
+  const want = new Set(__IDXS__); let n=0;
+  for (const c of document.querySelectorAll('input[type=checkbox][data-ats-cb]')) {
+    if (want.has(parseInt(c.getAttribute('data-ats-cb'),10)) && !c.checked) { c.click(); n++; }
+  }
+  return n;
+})()
+"""
+
+# (category, regex). ORDER MATTERS: anti-AI and marketing are matched FIRST so a box that also
+# reads like a generic "consent" can't be mis-ticked. A label matching NO rule is UNKNOWN.
+_CB_RULES = [
+    ("anti_ai", re.compile(r"only my own words|\bno ai\b|without (the use of )?ai|ai[- ]?generated|"
+                           r"use of ai|artificial intelligence.{0,40}(disqualif|prohibit|not permitted|not allowed)", re.I)),
+    ("marketing", re.compile(r"marketing|newsletter|promotional|keep me (updated|informed|posted)|"
+                             r"future (roles|jobs|opportunities|vacancies)|talent (community|network|pool)|"
+                             r"subscribe|contact me about (other|future)", re.I)),
+    ("right_to_work_uk", re.compile(r"right to work in the uk|eligible to work in the uk|"
+                                    r"authori[sz]ed to work in the uk|permission to work in the uk", re.I)),
+    ("needs_visa", re.compile(r"(require|need)\w*.{0,25}(visa|sponsor)|would need sponsorship", re.I)),
+    ("veteran", re.compile(r"\bveteran\b|armed forces|ex[- ]?forces|military service", re.I)),
+    ("disability", re.compile(r"have a disabilit|long[- ]term (health )?condition|consider yourself.{0,15}disab", re.I)),
+    ("over_18", re.compile(r"18 (years|or older|or over)|over 18|at least 18|of legal (working )?age", re.I)),
+    ("accuracy", re.compile(r"information.{0,30}(true|accurate|correct|complete)|"
+                            r"declare.{0,20}(true|accurate|correct)|certify.{0,20}(accurate|correct|true)|"
+                            r"to the best of my knowledge", re.I)),
+    ("consent", re.compile(r"privacy (policy|notice)|terms (and|&) conditions|terms of (use|service)|"
+                           r"data (protection|processing) (policy|notice|statement)|read and (agree|accept|understood)|"
+                           r"consent to.{0,40}(process|store|use).{0,25}(data|application|personal)|\bgdpr\b|"
+                           r"i (agree|accept).{0,25}(privacy|terms|processing of)", re.I)),
+]
+# eligibility categories → apply-defaults.json 'checkbox_truths' key (config-routed, gitignored)
+_CB_FACT = {"right_to_work_uk": "right_to_work_uk", "needs_visa": "needs_visa_sponsorship",
+            "veteran": "veteran", "disability": "disability", "over_18": "over_18"}
+
+
+def _cb_action(label, truths):
+    """Pure per-label decision (unit-testable, no browser): returns (action, category) where
+    action is 'tick' | 'left_antiai' | 'left_marketing' | 'left_unknown' | 'left_false'.
+    DEFAULT-DENY: only 'tick' when the box is affirmatively true (procedural accuracy/consent,
+    or an eligibility fact that checkbox_truths marks True)."""
+    cat = next((c for c, rx in _CB_RULES if rx.search(label or "")), None)
+    if cat == "anti_ai":
+        return ("left_antiai", cat)
+    if cat == "marketing":
+        return ("left_marketing", cat)
+    if cat in ("accuracy", "consent"):
+        return ("tick", cat)
+    if cat is None:
+        return ("left_unknown", None)
+    return ("tick", cat) if truths.get(_CB_FACT[cat]) is True else ("left_false", cat)
+
+
+def checkboxes_from_profile(config=None, do_tick=True):
+    """Tick ONLY checkboxes whose statement is affirmatively true for the applicant; leave
+    unknown / false / marketing / anti-AI boxes unchecked (and report them). The truthful
+    replacement for a blanket tick-all. Applicant eligibility facts come from apply-defaults.json
+    'checkbox_truths' (gitignored); procedural accuracy/consent boxes are true by virtue of
+    applying; marketing opt-ins and the anti-AI oath are never auto-selected. Returns a report."""
+    try:
+        truths = (config or _load_defaults(True) or {}).get("checkbox_truths", {}) or {}
+    except Exception:  # noqa: BLE001
+        truths = {}
+    try:
+        items = json.loads(cfx.evaluate(_ENUM_CHECKBOXES) or "[]")
+    except (ValueError, TypeError):
+        items = []
+    rep = {"ticked": [], "left_false": [], "left_unknown": [], "left_marketing": [], "left_antiai": []}
+    tick_idx = []
+    for it in items:
+        if it.get("checked"):
+            continue
+        short = (it.get("label") or "").strip()[:70]
+        action, cat = _cb_action(it.get("label") or "", truths)
+        if action == "tick":
+            tick_idx.append(it["i"]); rep["ticked"].append(short)
+        elif action == "left_false":
+            rep["left_false"].append(f"{short} [{cat}={truths.get(_CB_FACT[cat])!r}]")
+        else:
+            rep[action].append(short)
+    if do_tick and tick_idx:
+        cfx.evaluate(_TICK_CB_BY_INDEX.replace("__IDXS__", json.dumps(tick_idx)))
+    return rep
+
+
 def _default_entries(defaults, section, cfg_section):
     """Yield (label, value) defaults for `section`, minus any that overlap an
     explicit config key (case-insensitive substring either way — a config 'Name'

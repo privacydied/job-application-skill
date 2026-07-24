@@ -220,6 +220,20 @@ def apply(form_url, spec, do_submit=False):
         print("apply: NOT submitting — fix above first.")
         return 1
     if do_submit or spec.get("submit"):
+        # Truthful checkbox auto-fill (replaces a blanket tick-all): tick ONLY boxes whose
+        # statement is affirmatively true for the applicant; leave unknown / false / marketing /
+        # anti-AI unchecked for the human (atsform.checkboxes_from_profile, default-deny).
+        try:
+            import atsform  # noqa: E402  (shared engine; sys.path already has _common/scripts)
+            rep = atsform.checkboxes_from_profile()
+            if rep.get("ticked"):
+                print(f"OK  truthful-checkboxes ticked {len(rep['ticked'])}: {rep['ticked']}")
+            for k in ("left_unknown", "left_antiai", "left_false", "left_marketing"):
+                if rep.get(k):
+                    print(f"  checkbox left for you ({k[5:]}): {rep[k]}")
+        except cfx.CfxError:
+            pass
+
         sub = cfx.evaluate("""(() => {
           const b = document.querySelector('input[type=submit], button[type=submit]');
           if (!b) return 'NO_SUBMIT';

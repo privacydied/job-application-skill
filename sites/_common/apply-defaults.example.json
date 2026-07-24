@@ -46,5 +46,13 @@
     "dual_nationality": "No",
     "other_nationality": "",
     "resided_outside_uk_10yrs": "No"
-  }
+  },
+  "checkbox_truths": {
+    "right_to_work_uk": true,
+    "needs_visa_sponsorship": false,
+    "veteran": false,
+    "disability": false,
+    "over_18": true
+  },
+  "_comment_checkbox_truths": "Eligibility facts for atsform.checkboxes_from_profile — it ticks a form's checkbox ONLY when the box's statement is affirmatively true (default-deny; anti-AI oath + marketing + unknown boxes are never auto-ticked)."
 }

@@ -161,3 +161,6 @@ references/convertible-pool-*.md
 references/interview-prep-index.md
 references/interview-prep.html
 references/interview-prep-README.md
+
+# throwaway field-probe (scratch; not a shipped tool — SKILL.md no-commit-probes rule)
+scripts/probe_required_fields.py
