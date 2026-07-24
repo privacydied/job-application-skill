@@ -537,6 +537,19 @@ class TestPrecheckPure(unittest.TestCase):
         for url, want in cases.items():
             self.assertIn(want, precheck.canon_ids(url), url)
 
+    def test_canon_ids_reed_search_url_jobid_param(self):
+        """Reed SEARCH-RESULTS URLs carry the id as a QUERY PARAM
+        (`/jobs/<slug>-jobs-in-<city>?q=…&jobId=57050584`), not a path segment. The path-only
+        pattern missed them, so canon_ids fell back to the full URL and the pre-submit guard
+        could not match. Live cost 2026-07-24: reed job 57050584 was applied+logged TWICE (once
+        via reed_apply's synthesized /jobs/ux-designer/<id> URL, once via the search URL) and
+        counted as two applications."""
+        path_form = "https://www.reed.co.uk/jobs/ux-designer/57050584"
+        search_form = ("https://www.reed.co.uk/jobs/hv-design-engineer-jobs-in-london"
+                       "?q=hv+design+engineer&jobId=57050584")
+        self.assertIn("57050584", precheck.canon_ids(search_form))
+        self.assertEqual(precheck.canon_ids(path_form), precheck.canon_ids(search_form))
+
     def test_canon_ids_same_posting_two_sources_one_key(self):
         # utm/redirect drift must NOT create a second key for the same adzuna posting.
         a = precheck.canon_ids("https://www.adzuna.co.uk/details/5209871234?utm_source=a&ref=1")

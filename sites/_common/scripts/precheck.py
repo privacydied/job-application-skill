@@ -87,6 +87,12 @@ _CANON_PATTERNS = (
     # (and some slugs) — all three shapes must dedup to the same numeric id or re-sources
     # report ~100% "fresh" (false-exhaustion).
     r"reed\.co\.uk/jobs/(?:[^/]+/)?(\d{5,8})",
+    # Reed SEARCH-RESULTS shape: `/jobs/<slug>-jobs-in-<city>?q=…&jobId=57050584` — the id is a
+    # QUERY PARAM, not a path segment, so the path pattern above misses it and canon_ids fell
+    # back to the full URL. Live cost (2026-07-24): reed job 57050584 was logged TWICE — once
+    # from reed_apply's synthesized `/jobs/ux-designer/<id>` URL and once from this search URL —
+    # and the pre-submit guard couldn't match them, so it counted as two applications.
+    r"reed\.co\.uk/[^\s]*?[?&]jobid=(\d{5,8})",
     r"greenhouse\.io/[^/]+/jobs/(\d+)",
     r"jobs\.lever\.co/[^/]+/([0-9a-f-]{8,})",
     r"ashbyhq\.com/[^/]+/([0-9a-f-]{8,})",
