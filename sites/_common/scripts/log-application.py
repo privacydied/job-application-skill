@@ -118,6 +118,14 @@ def find_match(rows, url, company, role):
     return find_match_typed(rows, url, company, role)[0]
 
 
+def _rank(status):
+    """Status seniority for the downgrade guard: a provably-submitted row must never be
+    overwritten by a lesser one. Applied (proof-backed) > Applied? (submitted, unconfirmed) >
+    everything else (Blocked / Skipped / Saved / Unverified / …)."""
+    s = (status or "").strip().lower()
+    return 2 if s == "applied" else 1 if s == "applied?" else 0
+
+
 def main():
     a = sys.argv[1:]
     if len(a) < 5:
@@ -209,9 +217,19 @@ def main():
         # a different new URL goes into Notes so its id is greppable on the same line.
         r = rows[idx]
         old_status = r.get("Status", "")
-        r["Date"], r["Status"] = date, status
-        if nxt:
-            r["Next Action"] = nxt
+        # DOWNGRADE GUARD (data-integrity): a submitted row (Applied / Applied?) must NEVER be
+        # overwritten with a lesser status by a later re-drive or failure — that destroys the
+        # proof-backed record (the gh_apply re-drive → Blocked downgrade that wiped a real
+        # Applied row). Keep Status + Date and record the refused attempt in Notes. Override
+        # deliberately with --force-status (e.g. correcting a genuine mis-log).
+        downgrade = _rank(status) < _rank(old_status) and "--force-status" not in opts
+        if downgrade:
+            att = f"[{date}] re-log to {status!r} refused — kept {old_status!r} (no downgrade)"
+            notes = f"{att}{'; ' + notes if notes else ''}"
+        else:
+            r["Date"], r["Status"] = date, status
+            if nxt:
+                r["Next Action"] = nxt
         if url and r.get("URL") and url != r["URL"] and not (canon_ids(url) & canon_ids(r["URL"])):
             notes = f"{notes + ' ' if notes else ''}ATS: {url}"
         elif url and not r.get("URL"):
@@ -229,7 +247,10 @@ def main():
         except OSError as e:
             print(f"FAIL: rewrite: {e}")
             return 2
-        print(f"UPDATED row {idx + 2}: {r['Company']} | {r['Role']} | {old_status or '(blank)'} -> {status}")
+        if downgrade:
+            print(f"KEPT row {idx + 2}: {r['Company']} | {r['Role']} | {old_status} (refused downgrade to {status!r} — logged as a note)")
+        else:
+            print(f"UPDATED row {idx + 2}: {r['Company']} | {r['Role']} | {old_status or '(blank)'} -> {status}")
         return 0
 
 
