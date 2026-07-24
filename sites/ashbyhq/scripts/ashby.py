@@ -64,6 +64,7 @@ import time
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "_common", "scripts"))
 import cfx  # noqa: E402
 import atsform  # noqa: E402  (shared ATS form engine)
+import precheck  # noqa: E402  — already_applied() apply-time dedup guard
 
 # --- JS building blocks -----------------------------------------------------
 
@@ -392,6 +393,22 @@ def apply(config_path: str, do_submit: bool = False) -> int:
     except (OSError, ValueError) as e:
         print(f"FAIL: cannot read config {config_path!r}: {e}")
         return 2
+
+    # DEDUP GUARD: apply() runs on an already-navigated page that bypassed the sourcing
+    # precheck, so re-check the live tracker (current URL's canonical id, then Company+Role)
+    # before filling/submitting a role already Applied — stops re-applying to already-applied
+    # roles. Only "Applied" skips (Blocked/Saved stay re-drivable); "force": true re-drives.
+    if not cfg.get("force"):
+        try:
+            cur_url = cfx.current_url()
+        except Exception:  # noqa: BLE001
+            cur_url = cfg.get("url", "")
+        hit = precheck.already_applied(url=cur_url or cfg.get("url"),
+                                       company=cfg.get("company"), role=cfg.get("role"))
+        if hit and precheck.is_applied(hit[0]):
+            print(f"SKIP_ALREADY_APPLIED {cfg.get('company')} | {cfg.get('role')} — "
+                  f"tracker={hit[0]} (matched {hit[1]})")
+            return 0
 
     cfg_dir = os.path.dirname(os.path.abspath(config_path))
 

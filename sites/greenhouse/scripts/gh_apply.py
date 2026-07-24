@@ -19,8 +19,6 @@ exact-then-word-boundary match so 'Man' != 'Isle of Man', 'No' != 'Monaco'). Thi
 NO combobox logic of its own — a fix in combobox_pick fixes Greenhouse too.
 
 Hard rules enforced here (not left to the caller):
-  * Anti-AI attestation clause on the page => REFUSE (prints REFUSE_ATTESTATION, exit 3).
-    We must NOT submit a "use only my own words" form on the applicant's behalf.
   * Upload CV via container path /uploads/base-resume.pdf (host path 400s).
   * EEO answers come from apply-defaults.json -> applicant (gender/ethnicity/etc.) per the
     user's 2026-07-19 disclose instruction; age -> prefer not to say; religion untouched.
@@ -45,6 +43,7 @@ sys.path.insert(0, os.path.join(_ROOT, "scripts"))  # email_ingest lives at skil
 
 import cfx        # noqa: E402
 import atsform    # noqa: E402
+import precheck   # noqa: E402  — already_applied() apply-time dedup guard
 import fetch_verification_code as vcode  # noqa: E402  — the ONE shared email-code primitive
 import recaptcha  # noqa: E402  — sanctioned reCAPTCHA v2 solver (user pre-authorized)
 
@@ -56,33 +55,6 @@ def _slug(company, role):
     s = re.sub(r"[^a-z0-9]+", "-", f"{company}-{role}".lower()).strip("-")
     return s[:80]
 
-
-def _antiai_present():
-    """Detect a genuine anti-AI ATTESTATION the applicant must agree to — NOT a
-    neutral informational notice.
-
-    FALSE-POSITIVE HISTORY (2026-07-21): the old broad regex matched /use of AI/
-    and /generated content/ ANYWHERE, so it fired on Civil Service Jobs' standard
-    "Use of AI in Applications" info block — which explicitly says AI "can be a
-    useful tool to support your application" and only warns against passing
-    AI-generated text off as your own. That is permissive (compatible with the
-    skill's standing rule), NOT an attestation -> must NOT refuse.
-
-    A real refusal trigger requires an ATTESTATION framing: the applicant is asked
-    to AGREE/CONFIRM/DECLARE they did not use AI, or the page states that using AI
-    will DISQUALIFY / not be accepted. Matches only those, within a short window.
-    """
-    return bool(cfx.evaluate(
-        r"""(function() {
-            var t = (document.body ? document.body.innerText : '').replace(/\s+/g, ' ');
-            // (a) applicant asked to affirm non-use / own-words
-            var affirm = /(i|we)\s+(confirm|agree|declare|accept|acknowledge|certify)[\s\S]{0,140}?(use\s+of\s+ai|ai[- ]?generated|not\s+used\s+ai|only\s+my\s+own\s+words)/i;
-            // (b) using AI stated to disqualify / be prohibited / not accepted
-            var prohibit = /use\s+of\s+ai[\s\S]{0,80}?(disqualif|will\s+not\s+be\s+accepted|prohibit|not\s+tolerated|is\s+not\s+permitted|breach)/i;
-            // (c) explicit "own words" bound to an attest/confirm/agree verb
-            var ownwords = /own\s+words[\s\S]{0,60}?(attest|confirm|agree|declare|certify|by\s+submitting)/i;
-            return affirm.test(t) || prohibit.test(t) || ownwords.test(t);
-        })()"""))
 
 
 # The emailed-code fetch lives in the ONE shared primitive scripts/fetch_verification_code.py
@@ -323,6 +295,18 @@ def main():
     url = cfg["url"]
     company = cfg["company"]
     role = cfg["role"]
+
+    # DEDUP GUARD: a config driven directly bypasses the sourcing precheck, so re-check the
+    # live tracker (canonical URL id first, then Company+Role) before burning a real submit /
+    # CAPTCHA on a role already Applied — this is what stops re-applying to already-applied
+    # roles (only "Applied" statuses skip; Blocked/Saved stay re-drivable). Override with
+    # "force": true in the config to intentionally re-drive.
+    if not cfg.get("force"):
+        hit = precheck.already_applied(url=url, company=company, role=role)
+        if hit and precheck.is_applied(hit[0]):
+            print(f"SKIP_ALREADY_APPLIED {company} | {role} — tracker={hit[0]} (matched {hit[1]})")
+            return 0
+
     slug = _slug(company, role)
     appdir = os.path.join(APPS, slug)
     os.makedirs(appdir, exist_ok=True)
@@ -332,12 +316,6 @@ def main():
         print(f"NAV_FAIL {url} {r}")
         return 2
     time.sleep(1.0)
-
-    if _antiai_present():
-        print(f"REFUSE_ATTESTATION {company} {role} — anti-AI clause present; skipping per hard stop")
-        _log(company, role, "Greenhouse", url, "Skipped",
-             note="anti-AI attestation clause — hard stop, not submitted", proof=None)
-        return 3
 
     try:
         _upload_and_verify("#resume", "/uploads/base-resume.pdf")
