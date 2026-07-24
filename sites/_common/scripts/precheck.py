@@ -266,6 +266,28 @@ def guard(url=None, company=None, role=None, label=""):
         print(f"ALREADY_APPLIED status={hit[0]!r} matched={hit[1]}{tag} — "
               f"refusing duplicate submit: {who}")
         return True
+    # OFF-PROFILE WARNING (advisory, never blocks). The title screen runs at SOURCING, so a
+    # driver invoked on an explicit URL never saw it — that is how a High-Voltage "Design
+    # Engineer", a mid-level Software Engineer and a Content Marketer were applied to on
+    # 2026-07-24 and counted toward the target, against SKILL.md's "never pad with off-profile
+    # roles". Deliberately NOT a refusal: a tier-C stretch the operator chose on purpose is
+    # legitimate, and a hard gate here would silently kill those. It just makes the off-profile
+    # call VISIBLE at the moment of submit instead of after the fact.
+    if role:
+        try:
+            from check_title import check_title
+            v = check_title(role)
+            if not v.get("eligible"):
+                why = ("industrial/engineering 'design engineer', not a design role"
+                       if v.get("discipline_flag") else
+                       "above the junior→mid target band" if v.get("seniority_flag") else
+                       "no target-roles.md phrase matches")
+                print(f"⚠ OFF-PROFILE {role!r} — {why}. references/target-roles.md is the "
+                      f"scope; SKILL.md forbids padding the count with off-profile roles. "
+                      f"Proceeding (advisory only) — apply ONLY if this is a deliberate, "
+                      f"tailored stretch.")
+        except Exception:  # noqa: BLE001 — advisory check must never break an apply
+            pass
     return False
 
 

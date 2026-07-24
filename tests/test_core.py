@@ -96,6 +96,34 @@ class TestCheckTitle(unittest.TestCase):
             self.assertFalse(r["eligible"], f"{t} should be off-profile")
             self.assertTrue(r["discipline_flag"], f"{t} should set discipline_flag")
 
+    def test_power_and_infra_design_engineer_excluded(self):
+        """LIVE LEAK 2026-07-24: "HV Design Engineer" (High Voltage) scored Tier A off the bare
+        "design engineer" phrase and was actually APPLIED TO — a UX designer's CV sent to a
+        high-voltage power-engineering role, then counted toward the daily target. The
+        electrical-power and civil-infrastructure modifier families were simply missing from
+        _DESIGN_ENG_INDUSTRIAL."""
+        for t in ("HV Design Engineer", "LV Design Engineer", "EHV Design Engineer",
+                  "High Voltage Design Engineer", "Low Voltage Design Engineer",
+                  "Power Systems Design Engineer", "Substation Design Engineer",
+                  "Transmission Design Engineer", "Cable Design Engineer",
+                  "Rail Design Engineer", "Railway Design Engineer",
+                  "Highway Design Engineer", "Drainage Design Engineer",
+                  "Nuclear Design Engineer", "Offshore Wind Design Engineer",
+                  "Automation Design Engineer", "Tooling Design Engineer"):
+            r = check_title.check_title(t)
+            self.assertFalse(r["eligible"], f"{t} should be off-profile")
+            self.assertTrue(r["discipline_flag"], f"{t} should set discipline_flag")
+
+    def test_new_modifiers_only_affect_design_engineer_titles(self):
+        """The industrial screen must fire ONLY on '<modifier> design engineer' compounds —
+        adding modifiers must never knock out a real design title that happens to share a word
+        (a 'power'/'water'/'systems' token in a designer title is not an engineering role)."""
+        for t in ("Design Systems Designer", "Product Designer", "Content Designer",
+                  "Service Designer", "Interaction Designer", "UX Researcher"):
+            r = check_title.check_title(t)
+            self.assertTrue(r["eligible"], f"{t} must stay on-profile")
+            self.assertFalse(r["discipline_flag"], f"{t} must not be flagged industrial")
+
     def test_design_engineer_keeps_bare_and_ux_hybrids(self):
         # Bare "Design Engineer" stays Tier A (his literal positioning); a UX/creative
         # signal rescues a hybrid; unrelated IT/support titles are untouched.
@@ -583,6 +611,29 @@ class TestPrecheckPure(unittest.TestCase):
             self.assertTrue(precheck.guard(url=applied_url + "?utm_source=x"))
             # a genuinely different posting is NOT blocked
             self.assertFalse(precheck.guard(url="https://www.reed.co.uk/jobs/ux-designer/77001122"))
+        finally:
+            precheck.load_tracker = lt
+
+    def test_guard_warns_off_profile_but_never_blocks(self):
+        """The title screen runs at SOURCING, so a driver invoked on an explicit URL never saw
+        it — that is how an HV (High Voltage) "Design Engineer", a mid-level Software Engineer
+        and a Content Marketer were applied to on 2026-07-24 and counted toward the target.
+        guard() now surfaces that at submit time. ADVISORY ONLY: a deliberate tier-C stretch is
+        legitimate, so it must warn and still return False (never refuse)."""
+        lt = precheck.load_tracker
+        precheck.load_tracker = lambda: ({}, {})
+        try:
+            for role in ("HV Design Engineer", "Software Engineer (Mid-level)", "Content Marketer"):
+                buf = io.StringIO()
+                with contextlib.redirect_stdout(buf):
+                    blocked = precheck.guard(url="https://ex.com/x", role=role)
+                self.assertFalse(blocked, f"off-profile must NOT block the apply ({role})")
+                self.assertIn("OFF-PROFILE", buf.getvalue(), f"no warning for {role}")
+            # an on-profile role stays silent — a noisy guard gets ignored
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                precheck.guard(url="https://ex.com/y", role="Product Designer")
+            self.assertNotIn("OFF-PROFILE", buf.getvalue())
         finally:
             precheck.load_tracker = lt
 

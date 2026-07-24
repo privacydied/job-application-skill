@@ -81,8 +81,21 @@ _DESIGN_ENG_INDUSTRIAL = (
     "automotive", "mechatronic", "pcb", "firmware", "optical", "thermal", "acoustic",
     "instrumentation", "telecoms", "telecommunication", "manufacturing", "process",
     "controls", "systems", "hydraulic", "piping", "geotechnical", "asic", "fpga",
-    "building services", "renewable", "heat pump", "mep", "structural", "civil",
+    "building services", "renewable", "heat pump", "mep",
     "project design", "project",
+    # --- ELECTRICAL-POWER modifiers (added 2026-07-24 after a live leak) ---
+    # "HV Design Engineer" (High Voltage) scored Tier A off the bare "design engineer"
+    # phrase and was actually APPLIED TO — a UX designer's CV sent to a high-voltage
+    # power-engineering role. Power/voltage grades are the most common UK "<X> Design
+    # Engineer" family that wasn't represented here.
+    "hv", "lv", "ehv", "high voltage", "low voltage", "power", "substation",
+    "transmission", "distribution", "overhead line", "cable",
+    # --- civil/infrastructure + heavy-industry modifiers in the same family ---
+    "rail", "railway", "highway", "bridge", "tunnel", "drainage", "water",
+    "marine", "offshore", "subsea", "nuclear", "mining", "pipeline",
+    "wind", "solar", "battery", "automation", "robotics", "facade", "façade",
+    "steel", "concrete", "tooling", "injection", "sheet metal", "packaging",
+    "valve", "pump", "plant",
 )
 
 
