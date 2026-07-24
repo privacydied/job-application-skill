@@ -127,6 +127,10 @@ warm-map.json
 /run_spec_*.json
 /spec_*.json
 /apply_hackney_hdo.json
+# Per-run apply CONFIGS (runs/cfg_*.json): their "fill" block holds the applicant's REAL
+# name/email/phone — same PII class as applications/* and sites/_common/apply-defaults.json.
+# check-no-pii flagged these as untracked-but-not-ignored (one `git add -A` would leak them).
+/runs/
 
 # reCAPTCHA helper runtime state (per-run; may hold challenge specifics — never commit)
 captcha-audit.csv
