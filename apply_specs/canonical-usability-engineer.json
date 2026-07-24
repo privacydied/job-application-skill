@@ -1,0 +1,20 @@
+{
+  "url": "https://job-boards.greenhouse.io/canonical/jobs/7528952",
+  "company": "Canonical (Ubuntu)",
+  "role": "Usability Engineer - User Science",
+  "cv": "base-resume.pdf",
+  "fill": {
+    "Full Name": "Jane Doe",
+    "Email": "you@example.com",
+    "Phone": "+44 7700 900000",
+    "Location": "London, UK",
+    "LinkedIn": "https://www.linkedin.com/in/jane-doe",
+    "Portfolio": "https://example.com",
+    "Website": "https://example.com"
+  },
+  "combo": {
+    "authorized to work": "Yes",
+    "require sponsorship": "No"
+  },
+  "eeo": true
+}
