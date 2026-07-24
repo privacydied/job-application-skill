@@ -20,6 +20,7 @@ class of drift from recurring.
 | **Deep-dive playbooks** (referenced by SKILL.md) | `references/*.md` |
 | **Repo structure & file placement** (this contract) | `AGENTS.md` (this file) |
 | **Shared browser / ATS primitives** | `sites/_common/scripts/` ONLY |
+| **What shared primitives already exist** (grep-first index) | `references/shared-primitives.md` |
 
 When any doc references a script, it MUST use that script's **canonical path** (below).
 
@@ -78,6 +79,9 @@ Root-level entrypoints (the ONLY scripts that live at repo root):
    (e.g. `scripts/amazon_apply.py`); delete anything it supersedes.
 5. Before adding a script, check it doesn't already exist:
    `git ls-files | grep <name>` and `find . -name '<name>'`.
+0. **Before writing ANY primitive, grep the inventory: `references/shared-primitives.md`.** It
+   indexes every shared engine (cfx / atsform / precheck / check_title / board_cooldown / …) and
+   its public entrypoints. Most "new" infra already exists — extend it in place, don't re-fork.
 6. **Form-widget binding is shared infra — one home only: `sites/_common/scripts/atsform.py`.**
    Text fill, dropdown/react-select pick (`combobox_pick`), radios, checkboxes, upload, review
    all live there; board adapters **delegate** (`sites/ashbyhq/scripts/ashby.py`:

@@ -501,13 +501,15 @@ def apply(config_path: str, do_submit: bool = False) -> int:
         if set_checkbox(lbl, st) != 0:
             failures.append(f"checkbox:{lbl}")
 
-    # Required react-select comboboxes (location / US work authorization) MUST be committed
-    # via the native-setter ladder AFTER the text/toggle fills — atsform.combobox_pick does
-    # not bind these headlessly (verified 2026-07-24). Truthful values only:
+    # Required react-select comboboxes (location / US work authorization), committed AFTER the
+    # text/toggle fills. combobox_commit() DELEGATES to the shared atsform.combobox_pick — do NOT
+    # re-fork a board-local combobox here (the 2026-07-24 fork, since removed; the shared engine's
+    # _FIND_CONTROL disambiguation + free-text fallback + real-keystroke typing now bind these
+    # headlessly). Truthful values only:
     #   location        -> e.g. "London, United Kingdom" (applicant is London-based)
     #   authorized_in_us -> "No" for a British citizen with no US work authorization.
     # Match on a SHORT keyword (the ancestor DOM text holds only "Location" / "authorized",
-    # not the full field label), so the matcher actually resolves.
+    # not the full field label), so the matcher resolves the right field.
     if cfg.get("location"):
         if combobox_commit("location", cfg["location"]) != 0:
             failures.append("combobox:location")
@@ -515,16 +517,23 @@ def apply(config_path: str, do_submit: bool = False) -> int:
         if combobox_commit("authorized", str(cfg["authorized_in_us"])) != 0:
             failures.append("combobox:us_auth")
 
-    # Auto-tick all unchecked checkboxes (anti-AI attestation oath, etc.)
-    # User has authorised auto-ticking — no manual gate.
+    # Truthful checkbox auto-fill — tick ONLY affirmatively-true boxes; leave marketing / anti-AI /
+    # unknown / false ones unticked (and report them). Delegates to the shared engine
+    # (atsform.checkboxes_from_profile), which REPLACED blanket tick-all repo-wide (commit
+    # d945a9c). The old board-local code here was (a) an INTEGRITY regression — a raw "click every
+    # unchecked box" that would tick anti-AI/marketing/false boxes, the exact thing that commit
+    # removed — and (b) DEAD: its JS had a misplaced `return` (SyntaxError), so it silently no-op'd
+    # under the CfxError catch. Do NOT reintroduce a per-board tick-all; extend the shared primitive.
     try:
-        ticked = cfx.evaluate(
-            "(()=>{let n=0;var cb=document.querySelectorAll('input[type=checkbox]');for(var i=0;i<cb.length;i++){if(!cb[i].checked){cb[i].click();n++;}}}return n;})()"
-        )
-        if isinstance(ticked, int) and ticked > 0:
-            print(f"OK  auto-ticked {ticked} remaining checkbox(es)")
-    except cfx.CfxError:
-        pass
+        rep = atsform.checkboxes_from_profile()
+        if rep.get("ticked"):
+            print(f"OK  truthfully ticked {len(rep['ticked'])} checkbox(es): "
+                  f"{', '.join(rep['ticked'])[:120]}")
+        for cat in ("left_false", "left_unknown", "left_marketing", "left_antiai"):
+            if rep.get(cat):
+                print(f"  left unticked [{cat[5:]}]: {', '.join(rep[cat])[:120]}")
+    except Exception as e:  # noqa: BLE001 — truthful auto-fill is best-effort, never blocks apply
+        print(f"  checkbox auto-fill note: {str(e)[:80]}")
 
     print("\n===== pre-submit check =====")
     chk = check()

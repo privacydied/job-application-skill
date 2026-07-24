@@ -108,7 +108,8 @@ def _divergent_infra_guard():
         if offenders:
             print(f"note: {len(offenders)} duplicate-infra offender(s) — a shared primitive was "
                   f"re-forked in a board/driver file. Fix by DELEGATING to the shared engine "
-                  f"(AGENTS.md §no-divergent-duplicate); do NOT keep the fork or ship a second copy.")
+                  f"(the inventory is references/shared-primitives.md; rule: AGENTS.md "
+                  f"§no-divergent-duplicate). Do NOT keep the fork or ship a second copy.")
     except Exception:  # noqa: BLE001 — a guard hiccup must never block the loop
         pass
 
