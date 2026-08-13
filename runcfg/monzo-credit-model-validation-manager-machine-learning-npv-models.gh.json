@@ -1,0 +1,13 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Monzo",
+ "role": "Credit Model Validation Manager (Machine Learning & NPV Models)",
+ "url": "https://job-boards.greenhouse.io/monzo/jobs/8023162",
+ "source": "Greenhouse",
+ "fill": {
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work in the UK": "I am a British or Irish Citizen"
+ }
+}

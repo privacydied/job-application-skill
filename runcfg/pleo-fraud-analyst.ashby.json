@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Pleo",
+ "role": "Fraud Analyst",
+ "url": "https://jobs.ashbyhq.com/pleo/19b7ebc6-18ca-4340-9346-c9cd4746c03f",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

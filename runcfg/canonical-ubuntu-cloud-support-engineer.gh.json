@@ -1,0 +1,13 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Canonical (Ubuntu)",
+ "role": "Cloud Support Engineer",
+ "url": "https://job-boards.greenhouse.io/canonical/jobs/2456563",
+ "source": "Greenhouse",
+ "fill": {
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work in the UK": "I am a British or Irish Citizen"
+ }
+}

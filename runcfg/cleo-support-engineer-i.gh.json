@@ -1,0 +1,13 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Cleo",
+ "role": "Support Engineer I",
+ "url": "https://job-boards.greenhouse.io/cleo/jobs/4718011005",
+ "source": "Greenhouse",
+ "fill": {
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work in the UK": "I am a British or Irish Citizen"
+ }
+}

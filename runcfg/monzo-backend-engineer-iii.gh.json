@@ -1,0 +1,13 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Monzo",
+ "role": "Backend Engineer III",
+ "url": "https://job-boards.greenhouse.io/monzo/jobs/6635595",
+ "source": "Greenhouse",
+ "fill": {
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work in the UK": "I am a British or Irish Citizen"
+ }
+}

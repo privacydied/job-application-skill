@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Deliveroo",
+ "role": "Machine Learning Engineer",
+ "url": "https://jobs.ashbyhq.com/deliveroo/4e9da2a7-a8ef-4d58-a55b-89557af35e90",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

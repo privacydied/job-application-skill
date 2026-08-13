@@ -1,0 +1,25 @@
+{
+  "cv": "base-resume.pdf",
+  "company": "Miro",
+  "role": "Senior Product Designer - Growth, Monetisation",
+  "url": "https://jobs.ashbyhq.com/miro/a0759393-fcf5-4b45-bf8e-e2dd8c2a450f",
+  "source": "Ashby",
+  "fill": {
+    "Name": "Jane Doe",
+    "Email": "you@example.com",
+    "Phone": "+447****3456",
+    "LinkedIn Profile": "https://linkedin.com/in/example",
+    "Website (please include password if necessary)": "https://example.com",
+    "What is it about Miro that makes you interested in joining the team?": "Miro is where visual collaboration meets serious product craft. I want to design growth and monetisation experiences that feel as intuitive as the canvas itself, helping teams go from messy ideation to clear decisions.",
+    "Why do you feel you would be well suited for this role?": "I have shipped design systems and data-driven product surfaces for fintech and developer tools, and partnered closely with growth and monetisation teams. That mix of systems thinking and commercial instinct is exactly what this role needs."
+  },
+  "consent_options": [],
+  "toggles": {},
+  "comboboxes": {},
+  "eeo_overrides": {
+    "When were you born?": "Millennial",
+    "Which of the following best describes your gender identity?": "Male",
+    "Do you identify as a member of the LGBTQ+ community?": "No",
+    "None of the above": "None of the above"
+  }
+}

@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Too Good To Go",
+ "role": "Commercial Planning Analyst",
+ "url": "https://jobs.ashbyhq.com/toogoodtogo/2e5eb579-a63f-4560-b4ad-bdeb7fef2871",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

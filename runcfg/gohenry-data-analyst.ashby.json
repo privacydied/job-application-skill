@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "GoHenry",
+ "role": "Data Analyst",
+ "url": "https://jobs.ashbyhq.com/gohenry/09e04acc-a14d-41f7-b123-cbad1815fa81",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

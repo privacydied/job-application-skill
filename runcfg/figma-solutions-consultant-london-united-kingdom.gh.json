@@ -1,0 +1,13 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Figma",
+ "role": "Solutions Consultant (London, United Kingdom)",
+ "url": "https://boards.greenhouse.io/figma/jobs/5735493004?gh_jid=5735493004",
+ "source": "Greenhouse",
+ "fill": {
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work in the UK": "I am a British or Irish Citizen"
+ }
+}

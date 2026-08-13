@@ -1,0 +1,590 @@
+[
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/linear-solutions-engineer-europe.ashby.json",
+  "board": "ashby",
+  "company": "Linear",
+  "role": "Solutions Engineer, Europe",
+  "url": "https://jobs.ashbyhq.com/linear/d37b3d76-3080-47f9-8a19-60505573112c"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/sanity-software-engineering-manager-content-agent.ashby.json",
+  "board": "ashby",
+  "company": "Sanity",
+  "role": "Software Engineering Manager, Content Agent",
+  "url": "https://jobs.ashbyhq.com/sanity/b37521f5-66f7-4738-8098-6626853cad9a"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/quantexa-software-engineer.ashby.json",
+  "board": "ashby",
+  "company": "Quantexa",
+  "role": "Software Engineer",
+  "url": "https://jobs.ashbyhq.com/quantexa/a255bbab-562f-444d-99e1-5323f6818696"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/plaid-software-engineer.ashby.json",
+  "board": "ashby",
+  "company": "Plaid",
+  "role": "Software Engineer",
+  "url": "https://jobs.ashbyhq.com/plaid/5fc0bf62-9e80-4bbe-82f4-7fdf5461deb9"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/primer-architectural-designer-ii.ashby.json",
+  "board": "ashby",
+  "company": "Primer",
+  "role": "Architectural Designer II",
+  "url": "https://jobs.ashbyhq.com/primer/fcc5c671-1048-46ef-83cb-41d5875565a0"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/lendable-data-scientist.ashby.json",
+  "board": "ashby",
+  "company": "Lendable",
+  "role": "Data Scientist",
+  "url": "https://jobs.ashbyhq.com/lendable/805595d4-ce39-47db-82f5-8066c8fdea89"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/lendable-financial-crime-qa-analyst.ashby.json",
+  "board": "ashby",
+  "company": "Lendable",
+  "role": "Financial Crime QA Analyst",
+  "url": "https://jobs.ashbyhq.com/lendable/b5e45f00-7765-462b-ad4b-2ff0cadb2a61"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/lendable-it-support-engineer.ashby.json",
+  "board": "ashby",
+  "company": "Lendable",
+  "role": "IT Support Engineer",
+  "url": "https://jobs.ashbyhq.com/lendable/485ad578-67d0-41e5-ab33-51a9375f8387"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/lendable-security-grc-analyst.ashby.json",
+  "board": "ashby",
+  "company": "Lendable",
+  "role": "Security GRC Analyst",
+  "url": "https://jobs.ashbyhq.com/lendable/938e53b2-cd8d-484d-881d-8de39aa964fd"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/gohenry-data-analyst.ashby.json",
+  "board": "ashby",
+  "company": "GoHenry",
+  "role": "Data Analyst",
+  "url": "https://jobs.ashbyhq.com/gohenry/09e04acc-a14d-41f7-b123-cbad1815fa81"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/pleo-aml-analyst.ashby.json",
+  "board": "ashby",
+  "company": "Pleo",
+  "role": "AML Analyst",
+  "url": "https://jobs.ashbyhq.com/pleo/a54651f0-d946-4da6-b39b-826b1ed6d527"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/pleo-fraud-analyst.ashby.json",
+  "board": "ashby",
+  "company": "Pleo",
+  "role": "Fraud Analyst",
+  "url": "https://jobs.ashbyhq.com/pleo/19b7ebc6-18ca-4340-9346-c9cd4746c03f"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/freetrade-backend-product-engineer-mid-level.ashby.json",
+  "board": "ashby",
+  "company": "Freetrade",
+  "role": "Backend Product Engineer (Mid-level)",
+  "url": "https://jobs.ashbyhq.com/freetrade/52ad3d9d-1b19-4845-bdaa-3235a5abde58"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/freetrade-backend-software-engineer-mid-level.ashby.json",
+  "board": "ashby",
+  "company": "Freetrade",
+  "role": "Backend Software Engineer (Mid-level)",
+  "url": "https://jobs.ashbyhq.com/freetrade/21837466-ec48-4703-a15e-98d3097bfb14"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/freetrade-security-engineer-intern.ashby.json",
+  "board": "ashby",
+  "company": "Freetrade",
+  "role": "Security Engineer Intern",
+  "url": "https://jobs.ashbyhq.com/freetrade/f44c9df8-ec02-4fde-a75e-ad0f220147cd"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/paddle-software-engineer-go.ashby.json",
+  "board": "ashby",
+  "company": "Paddle",
+  "role": "Software Engineer - Go",
+  "url": "https://jobs.ashbyhq.com/paddle/de7ac3e5-16db-4a59-989d-5e7840b019b6"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/oaknorth-people-operations-analyst-12-month-ftc.ashby.json",
+  "board": "ashby",
+  "company": "OakNorth",
+  "role": "People Operations Analyst - 12 Month FTC",
+  "url": "https://jobs.ashbyhq.com/oaknorth/196ed6dd-bc28-4ee6-b20b-c7225f00b647"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/deliveroo-machine-learning-engineer.ashby.json",
+  "board": "ashby",
+  "company": "Deliveroo",
+  "role": "Machine Learning Engineer",
+  "url": "https://jobs.ashbyhq.com/deliveroo/4e9da2a7-a8ef-4d58-a55b-89557af35e90"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/deliveroo-software-engineer-ii-full-stack.ashby.json",
+  "board": "ashby",
+  "company": "Deliveroo",
+  "role": "Software Engineer II - Full-Stack",
+  "url": "https://jobs.ashbyhq.com/deliveroo/63f0c261-19c1-42c0-9705-30e588b6b4a1"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/deliveroo-software-engineer.ashby.json",
+  "board": "ashby",
+  "company": "Deliveroo",
+  "role": "Software Engineer",
+  "url": "https://jobs.ashbyhq.com/deliveroo/4e956baa-4b44-416c-bd5d-b2f750ab183f"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/deliveroo-software-engineer-new-grad.ashby.json",
+  "board": "ashby",
+  "company": "Deliveroo",
+  "role": "Software Engineer, New Grad",
+  "url": "https://jobs.ashbyhq.com/deliveroo/2b69d23b-30b5-46c8-95e8-48258ec05636"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/deliveroo-software-engineer-genai-platform.ashby.json",
+  "board": "ashby",
+  "company": "Deliveroo",
+  "role": "Software Engineer, GenAI Platform",
+  "url": "https://jobs.ashbyhq.com/deliveroo/78c5338a-6a37-4f5c-91c3-02707cab0726"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/deliveroo-software-engineer-machine-learning-infrastructure.ashby.json",
+  "board": "ashby",
+  "company": "Deliveroo",
+  "role": "Software Engineer, Machine Learning Infrastructure",
+  "url": "https://jobs.ashbyhq.com/deliveroo/58485b61-4c8e-4996-89bc-685d5e154b94"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/deliveroo-analyst-regional-security-operations-center.ashby.json",
+  "board": "ashby",
+  "company": "Deliveroo",
+  "role": "Analyst, Regional Security Operations Center",
+  "url": "https://jobs.ashbyhq.com/deliveroo/281024bc-f267-483c-8118-5b69c11ed3d5"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/deliveroo-analyst-risk-intelligence.ashby.json",
+  "board": "ashby",
+  "company": "Deliveroo",
+  "role": "Analyst, Risk Intelligence",
+  "url": "https://jobs.ashbyhq.com/deliveroo/520d3170-8d3c-480a-bc79-7ddd9cc65632"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/trainline-machine-learning-engineer.ashby.json",
+  "board": "ashby",
+  "company": "Trainline",
+  "role": "Machine Learning Engineer",
+  "url": "https://jobs.ashbyhq.com/trainline/7c9c4568-4b40-4f55-b4f4-d186d9053203"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/trainline-mlops-engineering-manager.ashby.json",
+  "board": "ashby",
+  "company": "Trainline",
+  "role": "MLOps Engineering Manager",
+  "url": "https://jobs.ashbyhq.com/trainline/1829dd8c-cad1-4d5d-95ea-4885f6c7c5b0"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/trainline-engineer-net-backend-london.ashby.json",
+  "board": "ashby",
+  "company": "Trainline",
+  "role": "Engineer - .NET Backend (London)",
+  "url": "https://jobs.ashbyhq.com/trainline/cd73d520-cb7b-4175-9151-8afb9df52250"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/trainline-treasury-analyst.ashby.json",
+  "board": "ashby",
+  "company": "Trainline",
+  "role": "Treasury Analyst",
+  "url": "https://jobs.ashbyhq.com/trainline/747ddf88-4e13-40f2-9bd9-03777474315e"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/trainline-junior-engineer-net-backend-london.ashby.json",
+  "board": "ashby",
+  "company": "Trainline",
+  "role": "Junior Engineer - .NET Backend (London)",
+  "url": "https://jobs.ashbyhq.com/trainline/68f597e9-60b3-482e-8d73-618d24b0bf8e"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/trainline-service-desk-engineer.ashby.json",
+  "board": "ashby",
+  "company": "Trainline",
+  "role": "Service Desk Engineer",
+  "url": "https://jobs.ashbyhq.com/trainline/d59b5f1b-7dfd-4426-a201-706acf959934"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/too-good-to-go-infor-m3-functional-finance-consultant.ashby.json",
+  "board": "ashby",
+  "company": "Too Good To Go",
+  "role": "Infor M3 Functional Finance Consultant",
+  "url": "https://jobs.ashbyhq.com/toogoodtogo/b5ac3974-61db-4cb5-abb4-7319d4bb8708"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/too-good-to-go-commercial-planning-analyst.ashby.json",
+  "board": "ashby",
+  "company": "Too Good To Go",
+  "role": "Commercial Planning Analyst",
+  "url": "https://jobs.ashbyhq.com/toogoodtogo/2e5eb579-a63f-4560-b4ad-bdeb7fef2871"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/too-good-to-go-backend-software-engineer.ashby.json",
+  "board": "ashby",
+  "company": "Too Good To Go",
+  "role": "Backend Software Engineer",
+  "url": "https://jobs.ashbyhq.com/toogoodtogo/83e14b3c-abb3-462e-9bcf-b2585bcea4ba"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/accurx-implementation-manager.ashby.json",
+  "board": "ashby",
+  "company": "Accurx",
+  "role": "Implementation Manager",
+  "url": "https://jobs.ashbyhq.com/accurx/e2401c37-0409-4d01-8526-3d08bef52800"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/figma-manager-software-engineering-ai-product-london-united-kingdom.gh.json",
+  "board": "greenhouse",
+  "company": "Figma",
+  "role": "Manager, Software Engineering - AI Product (London, United Kingdom)",
+  "url": "https://boards.greenhouse.io/figma/jobs/6099616004?gh_jid=6099616004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/figma-manager-solutions-consultant-london-united-kingdom.gh.json",
+  "board": "greenhouse",
+  "company": "Figma",
+  "role": "Manager, Solutions Consultant (London, United Kingdom)",
+  "url": "https://boards.greenhouse.io/figma/jobs/6111591004?gh_jid=6111591004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/figma-software-engineer-ai-product-london-united-kingdom.gh.json",
+  "board": "greenhouse",
+  "company": "Figma",
+  "role": "Software Engineer, AI Product (London, United Kingdom)",
+  "url": "https://boards.greenhouse.io/figma/jobs/5551697004?gh_jid=5551697004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/figma-software-engineer-production-engineering-london-united-kingdom.gh.json",
+  "board": "greenhouse",
+  "company": "Figma",
+  "role": "Software Engineer, Production Engineering (London, United Kingdom)",
+  "url": "https://boards.greenhouse.io/figma/jobs/5781928004?gh_jid=5781928004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/figma-solutions-consultant-london-united-kingdom.gh.json",
+  "board": "greenhouse",
+  "company": "Figma",
+  "role": "Solutions Consultant (London, United Kingdom)",
+  "url": "https://boards.greenhouse.io/figma/jobs/5735493004?gh_jid=5735493004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/airtable-delivery-consultant.gh.json",
+  "board": "greenhouse",
+  "company": "Airtable",
+  "role": "Delivery Consultant",
+  "url": "https://job-boards.greenhouse.io/airtable/jobs/8582568002"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/airtable-delivery-consultant-west-coast.gh.json",
+  "board": "greenhouse",
+  "company": "Airtable",
+  "role": "Delivery Consultant- West Coast",
+  "url": "https://job-boards.greenhouse.io/airtable/jobs/8597950002"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/airtable-software-engineer-compute-8-yoe.gh.json",
+  "board": "greenhouse",
+  "company": "Airtable",
+  "role": "Software Engineer, Compute (8+ YOE)",
+  "url": "https://job-boards.greenhouse.io/airtable/jobs/8442397002"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/airtable-software-engineer-infrastructure-8-yoe.gh.json",
+  "board": "greenhouse",
+  "company": "Airtable",
+  "role": "Software Engineer, Infrastructure (8+ YOE)",
+  "url": "https://job-boards.greenhouse.io/airtable/jobs/8400388002"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/canonical-ubuntu-cloud-support-engineer-london-uk-office.gh.json",
+  "board": "greenhouse",
+  "company": "Canonical (Ubuntu)",
+  "role": "Cloud Support Engineer (London UK office)",
+  "url": "https://job-boards.greenhouse.io/canonical/jobs/8023546"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/canonical-ubuntu-linux-desktop-support-engineer-london-uk-office.gh.json",
+  "board": "greenhouse",
+  "company": "Canonical (Ubuntu)",
+  "role": "Linux Desktop Support Engineer (London UK office)",
+  "url": "https://job-boards.greenhouse.io/canonical/jobs/7569101"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/vercel-devrel-engineer-agentic-infrastructure.gh.json",
+  "board": "greenhouse",
+  "company": "Vercel",
+  "role": "DevRel Engineer, Agentic Infrastructure",
+  "url": "https://job-boards.greenhouse.io/vercel/jobs/6122437004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/vercel-manager-solutions-architecture.gh.json",
+  "board": "greenhouse",
+  "company": "Vercel",
+  "role": "Manager, Solutions Architecture",
+  "url": "https://job-boards.greenhouse.io/vercel/jobs/5806456004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/vercel-security-engineer-detection-response.gh.json",
+  "board": "greenhouse",
+  "company": "Vercel",
+  "role": "Security Engineer, Detection Response",
+  "url": "https://job-boards.greenhouse.io/vercel/jobs/6111332004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/vercel-security-software-engineer-open-source-frameworks.gh.json",
+  "board": "greenhouse",
+  "company": "Vercel",
+  "role": "Security Software Engineer, Open Source Frameworks",
+  "url": "https://job-boards.greenhouse.io/vercel/jobs/6117204004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/vercel-software-engineer-agent.gh.json",
+  "board": "greenhouse",
+  "company": "Vercel",
+  "role": "Software Engineer, Agent",
+  "url": "https://job-boards.greenhouse.io/vercel/jobs/5704320004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/vercel-software-engineer-ai-gateway.gh.json",
+  "board": "greenhouse",
+  "company": "Vercel",
+  "role": "Software Engineer, AI Gateway",
+  "url": "https://job-boards.greenhouse.io/vercel/jobs/5798406004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/vercel-software-engineer-ai-sdk.gh.json",
+  "board": "greenhouse",
+  "company": "Vercel",
+  "role": "Software Engineer, AI SDK",
+  "url": "https://job-boards.greenhouse.io/vercel/jobs/5474915004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/vercel-software-engineer-cdn.gh.json",
+  "board": "greenhouse",
+  "company": "Vercel",
+  "role": "Software Engineer, CDN",
+  "url": "https://job-boards.greenhouse.io/vercel/jobs/5179639004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/vercel-software-engineer-cdn-content.gh.json",
+  "board": "greenhouse",
+  "company": "Vercel",
+  "role": "Software Engineer, CDN Content",
+  "url": "https://job-boards.greenhouse.io/vercel/jobs/6105394004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/vercel-software-engineer-compute.gh.json",
+  "board": "greenhouse",
+  "company": "Vercel",
+  "role": "Software Engineer, Compute",
+  "url": "https://job-boards.greenhouse.io/vercel/jobs/6113157004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/vercel-software-engineer-dashboard.gh.json",
+  "board": "greenhouse",
+  "company": "Vercel",
+  "role": "Software Engineer, Dashboard",
+  "url": "https://job-boards.greenhouse.io/vercel/jobs/5808568004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/vercel-software-engineer-deployment-infrastructure.gh.json",
+  "board": "greenhouse",
+  "company": "Vercel",
+  "role": "Software Engineer, Deployment Infrastructure",
+  "url": "https://job-boards.greenhouse.io/vercel/jobs/5633880004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/vercel-software-engineer-eve.gh.json",
+  "board": "greenhouse",
+  "company": "Vercel",
+  "role": "Software Engineer, eve",
+  "url": "https://job-boards.greenhouse.io/vercel/jobs/6098390004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/vercel-software-engineer-growth.gh.json",
+  "board": "greenhouse",
+  "company": "Vercel",
+  "role": "Software Engineer, Growth",
+  "url": "https://job-boards.greenhouse.io/vercel/jobs/5613601004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/vercel-software-engineer-next-js.gh.json",
+  "board": "greenhouse",
+  "company": "Vercel",
+  "role": "Software Engineer, Next.js",
+  "url": "https://job-boards.greenhouse.io/vercel/jobs/5993753004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/vercel-software-engineer-observability.gh.json",
+  "board": "greenhouse",
+  "company": "Vercel",
+  "role": "Software Engineer, Observability",
+  "url": "https://job-boards.greenhouse.io/vercel/jobs/5428982004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/vercel-software-engineer-workflows.gh.json",
+  "board": "greenhouse",
+  "company": "Vercel",
+  "role": "Software Engineer, Workflows",
+  "url": "https://job-boards.greenhouse.io/vercel/jobs/5798416004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/vercel-solutions-architect.gh.json",
+  "board": "greenhouse",
+  "company": "Vercel",
+  "role": "Solutions Architect",
+  "url": "https://job-boards.greenhouse.io/vercel/jobs/5804110004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/vercel-solutions-architect.gh.json",
+  "board": "greenhouse",
+  "company": "Vercel",
+  "role": "Solutions Architect",
+  "url": "https://job-boards.greenhouse.io/vercel/jobs/5806749004"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/graphcore-hardware-system-test-engineer.gh.json",
+  "board": "greenhouse",
+  "company": "Graphcore",
+  "role": "Hardware System Test Engineer",
+  "url": "https://job-boards.greenhouse.io/graphcore/jobs/8646834002"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/graphcore-lab-support-engineer-linux.gh.json",
+  "board": "greenhouse",
+  "company": "Graphcore",
+  "role": "Lab Support Engineer (Linux)",
+  "url": "https://job-boards.greenhouse.io/graphcore/jobs/8540581002"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/graphcore-software-engineer.gh.json",
+  "board": "greenhouse",
+  "company": "Graphcore",
+  "role": "Software Engineer",
+  "url": "https://job-boards.greenhouse.io/graphcore/jobs/8556059002"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/graphcore-software-engineer-triton.gh.json",
+  "board": "greenhouse",
+  "company": "Graphcore",
+  "role": "Software Engineer - Triton",
+  "url": "https://job-boards.greenhouse.io/graphcore/jobs/8466438002"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/graphcore-software-infrastructure-engineer.gh.json",
+  "board": "greenhouse",
+  "company": "Graphcore",
+  "role": "Software Infrastructure Engineer",
+  "url": "https://job-boards.greenhouse.io/graphcore/jobs/8554852002"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/graphcore-software-infrastructure-kubernetes-engineer.gh.json",
+  "board": "greenhouse",
+  "company": "Graphcore",
+  "role": "Software Infrastructure Kubernetes Engineer",
+  "url": "https://job-boards.greenhouse.io/graphcore/jobs/8420432002"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/graphcore-software-infrastructure-kubernetes-engineer.gh.json",
+  "board": "greenhouse",
+  "company": "Graphcore",
+  "role": "Software Infrastructure Kubernetes Engineer",
+  "url": "https://job-boards.greenhouse.io/graphcore/jobs/8605733002"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/graphcore-software-infrastructure-kubernetes-engineer.gh.json",
+  "board": "greenhouse",
+  "company": "Graphcore",
+  "role": "Software Infrastructure Kubernetes Engineer",
+  "url": "https://job-boards.greenhouse.io/graphcore/jobs/8605734002"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/graphcore-system-software-engineer.gh.json",
+  "board": "greenhouse",
+  "company": "Graphcore",
+  "role": "System Software Engineer",
+  "url": "https://job-boards.greenhouse.io/graphcore/jobs/8545354002"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/graphcore-system-software-engineer.gh.json",
+  "board": "greenhouse",
+  "company": "Graphcore",
+  "role": "System Software Engineer",
+  "url": "https://job-boards.greenhouse.io/graphcore/jobs/8545352002"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/monzo-backend-engineer-iii.gh.json",
+  "board": "greenhouse",
+  "company": "Monzo",
+  "role": "Backend Engineer III",
+  "url": "https://job-boards.greenhouse.io/monzo/jobs/6635595"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/monzo-credit-model-validation-manager-machine-learning-npv-models.gh.json",
+  "board": "greenhouse",
+  "company": "Monzo",
+  "role": "Credit Model Validation Manager (Machine Learning & NPV Models)",
+  "url": "https://job-boards.greenhouse.io/monzo/jobs/8023162"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/monzo-machine-learning-manager-fincrime.gh.json",
+  "board": "greenhouse",
+  "company": "Monzo",
+  "role": "Machine Learning Manager, Fincrime",
+  "url": "https://job-boards.greenhouse.io/monzo/jobs/7973753"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/monzo-machine-learning-manager-operations.gh.json",
+  "board": "greenhouse",
+  "company": "Monzo",
+  "role": "Machine Learning Manager, Operations",
+  "url": "https://job-boards.greenhouse.io/monzo/jobs/8043988"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/liberis-data-analyst-credit-risk.gh.json",
+  "board": "greenhouse",
+  "company": "Liberis",
+  "role": "Data Analyst - Credit Risk",
+  "url": "https://job-boards.greenhouse.io/liberis/jobs/8050659"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/liberis-fp-a-analyst.gh.json",
+  "board": "greenhouse",
+  "company": "Liberis",
+  "role": "FP&A Analyst",
+  "url": "https://job-boards.greenhouse.io/liberis/jobs/8030071"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/liberis-software-engineer.gh.json",
+  "board": "greenhouse",
+  "company": "Liberis",
+  "role": "Software Engineer",
+  "url": "https://job-boards.greenhouse.io/liberis/jobs/8071811"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/cleo-support-engineer-i.gh.json",
+  "board": "greenhouse",
+  "company": "Cleo",
+  "role": "Support Engineer I",
+  "url": "https://job-boards.greenhouse.io/cleo/jobs/4718011005"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/gymshark-business-analyst.gh.json",
+  "board": "greenhouse",
+  "company": "Gymshark",
+  "role": "Business Analyst",
+  "url": "https://job-boards.eu.greenhouse.io/gymshark/jobs/4935867101"
+ }
+]

@@ -1,0 +1,13 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Graphcore",
+ "role": "Lab Support Engineer (Linux)",
+ "url": "https://job-boards.greenhouse.io/graphcore/jobs/8540581002",
+ "source": "Greenhouse",
+ "fill": {
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work in the UK": "I am a British or Irish Citizen"
+ }
+}

@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Trainline",
+ "role": "Service Desk Engineer",
+ "url": "https://jobs.ashbyhq.com/trainline/d59b5f1b-7dfd-4426-a201-706acf959934",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

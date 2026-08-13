@@ -1,0 +1,13 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Monzo",
+ "role": "Machine Learning Manager, Operations",
+ "url": "https://job-boards.greenhouse.io/monzo/jobs/8043988",
+ "source": "Greenhouse",
+ "fill": {
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work in the UK": "I am a British or Irish Citizen"
+ }
+}

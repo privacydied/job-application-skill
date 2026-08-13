@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Trainline",
+ "role": "Machine Learning Engineer",
+ "url": "https://jobs.ashbyhq.com/trainline/7c9c4568-4b40-4f55-b4f4-d186d9053203",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

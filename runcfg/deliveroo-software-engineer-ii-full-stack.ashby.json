@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Deliveroo",
+ "role": "Software Engineer II - Full-Stack",
+ "url": "https://jobs.ashbyhq.com/deliveroo/63f0c261-19c1-42c0-9705-30e588b6b4a1",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

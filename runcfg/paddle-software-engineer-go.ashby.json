@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Paddle",
+ "role": "Software Engineer - Go",
+ "url": "https://jobs.ashbyhq.com/paddle/de7ac3e5-16db-4a59-989d-5e7840b019b6",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Freetrade",
+ "role": "Backend Product Engineer (Mid-level)",
+ "url": "https://jobs.ashbyhq.com/freetrade/52ad3d9d-1b19-4845-bdaa-3235a5abde58",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

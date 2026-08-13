@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Freetrade",
+ "role": "Security Engineer Intern",
+ "url": "https://jobs.ashbyhq.com/freetrade/f44c9df8-ec02-4fde-a75e-ad0f220147cd",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

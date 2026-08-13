@@ -1,0 +1,51 @@
+[
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/canonical-ubuntu-cloud-support-engineer.gh.json",
+  "board": "greenhouse",
+  "company": "Canonical (Ubuntu)",
+  "role": "Cloud Support Engineer",
+  "url": "https://job-boards.greenhouse.io/canonical/jobs/2456563"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/canonical-ubuntu-linux-desktop-support-engineer-london-uk-office.gh.json",
+  "board": "greenhouse",
+  "company": "Canonical (Ubuntu)",
+  "role": "Linux Desktop Support Engineer (London UK office)",
+  "url": "https://job-boards.greenhouse.io/canonical/jobs/7569101"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/cleo-support-engineer-i.gh.json",
+  "board": "greenhouse",
+  "company": "Cleo",
+  "role": "Support Engineer I",
+  "url": "https://job-boards.greenhouse.io/cleo/jobs/4718011005"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/graphcore-software-infrastructure-kubernetes-engineer.gh.json",
+  "board": "greenhouse",
+  "company": "Graphcore",
+  "role": "Software Infrastructure Kubernetes Engineer",
+  "url": "https://job-boards.greenhouse.io/graphcore/jobs/8605723002"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/lendable-financial-crime-qa-analyst.ashby.json",
+  "board": "ashby",
+  "company": "Lendable",
+  "role": "Financial Crime QA Analyst",
+  "url": "https://jobs.ashbyhq.com/lendable/b5e45f00-7765-462b-ad4b-2ff0cadb2a61"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/lendable-it-support-engineer.ashby.json",
+  "board": "ashby",
+  "company": "Lendable",
+  "role": "IT Support Engineer",
+  "url": "https://jobs.ashbyhq.com/lendable/485ad578-67d0-41e5-ab33-51a9375f8387"
+ },
+ {
+  "json_path": "/volume1/homes/pry/.hermes/skills/productivity/job-application/runcfg/gohenry-data-analyst.ashby.json",
+  "board": "ashby",
+  "company": "GoHenry",
+  "role": "Data Analyst",
+  "url": "https://jobs.ashbyhq.com/gohenry/09e04acc-a14d-41f7-b123-cbad1815fa81"
+ }
+]

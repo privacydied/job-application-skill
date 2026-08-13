@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Trainline",
+ "role": "Treasury Analyst",
+ "url": "https://jobs.ashbyhq.com/trainline/747ddf88-4e13-40f2-9bd9-03777474315e",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

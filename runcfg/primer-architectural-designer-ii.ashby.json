@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Primer",
+ "role": "Architectural Designer II",
+ "url": "https://jobs.ashbyhq.com/primer/fcc5c671-1048-46ef-83cb-41d5875565a0",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

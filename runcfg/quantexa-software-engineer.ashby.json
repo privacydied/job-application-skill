@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Quantexa",
+ "role": "Software Engineer",
+ "url": "https://jobs.ashbyhq.com/quantexa/a255bbab-562f-444d-99e1-5323f6818696",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

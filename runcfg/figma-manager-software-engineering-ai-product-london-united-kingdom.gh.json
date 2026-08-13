@@ -1,0 +1,13 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Figma",
+ "role": "Manager, Software Engineering - AI Product (London, United Kingdom)",
+ "url": "https://boards.greenhouse.io/figma/jobs/6099616004?gh_jid=6099616004",
+ "source": "Greenhouse",
+ "fill": {
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work in the UK": "I am a British or Irish Citizen"
+ }
+}

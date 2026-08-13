@@ -1,0 +1,13 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Figma",
+ "role": "Software Engineer, Production Engineering (London, United Kingdom)",
+ "url": "https://boards.greenhouse.io/figma/jobs/5781928004?gh_jid=5781928004",
+ "source": "Greenhouse",
+ "fill": {
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work in the UK": "I am a British or Irish Citizen"
+ }
+}

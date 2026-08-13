@@ -1,0 +1,24 @@
+{
+  "cv": "base-resume.pdf",
+  "company": "Accurx",
+  "role": "Senior Product Designer (12 month - FTC)",
+  "url": "https://jobs.ashbyhq.com/accurx/22984266-61b6-45e5-81d3-97ebcbc20207",
+  "source": "Ashby",
+  "eeo": true,
+  "fill": {
+    "Full Name": "Jane Doe",
+    "Email": "you@example.com",
+    "Phone": "+447****3456",
+    "Please provide a link to your portfolio": "https://example.com"
+  },
+  "radios": {
+    "Interview Recording Consent": "Yes, I consent to be recorded",
+    "By clicking submit you are agreeing to our Privacy Policy": "Acknowledge/Confirm"
+  },
+  "toggles": {
+    "Will you require visa sponsorship from Accurx": "No"
+  },
+  "comboboxes": {
+    "What is your highest level of Education/Training?": "Bachelors Degree (or equivalent)"
+  }
+}

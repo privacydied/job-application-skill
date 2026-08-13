@@ -1,0 +1,13 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Vercel",
+ "role": "Software Engineer, CDN",
+ "url": "https://job-boards.greenhouse.io/vercel/jobs/5179639004",
+ "source": "Greenhouse",
+ "fill": {
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work in the UK": "I am a British or Irish Citizen"
+ }
+}

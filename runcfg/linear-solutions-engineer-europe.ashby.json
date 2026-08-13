@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Linear",
+ "role": "Solutions Engineer, Europe",
+ "url": "https://jobs.ashbyhq.com/linear/d37b3d76-3080-47f9-8a19-60505573112c",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

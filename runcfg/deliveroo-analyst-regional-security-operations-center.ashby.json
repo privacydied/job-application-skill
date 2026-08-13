@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Deliveroo",
+ "role": "Analyst, Regional Security Operations Center",
+ "url": "https://jobs.ashbyhq.com/deliveroo/281024bc-f267-483c-8118-5b69c11ed3d5",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

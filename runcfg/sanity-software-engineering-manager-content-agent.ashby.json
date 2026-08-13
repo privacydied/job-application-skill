@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Sanity",
+ "role": "Software Engineering Manager, Content Agent",
+ "url": "https://jobs.ashbyhq.com/sanity/b37521f5-66f7-4738-8098-6626853cad9a",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

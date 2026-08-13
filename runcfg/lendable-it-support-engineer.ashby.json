@@ -1,0 +1,18 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Lendable",
+ "role": "IT Support Engineer",
+ "url": "https://jobs.ashbyhq.com/lendable/485ad578-67d0-41e5-ab33-51a9375f8387",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen",
+  "are you able to be in the office 3 days per week": "Yes",
+  "loan/credit card/auto loan": "Not applicable",
+  "understand that your data will be processed": "Yes"
+ }
+}

@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Deliveroo",
+ "role": "Software Engineer, GenAI Platform",
+ "url": "https://jobs.ashbyhq.com/deliveroo/78c5338a-6a37-4f5c-91c3-02707cab0726",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

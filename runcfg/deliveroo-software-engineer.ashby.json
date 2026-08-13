@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Deliveroo",
+ "role": "Software Engineer",
+ "url": "https://jobs.ashbyhq.com/deliveroo/4e956baa-4b44-416c-bd5d-b2f750ab183f",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

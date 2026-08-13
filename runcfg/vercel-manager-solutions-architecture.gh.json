@@ -1,0 +1,13 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Vercel",
+ "role": "Manager, Solutions Architecture",
+ "url": "https://job-boards.greenhouse.io/vercel/jobs/5806456004",
+ "source": "Greenhouse",
+ "fill": {
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work in the UK": "I am a British or Irish Citizen"
+ }
+}

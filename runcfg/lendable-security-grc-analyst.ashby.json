@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Lendable",
+ "role": "Security GRC Analyst",
+ "url": "https://jobs.ashbyhq.com/lendable/938e53b2-cd8d-484d-881d-8de39aa964fd",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

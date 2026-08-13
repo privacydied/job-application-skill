@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Trainline",
+ "role": "Engineer - .NET Backend (London)",
+ "url": "https://jobs.ashbyhq.com/trainline/cd73d520-cb7b-4175-9151-8afb9df52250",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

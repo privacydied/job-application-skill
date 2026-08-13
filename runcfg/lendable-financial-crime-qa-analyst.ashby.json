@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Lendable",
+ "role": "Financial Crime QA Analyst",
+ "url": "https://jobs.ashbyhq.com/lendable/b5e45f00-7765-462b-ad4b-2ff0cadb2a61",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

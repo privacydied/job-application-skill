@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Plaid",
+ "role": "Software Engineer",
+ "url": "https://jobs.ashbyhq.com/plaid/5fc0bf62-9e80-4bbe-82f4-7fdf5461deb9",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

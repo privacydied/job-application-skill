@@ -1,0 +1,13 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Liberis",
+ "role": "FP&A Analyst",
+ "url": "https://job-boards.greenhouse.io/liberis/jobs/8030071",
+ "source": "Greenhouse",
+ "fill": {
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work in the UK": "I am a British or Irish Citizen"
+ }
+}

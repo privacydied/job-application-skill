@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Lendable",
+ "role": "Data Scientist",
+ "url": "https://jobs.ashbyhq.com/lendable/805595d4-ce39-47db-82f5-8066c8fdea89",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

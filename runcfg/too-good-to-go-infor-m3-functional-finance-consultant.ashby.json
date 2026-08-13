@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Too Good To Go",
+ "role": "Infor M3 Functional Finance Consultant",
+ "url": "https://jobs.ashbyhq.com/toogoodtogo/b5ac3974-61db-4cb5-abb4-7319d4bb8708",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "OakNorth",
+ "role": "People Operations Analyst - 12 Month FTC",
+ "url": "https://jobs.ashbyhq.com/oaknorth/196ed6dd-bc28-4ee6-b20b-c7225f00b647",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

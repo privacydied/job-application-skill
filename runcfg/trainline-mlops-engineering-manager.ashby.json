@@ -1,0 +1,15 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Trainline",
+ "role": "MLOps Engineering Manager",
+ "url": "https://jobs.ashbyhq.com/trainline/1829dd8c-cad1-4d5d-95ea-4885f6c7c5b0",
+ "source": "Ashby",
+ "location": "London, United Kingdom",
+ "fill": {
+  "Name": "Jane Doe",
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work": "I am a British or Irish Citizen"
+ }
+}

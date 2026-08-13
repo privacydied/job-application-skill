@@ -1,0 +1,13 @@
+{
+ "cv": "base-resume.pdf",
+ "company": "Airtable",
+ "role": "Software Engineer, Infrastructure (8+ YOE)",
+ "url": "https://job-boards.greenhouse.io/airtable/jobs/8400388002",
+ "source": "Greenhouse",
+ "fill": {
+  "Email": "you@example.com"
+ },
+ "radios": {
+  "right to work in the UK": "I am a British or Irish Citizen"
+ }
+}
