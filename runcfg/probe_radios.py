@@ -1,9 +1,12 @@
 import sys, json
 sys.path.insert(0, 'sites/_common/scripts'); sys.path.insert(0, 'sites/ashbyhq/scripts')
 import cfx, ashby
-URL = sys.argv[1]
-cfx.goto(URL); ashby.reveal()
-expr = r"""
+
+
+def main():
+    URL = sys.argv[1]
+    cfx.goto(URL); ashby.reveal()
+    expr = r"""
 (() => {
   const groups = {};
   for (const r of document.querySelectorAll('input[type=radio]')) {
@@ -25,7 +28,11 @@ expr = r"""
   return JSON.stringify(out);
 })()
 """
-for d in json.loads(cfx.evaluate(expr)):
-    print("GRP:", d['name'])
-    print("  Q:", d['q'])
-    for o in d['opts']: print("    -", o)
+    for d in json.loads(cfx.evaluate(expr)):
+        print("GRP:", d['name'])
+        print("  Q:", d['q'])
+        for o in d['opts']: print("    -", o)
+
+
+if __name__ == "__main__":
+    main()
