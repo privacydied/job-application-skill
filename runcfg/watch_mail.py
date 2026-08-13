@@ -33,11 +33,11 @@ while time.time() < end:
                     for p in m.walk():
                         if p.get_content_type()=='text/plain':
                             try: body=p.get_payload(decode=True).decode('utf-8','replace')
-                            except: pass
+                            except (AttributeError, UnicodeDecodeError, TypeError): pass
                             break
                 else:
                     try: body=m.get_payload(decode=True).decode('utf-8','replace')
-                    except: pass
+                    except (AttributeError, UnicodeDecodeError, TypeError): pass
                 import re
                 code=re.findall(r'\b([A-Za-z0-9]{6,8})\b', body)
                 seen.add(mid)

@@ -2484,10 +2484,34 @@ class TestSearchPlan(unittest.TestCase):
         r = self.sp.plan(searches=self._searches, holds=[], target=10)
         self.assertEqual(r["verdict"], "DONE")
 
-    def test_captcha_hold_beats_everything(self):
+    def test_captcha_hold_on_one_site_does_not_halt_other_boards(self):
+        """A parked CAPTCHA pins ITS site only. Regression: any captcha row used to return
+        HOLD, so one held Greenhouse form made every later firing refuse to source at all
+        while a dozen other boards sat drivable."""
         r = self.sp.plan(searches=self._searches,
-                         holds=[{"type": "captcha", "site": "x", "role": "", "url": "", "note": ""}])
+                         holds=[{"type": "captcha", "site": "linkedin", "role": "",
+                                 "url": "", "note": ""}])
+        self.assertEqual(r["verdict"], "WORK")
+        self.assertEqual([s["board"] for s in r["clear"]], ["indeed"])
+
+    def test_captcha_hold_without_site_halts_everything(self):
+        """Blank/`*`/`all` site is the explicit halt-everything escape hatch."""
+        for site in ("", "*", "all"):
+            r = self.sp.plan(searches=self._searches,
+                             holds=[{"type": "captcha", "site": site, "role": "",
+                                     "url": "", "note": ""}])
+            self.assertEqual(r["verdict"], "HOLD", f"site={site!r}")
+
+    def test_captcha_hold_is_reported_when_it_blocks_the_last_board(self):
+        """Site-scoped, but nothing else left => HOLD (not an unactionable SLEEP wake_at=None),
+        so the user still gets the noVNC nudge."""
+        r = self.sp.plan(searches=self._searches,
+                         holds=[{"type": "captcha", "site": "linkedin", "role": "",
+                                 "url": "", "note": ""},
+                                {"type": "login", "site": "indeed", "role": "",
+                                 "url": "", "note": ""}])
         self.assertEqual(r["verdict"], "HOLD")
+        self.assertEqual(r["captcha_hold"]["site"], "linkedin")
 
     def test_login_hold_skips_only_that_site(self):
         r = self.sp.plan(searches=self._searches,

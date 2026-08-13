@@ -14,7 +14,10 @@ INPUTS (all small on-disk CSVs):
   application-tracker.csv   to count today's confirmed Applied rows
 
 VERDICT (precedence order):
-  HOLD  — a non-sanctioned CAPTCHA is held on the user: halt everything.
+  HOLD  — a non-sanctioned CAPTCHA is held on the user AND it is the last thing blocking
+          work: either the row names no site (blank/`*`/`all` = explicit halt-everything),
+          or every other search is already blocked/cooling. A site-scoped captcha row with
+          other boards still drivable is NOT a HOLD — it skips that board and returns WORK.
   DONE  — today's confirmed Applied count already meets the run target: stop, don't
           source (a prior same-day firing may have finished the goal). NEW 2026-07-15,
           folds the old SKILL.md bash grep into the checkpoint so a fresh instance
@@ -63,7 +66,8 @@ def read_searches(path=SEARCHES):
 
 def read_holds(path=HOLDS):
     """Active hard-stop holds. Format: type,site,role,url,created_at,note
-    `type` is 'captcha' (halts everything) or 'login' (blocks only that site).
+    `type` is 'captcha' or 'login' — BOTH block only the named `site`. A 'captcha' row with
+    a blank/`*`/`all` site is the explicit halt-everything escape hatch.
     Missing file / no rows => none. Delete a row (or the file) to clear it."""
     holds = []
     try:
@@ -123,12 +127,25 @@ def plan(now=None, target=DEFAULT_TARGET, searches=None, holds=None,
     if not searches:
         return {"verdict": "ERROR", "error": "searches.csv has no board,query rows"}
 
-    captcha_hold = next((h for h in holds if h["type"] == "captcha"), None)
+    # A CAPTCHA hold pins the SITE it was raised on — not the whole loop (2026-08-13).
+    # Previously ANY captcha row returned HOLD, so one parked Greenhouse CAPTCHA made every
+    # later firing refuse to source at all ("do NOT open a browser") while a dozen other
+    # boards sat drivable. A captcha on Canonical's Greenhouse says nothing about WTTJ.
+    # Scope it like a login hold; only halt globally when the row names no specific site
+    # (site blank / `*` / `all`), which is the explicit "stop everything" escape hatch.
+    captcha_holds = [h for h in holds if h["type"] == "captcha"]
+    global_captcha = next(
+        (h for h in captcha_holds
+         if (h.get("site") or "").strip().lower() in ("", "*", "all")), None)
+    captcha_blocked = {bc.norm(h["site"]) for h in captcha_holds
+                       if (h.get("site") or "").strip().lower() not in ("", "*", "all")}
     login_blocked = {bc.norm(h["site"]) for h in holds if h["type"] == "login"}
+    # Sites that cannot be sourced this firing, whatever the reason.
+    blocked_sites = login_blocked | captcha_blocked
 
-    if captcha_hold:
-        return {"verdict": "HOLD", "captcha_hold": captcha_hold,
-                "login_blocked": login_blocked}
+    if global_captcha:
+        return {"verdict": "HOLD", "captcha_hold": global_captcha,
+                "login_blocked": login_blocked, "captcha_blocked": captcha_blocked}
 
     done_n = applied_today(day=now.strftime("%Y-%m-%d")) if count_applied else 0
     # NB the DONE gate is evaluated AFTER inventory is computed (below), so a met target can
@@ -148,8 +165,8 @@ def plan(now=None, target=DEFAULT_TARGET, searches=None, holds=None,
                     if bc.daily_limit_active(b, now=now, rows=cd_rows)}
     clear, cooling = [], []
     for s in searches:
-        if bc.norm(s["board"]) in login_blocked:
-            continue  # that whole site is login-walled this firing
+        if bc.norm(s["board"]) in blocked_sites:
+            continue  # that whole site is login-walled / captcha-held this firing
         if bc.norm(s["board"]) in rate_limited:
             # The board-wide daily cap is SELF-CLEARING, so fold its remaining time into
             # `cooling` — otherwise, when every actionable board is daily-capped, plan()
@@ -206,6 +223,14 @@ def plan(now=None, target=DEFAULT_TARGET, searches=None, holds=None,
         return {"verdict": "SLEEP", "wake_at": wake_at, "in_hours": soonest_rem,
                 "cooling": cooling, "soonest": soonest_s, "login_blocked": login_blocked,
                 "rate_limited": rate_limited}
+
+    # Nothing clear, nothing cooling. If a parked CAPTCHA is what's actually holding the last
+    # drivable site, surface HOLD (so the user gets the noVNC nudge) rather than an
+    # unactionable `SLEEP wake_at=None`. Now it means "the captcha IS the blocker", not
+    # merely "a captcha exists somewhere".
+    if captcha_holds:
+        return {"verdict": "HOLD", "captcha_hold": captcha_holds[0],
+                "login_blocked": login_blocked, "captcha_blocked": captcha_blocked}
 
     # No clear searches and nothing cooling => everything is login-walled.
     return {"verdict": "SLEEP", "wake_at": None, "in_hours": None, "cooling": [],

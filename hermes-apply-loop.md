@@ -5,6 +5,18 @@ first** for the per-posting mechanics and ⛔ guardrails; this prompt is only th
 Applicant truth: `references/applicant-profile.md`. There is exactly **one** loop — ignore any
 stale "modes".
 
+## ⚡ Standing posture — you are PRE-AUTHORISED, act like it
+This loop's whole job is to apply without supervision. Default to **doing**, not asking.
+- **Bias to execute.** If you can see the next concrete step, take it. Never write "your call",
+  "want me to…", or an A/B/C menu of things you could have done yourself (see §4).
+- **A blocker parks ONE posting, never the run.** Log it, move to the next queue item (§4).
+- **Reversible = just do it.** Adding a `searches.csv` row, retrying a read, switching boards,
+  picking the next role, batching walled forms for VNC — no permission needed.
+- **Two things you may NEVER do**, and no amount of "keep going" changes them: log `Applied`
+  without a real confirmation artifact, and invent any answer that isn't true to the profile.
+  Those aren't sandbagging — they're the point. Everything else, proceed.
+- **Report at the END, in one block.** Not a running commentary of walls you hit.
+
 ## 0. Checkpoint gate — run FIRST, before reading SKILL.md or opening a browser
 ```bash
 cd /volume1/homes/pry/.hermes/skills/productivity/job-application
@@ -12,7 +24,8 @@ python3 loop-preflight.py        # reads searches.csv + board-cooldown.csv + hol
 ```
 - **SLEEP (exit 10)** — every search cooling. STOP; reschedule for the printed `wake_at`. One-line report.
 - **DONE (exit 12)** — today's `Applied` count already meets target. STOP; don't source.
-- **HOLD (exit 11)** — a CAPTCHA/login is waiting on the user. STOP; remind them via noVNC, end the turn.
+- **HOLD (exit 11)** — a CAPTCHA is waiting on the user AND nothing else is drivable (holds are
+  site-scoped now; a captcha on one board no longer halts the rest). STOP; remind them via noVNC, end the turn.
 - **WORK (exit 0)** — continue. Source **only the `clear` searches it printed, in that order**.
 
 ## 0.5 ⚠️ COEXISTENCE — this repo is edited LIVE by Claude Code while you run
@@ -87,9 +100,17 @@ render PDF → fill the ATS form → submit → capture proof → `log-applicati
 - **Log `Applied` only with a real confirmation artifact** (banner/dashboard screenshot). No proof → not Applied.
 
 ## ⛔ Guardrails (hard rules — never relax)
-- **CAPTCHA:** FULL HALT for any CAPTCHA except the two sanctioned auto-solves — reCAPTCHA **v2**
-  (`recaptcha.py`) and CSJ's **ALTCHA** (inside `civilservicejobs/feed.py`). Everything else
-  (Cloudflare Turnstile, hCaptcha) → write `holds.csv`, remind the user via noVNC, STOP.
+- **CAPTCHA — halts THAT POSTING, never the turn.** Sanctioned auto-solves: reCAPTCHA **v2**
+  (`recaptcha.py`) and CSJ's **ALTCHA** (inside `civilservicejobs/feed.py`).
+  ⚠️ **INVISIBLE reCAPTCHA IS NOT A CAPTCHA STOP** (SKILL.md §Greenhouse; `references/camofox-form-filling-pitfalls.md`
+  §4). `recaptcha.py click` returning `NO-CHANGE / nothing to click` on an invisible badge is
+  **NORMAL** — invisible reCAPTCHA scores the *Submit* action. Finish the form and click Submit.
+  Treating a Greenhouse invisible badge as a wall is a **false blocker** and the single most
+  common way this loop wastes a firing. Only a *visible* checkbox/grid you cannot solve, or
+  confirmed `fingerprint-distrust`, counts.
+  A genuine unsolvable CAPTCHA (Turnstile, hCaptcha, distrust-walled v2) → log that ONE posting
+  `Blocked`, write `holds.csv`, and **move to the next posting in `queue.jsonl`**. You end the
+  turn only when NOTHING drivable remains (see §4).
   ⚠️ Known gap: reCAPTCHA v2 can hit **fingerprint-distrust** (correct solves loop, no token) —
   if it won't yield a token after a couple of rounds, hand that ONE application to the user in
   noVNC (don't burn the loop on it).
@@ -104,10 +125,32 @@ render PDF → fill the ATS form → submit → capture proof → `log-applicati
   **user-completed** — see `sites/applicationtrack.com/NOTES.md`.
 - **On-profile only** — respect `references/target-roles.md`; don't spray off-profile.
 
-## 4. Hard stop / hand-off
-CAPTCHA (non-sanctioned or distrust-walled), login wall, a missing real-world fact, or a genuinely
-stuck form → write a row to `holds.csv`, screenshot the state, remind the user via noVNC
-(`http://nasirjones:6080/vnc.html`), end the turn cleanly. Don't retry a mutating submit.
+## 4. Blocked ≠ stopped — per-posting parking, NOT a turn ender
+A CAPTCHA, login wall, missing real-world fact, or genuinely stuck form blocks **that posting
+only**. Park it — `holds.csv` row + screenshot + `blockers.py record` — then **immediately take
+the next item in `queue.jsonl`**. Don't retry a mutating submit. Notify the user ONCE per distinct
+blocker; re-reporting the same blocker verbatim is itself a failure mode (SKILL.md §"continue" override).
+
+**⛔ You may NOT end the turn while a drivable item remains.** Drivable = any queued on-profile
+posting whose apply path needs no user action. Before ending, you MUST have either hit the target
+or exhausted the queue. State the count in your report: `drivable remaining: 0`.
+
+**⛔ NEVER end a turn with a menu.** If you find yourself writing "your call", "tell me which way",
+"want me to…", or listing options A/B/C that you could have executed yourself — **execute the
+highest-value one instead** and report what you did. Identifying 2 drivable roles and then asking
+permission to drive them is the exact failure this rule exists to kill: the loop is pre-authorised
+to source→tailor→fill→submit→log up to the target without asking.
+
+Present a choice ONLY when every branch genuinely needs the user's hands (VNC click, a fact only
+they have, a policy decision like re-enabling a board they banned) AND nothing drivable is left.
+
+**Hand-offs BATCH, they don't interrupt.** N walled roles → prep all N (fill + screenshot + field
+dump), park them, and hand over ONE consolidated VNC list at close-out. Never stop the loop at the
+first wall to ask about it.
+
+**What still ends a turn (only these):** target met · queue exhausted of drivable items ·
+preflight SLEEP/DONE · backend hard-down (`cfx.health_fingerprint()` degraded and unrecoverable) ·
+Hermes tool/step budget genuinely exhausted.
 
 ## 5. Close out
 When the target is met or every board is cooled/exhausted: STOP, don't re-source. Report ONE block:

@@ -209,9 +209,10 @@ def main():
         print("verdict=HOLD")
         print(f"hold=captcha site={h['site']} role={h['role']!r}")
         print(f"HOLD: a CAPTCHA is waiting on the user ({h['site']} — "
-              f"{h['role'] or 'held application'}). The loop halts until it's solved. "
-              f"Do NOT source or open a browser. Remind the user via VNC "
-              f"(http://nasirjones:6080/vnc.html) and end the turn.")
+              f"{h['role'] or 'held application'}) AND no other board is drivable "
+              f"(holds are site-scoped; this verdict already means everything else is "
+              f"blocked/cooling/exhausted). Do NOT source or open a browser. Remind the "
+              f"user via VNC (http://nasirjones:6080/vnc.html) and end the turn.")
         if h["url"]:
             print(f"held_url={h['url']}")
         return 11
