@@ -27,10 +27,6 @@ import time
 sys.path.insert(0, "sites/_common/scripts")
 import cfx  # noqa: E402
 
-url = sys.argv[1]
-cfx.goto(url)
-time.sleep(2)
-
 
 def near_label(el):
     p = el.closest("label")
@@ -74,15 +70,28 @@ js = r"""(function(){
   for(var c of cbs){ var l=lab(c); if(l&&l!='(unlabeled)') out.push({t:'check', label:l.slice(0,60), chk:c.checked}); }
   return out;
 })()"""
-res = cfx.evaluate(js) or []
-for f in res:
-    if f["t"] == "select":
-        print(f"[SELECT] {f['label'][:50]} req={f['req']} opts={f['opts'][:6]}")
-    elif f["t"] == "rselect":
-        print(f"[RSELECT] {f['label'][:50]} req={f['req']} ph='{f['ph']}'")
-    elif f["t"] == "essay":
-        print(f"[ESSAY] {f['label'][:55]} req={f['req']} len={f['len']}")
-    elif f["t"] == "text":
-        print(f"[TEXT*] {f['label'][:50]} ='{f['val']}'")
-    elif f["t"] == "check":
-        print(f"[CHECK] {f['label'][:55]} checked={f['chk']}")
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("usage: inspect_gh_form.py <greenhouse-url>", file=sys.stderr)
+        return 2
+    url = sys.argv[1]
+    cfx.goto(url)
+    time.sleep(2)
+    res = cfx.evaluate(js) or []
+    for f in res:
+        if f["t"] == "select":
+            print(f"[SELECT] {f['label'][:50]} req={f['req']} opts={f['opts'][:6]}")
+        elif f["t"] == "rselect":
+            print(f"[RSELECT] {f['label'][:50]} req={f['req']} ph='{f['ph']}'")
+        elif f["t"] == "essay":
+            print(f"[ESSAY] {f['label'][:55]} req={f['req']} len={f['len']}")
+        elif f["t"] == "text":
+            print(f"[TEXT*] {f['label'][:50]} ='{f['val']}'")
+        elif f["t"] == "check":
+            print(f"[CHECK] {f['label'][:55]} checked={f['chk']}")
+
+
+if __name__ == "__main__":
+    sys.exit(main())

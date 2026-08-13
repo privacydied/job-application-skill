@@ -45,13 +45,31 @@ CANONICAL_MARKER = "# Applicant Profile"
 _PLACEHOLDER_NAMES = ("Jane Doe", "[Your Name]", "Your Name")
 
 
+# Stale mirror dirs (see AGENTS.md / audit 2026-08-13: t_8449b999). SKILL.md:93 warns a
+# stale copy of the skill lives at $HOME/job-application-shared/. Running the loop from the
+# mirror executes rotted code. Reject it loudly instead of silently using stale scripts.
+_MIRROR_DIRS = (
+    os.path.realpath(os.path.expanduser("~/job-application-shared")),
+    "/volume1/homes/pry/job-application-shared",
+)
+
+
 def assert_canonical_dir():
-    """Gate two failure modes before the loop runs against the wrong person:
-      1. references/applicant-profile.md is missing → you haven't created your profile
+    """Gate three failure modes before the loop runs against the wrong person:
+      1. we are NOT running from the live skill — a stale mirror copy
+         (e.g. ~/job-application-shared/) would execute rotted code.
+      2. references/applicant-profile.md is missing → you haven't created your profile
          yet (copy references/applicant-profile.example.md and fill it in), or you're in
          the wrong directory.
-      2. the profile is still the shipped TEMPLATE (placeholder name) → personalise it
+      3. the profile is still the shipped TEMPLATE (placeholder name) → personalise it
          first, or you'd apply as "Jane Doe"."""
+    real_here = os.path.realpath(_here)
+    if real_here in _MIRROR_DIRS:
+        print("verdict=ERROR")
+        print(f"ERROR: running from the STALE MIRROR dir {real_here!r}. "
+              f"The live skill is ~/.hermes/skills/productivity/job-application/. "
+              f"Cd there and re-run; do not execute the mirror copy.")
+        return False
     try:
         with open(PROFILE, encoding="utf-8", errors="replace") as f:
             first = f.readline().strip()

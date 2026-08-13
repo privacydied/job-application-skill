@@ -3,6 +3,24 @@ name: job-application
 description: Autonomous end-to-end job application workflow — sourcing postings via the camofox browser (LinkedIn, Indeed, Welcome to the Jungle), tailoring resume/cover letter to a JD, filling and submitting application forms on the user's behalf, drafting outreach, tracking applications, and interview prep. Load for any task about applying to jobs, customizing a resume, or running a job hunt.
 ---
 
+# ⛔ HERMES BOOTSTRAP — read this BEFORE any browser/apply task (Claude Code skips it)
+
+Claude Code gets `CFX_*` injected by a PostToolUse hook. **Hermes has no hook**, so every
+Hermes terminal call starts with NO camofox env — the first `cfx` call dies with
+`CFX_KEY: Set CFX_KEY…` or `401` unless you bootstrap first. Do this FIRST, every call:
+
+    python3 sites/_common/scripts/cfx.py init     # exit 0 = ready; non-zero = STOP, fix it
+
+`cfx.py init` loads the key from `.jobenv.run`, ensures a LIVE tab, syncs it to every
+pointer file, and asserts backend health in one shot. After it returns 0 you can use
+`cfx.sh` / `cfx.py` / any site script directly. If it fails, read its message — do NOT
+fall back to manual `source`/tab-reopen unless `init` itself is broken.
+
+⛔ **NEVER use Hermes's native `browser_navigate` / `browser_click` / `browser_type` / etc.**
+They are a thin incomplete subset (no JS eval, no tab listing, no coordinate/iframe clicks,
+no file upload — see `sites/_common/CAPABILITY-GAPS.md`). Driving the skill through them
+produces FAKE "stuck" results. All browsing goes through `cfx.sh` / `cfx.py` only.
+
 # Job Application
 
 Run a focused, high-conversion job hunt **autonomously, end to end**. Core principle: **one resume per human, many tailored versions per application** — never send a generic resume; match each application to the JD via keyword + achievement alignment.
@@ -48,7 +66,17 @@ All navigation runs through **camofox** (anti-detect Firefox) via `cfx.sh`/`cfx.
 - **Backend health = `curl -fsS http://localhost:9377/health`** (the real liveness signal, not whether open-tab navigated). `cfx.restart_engine()` self-heals via a NOPASSWD sudoers rule (drops tabs; login persists in the profile). If restart says "a password is required" the rule is absent — wait ~90s idle for self-heal, then a fresh tab via `cfx.goto`. **`cfx.evaluate` intermittently 500s on heavy ATS/VacancyFiller pages** (phantom — page renders fine, just the eval call fails). Three proven fixes, in order: (1) a stale tab handle in the python module causes phantom 500s — call `cfx.ensure_tab(persist=False)` once before `cfx.goto` to reset it; (2) retry the eval 2–3× with a 2s sleep; (3) **most reliable: route the call through the shell wrapper** — `bash sites/_common/scripts/cfx.sh eval '<js expression>'` is the SAME REST endpoint but does NOT suffer the python `cfx.evaluate` 500s. When `evaluate` keeps flaking on applicationtrack.com eforms, switch all reads/fills to `cfx.sh eval`. The native `browser_*` tools are a last-resort fallback driving the same tab. **⚠️ The shell `cfx.sh eval` wrapper is NOT immune to the 500 either — complex IIFE expressions that RETURN an object/array literal (e.g. `JSON.stringify({...})` of DOM-shaped structures, or `[...].map(...)`) return `{"error":"Internal server error"}` even for valid JS.** Keep probe/eval expressions returning FLAT PRIMITIVES (`JSON.stringify` of a plain string-list joined with `" | "`, or a count/boolean) — never return a structured object/array that mirrors DOM nodes. If you must return a list, `return out.join(" | ")` (a string), not `return JSON.stringify(out)` of objects. This is the #1 cause of phantom `cfx.sh eval` 500s on heavy Reed/Ashby pages.
 
 ### Bootstrap (terminal-driven cfx)
-Full step-by-step: `references/hermes-bootstrap.md`. Essentials: **Claude Code** — a PostToolUse hook sets `CFX_*`, nothing to do. **Hermes** — bootstrap the env yourself and re-`source` the persisted env on every terminal call. Tabs die frequently (`HTTP 404 Tab not found`) — reopen a fresh `job-apply` tab with the real `CFX_KEY`, overwrite `CFX_TAB`, continue (key is stable). Persist both vars with `cfx.py persist-env` (never `echo CFX_TAB= > .jobenv.persist` — that clobbers `CFX_KEY`). **⚡ Reconcile ALL pointer files at once: `cfx.py sync-tab`** ensures a live tab and rewrites every standard `.jobenv.*` pointer to it in one call — the fix for the divergent-`CFX_TAB` "Session expired" trap (each env file drifting to a different, often stale, tab id). **Prevent the ~8-tab wedge proactively: `cfx.py prune-tabs`** closes stale background tabs down to headroom (never the active tab); `ensure_tab` now self-throttles below `CFX_TAB_BUDGET` (default 7) before opening, so an unattended run can't accumulate tabs into a wedge. ⚠️ **ENV-FILE FOOTGUN (silent, common):** a hand-written `.jobenv.*` containing literal `export CFX_URL=""` / `export CFX_USER=""` OVERRIDES the python `cfx` module's built-in defaults (`U=http://localhost:9377`, `_uid()='nasirjones'`), so every `import cfx` call dies with `unknown url type: '/tabs/.../evaluate'` or `HTTP 400 userId is required` — while `bash cfx.sh eval` still works (it sets its own base). Persist ONLY `CFX_KEY`+`CFX_TAB` and run `unset CFX_URL CFX_USER` after `source`. When re-persisting after a recovered tab, capture `cfx.ensure_tab(persist=True)`'s RETURN value as the new tab id (the stale `os.environ['CFX_TAB']` is the dead one). Full dead-engine→fresh-tab recovery recipe: `references/camofox-env-recovery.md`.
+Run `python3 sites/_common/scripts/cfx.py init` FIRST, before any cfx call — it sources the key
+from `.jobenv.run`, ensures a live tab, syncs every pointer file, and asserts backend health in one
+command (exit 0 = ready). **Hermes has NO env hook** (Claude Code gets `CFX_*` from a PostToolUse
+hook), so the env does NOT persist between terminal calls — re-run `cfx.py init` (or at minimum
+`source .jobenv.run && cfx.py sync-tab`) at the top of every call. Full step-by-step:
+`references/hermes-bootstrap.md`. ⚡ `cfx.py sync-tab` reconciles ALL pointer files to one live tab
+(the fix for the divergent-`CFX_TAB` "Session expired" trap). `cfx.py prune-tabs` heads off the ~8-tab
+wedge. ⚠️ **ENV-FILE FOOTGUN:** a hand-written `.jobenv.*` with literal `export CFX_URL=""` /
+`export CFX_USER=""` OVERRIDES the python `cfx` module's defaults and breaks every `import cfx` call
+while `bash cfx.sh eval` still works. `cfx.py init` strips those overrides automatically. Persist
+ONLY `CFX_KEY`+`CFX_TAB`. Full dead-engine→fresh-tab recovery: `references/camofox-env-recovery.md`.
 
 - **CSJ / TAL session recovery — SCRIPTABLE, do NOT VNC-halt.** Empty HTML (len 0) while a control nav renders fine = session cookie died; re-login from `ats-credentials.csv` (`civilservicejobs.service.gov.uk`) in a fresh tab and resume. Recipe: `references/csj-tal-eform-notes.md`.
 - LinkedIn sourcing quirks (promoted blank-title cards; virtualization blank title/company): `references/linkedin-promoted-cards.md`, `references/linkedin-blank-title-recovery.md` + `scripts/reveal_blank.py`.

@@ -16,14 +16,19 @@ the native `browser_*` tools (incomplete subset, see
    (`export CFX_KEY=…; CFX_USER=nasirjones; CFX_URL=http://localhost:9377; CFX_TAB=""`).
    `source` it — `CFX_TAB` is empty; you create the tab next.
 
-   ⚠️ **STALE-KEY TRAP (2026-07-14, cost a full wasted sourcing pass).** `.jobenv`'s
-   `CFX_KEY` is the SHORT 36-char UUID form and is **stale/wrong**. The live
-   64-char bearer token lives in **`.jobenv.run`** (same dir). A GET against
-   `/health` SUCCEEDS with the short key (so a naive health-check passes and fools
-   you), but every POST (`/tabs` open, `/navigate`) returns `401 Unauthorized`.
-   **Always `source .jobenv.run`, not `.jobenv`.** If a POST hits `401` right after
-   a clean `200` on `/health`, the key is the first suspect — overwrite `.jobenv`
-   with the `.jobenv.run` contents and re-source.
+   ⚠️ **KEY SOURCING (was the "stale-key trap"; REVISED 2026-08-13).** Historically
+   (2026-07-14) `.jobenv` carried a SHORT 36-char UUID key that a GET `/health` would
+   accept but every POST (`/tabs`, `/navigate`) rejected with `401 Unauthorized`. The
+   live 64-char bearer token lived in **`.jobenv.run`** and the rule was "always
+   `source .jobenv.run`, never `.jobenv`". As of 2026-08-13 BOTH files carry working
+   64-char keys (verified: `GET /health=200` AND `POST /tabs=200` on each), so the
+   original trap no longer fires on a fresh checkout — but do NOT reintroduce it: never
+   hand-edit a key down to the 36-char form. **Preferred bootstrap now:** run
+   `python3 sites/_common/scripts/cfx.py init` — it reads the key from `.jobenv.run`
+   (refuses any key < 40 chars), ensures a live tab, syncs every pointer file, and
+   asserts backend health in ONE call (exit 0 = ready). If a POST genuinely 401s after a
+   clean 200 on `/health`, the browser backend has most likely restarted — see
+   `references/camofox-backend-recovery.md`, NOT a key regression.
 
 2. **Open a tab against the `job-apply` session** (this profile holds the
    LinkedIn/WTTJ logged-in cookies — a fresh `sessionKey` logs you out):

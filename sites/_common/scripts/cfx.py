@@ -1199,10 +1199,83 @@ def shot(outfile: str = "/tmp/cfx-shot.png", selector: str = None,
         return outfile + f" (full: crop failed: {e})"
 
 
+def _init_hermes_env() -> int:
+    """Hermes bootstrap in ONE call (see `cfx.py init`). Claude Code gets CFX_* from a
+    PostToolUse hook; Hermes has no hook, so it must source env + reopen-dead-tabs by
+    hand every terminal call. This collapses that into a single command so a Hermes run
+    never starts with a 401/stale-tab at the first cfx call.
+
+    Steps: (1) load CFX_KEY from .jobenv.run (never the stale .jobenv short key),
+    (2) ensure a LIVE tab and sync it to every pointer file, (3) assert backend health.
+    Returns 0 if ready to drive, non-zero with a printed reason otherwise."""
+    import subprocess
+    root = _ROOT
+    runenv = os.path.join(root, ".jobenv.run")
+    if not os.path.exists(runenv):
+        print(f"REFUSING: {runenv} missing — cannot load CFX_KEY.\n"
+              f"Recreate it (same dir) with a 64-char CAMOFOX_ACCESS_KEY bearer token.",
+              file=sys.stderr)
+        return 2
+    # (1) load CFX_KEY (+ any CFX_TAB/CFX_USER) from .jobenv.run, NEVER .jobenv.
+    key = tab = user = None
+    for line in open(runenv, encoding="utf-8"):
+        line = line.strip()
+        if line.startswith("export CFX_KEY="):
+            key = line.split("=", 1)[1].strip().strip('"').strip("'")
+        elif line.startswith("export CFX_TAB="):
+            tab = line.split("=", 1)[1].strip().strip('"').strip("'")
+        elif line.startswith("export CFX_USER="):
+            user = line.split("=", 1)[1].strip().strip('"').strip("'")
+    if not key:
+        print("REFUSING: CFX_KEY not found in .jobenv.run.", file=sys.stderr)
+        return 2
+    if len(key) < 40:
+        # Safety net: the historical trap was a 36-char short key in .jobenv. If .jobenv.run
+        # ever regresses to that, refuse loudly instead of 401-ing on the first POST.
+        print(f"REFUSING: CFX_KEY looks too short ({len(key)} chars) — expected the 64-char "
+              f"bearer token. Re-issue from camofox and rewrite .jobenv.run.", file=sys.stderr)
+        return 2
+    os.environ["CFX_KEY"] = key
+    if user:
+        os.environ["CFX_USER"] = user
+    # STRIP any empty CFX_URL/CFX_USER override so the python cfx module's own defaults win
+    # (a literal `export CFX_URL=""` in a hand-written env file OVERRIDES the module default
+    # and breaks every `import cfx` call — a documented footgun).
+    os.environ.pop("CFX_URL", None)
+    os.environ.pop("CFX_USER", None) if not user else None
+    if tab:
+        os.environ["CFX_TAB"] = tab
+    # (2) ensure a live tab + sync ALL pointer files to it (heals the dead-tab case).
+    try:
+        new_tab = sync_tab()  # returns list of files written; sets CFX_TAB to a live tab
+        if not os.environ.get("CFX_TAB"):
+            print("FAILED: ensure_tab returned no live tab (backend may be down).", file=sys.stderr)
+            return 3
+    except CfxError as e:
+        print(f"FAILED: could not ensure/sync a live tab: {e}", file=sys.stderr)
+        return 3
+    # (3) assert backend health.
+    try:
+        fp = health_fingerprint()
+    except CfxError as e:
+        print(f"FAILED: backend health check errored: {e}", file=sys.stderr)
+        return 3
+    if fp.get("degraded"):
+        print(json.dumps(fp, indent=2))
+        print("FAILED: backend is degraded (blank renders / eval failing) — do NOT drive yet. "
+              "Wait ~90s for self-heal or `cfx.py restart-engine`.", file=sys.stderr)
+        return 3
+    print(json.dumps({"ok": True, "tab": os.environ.get("CFX_TAB"),
+                      "synced_files": new_tab, "health": fp}, indent=2))
+    print("READY. Env loaded + live tab synced to every pointer file. Drive via cfx.sh/cfx.py.",
+          file=sys.stderr)
+    return 0
+
+
 def _cli():
     import sys
     if len(sys.argv) < 2:
-        print("Usage: cfx.py <list-tabs|find-popup|open-tab|ensure-tab|sync-tab|prune-tabs|"
+        print("Usage: cfx.py <init|list-tabs|find-popup|open-tab|ensure-tab|sync-tab|prune-tabs|"
               "dismiss-cookies|click-follow|shot|check-engine|restart-engine|eval-frame> "
               "[args...]", file=sys.stderr)
         return 1
@@ -1308,6 +1381,15 @@ def _cli():
             os.replace(tmp, dest)
             print(f"persisted CFX_KEY + CFX_TAB -> {dest}")
             return 0
+        elif cmd == "init":
+            # cfx.py init  — Hermes bootstrap in ONE call (Claude Code gets this free from a
+            # PostToolUse hook; Hermes has no hook, so it must source env + reopen-dead-tabs
+            # by hand every terminal call — this collapses that into a single command).
+            # Promises: (1) CFX_KEY loaded from .jobenv.run (never the stale .jobenv short key),
+            # (2) a LIVE tab ensured + synced to every pointer file, (3) backend health asserted.
+            # Exit 0 = ready to drive; non-zero = do NOT proceed (prints the reason).
+            rc = _init_hermes_env()
+            return rc
         elif cmd == "health-fingerprint":
             # H.1: cheap read-only backend-liveness snapshot to STAMP a terminal verdict
             # with (so a verdict recorded during a degraded window can be quarantined).
