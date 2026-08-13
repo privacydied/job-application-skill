@@ -3362,5 +3362,89 @@ class TestAuditRecipe(unittest.TestCase):
         self.assertIn("drop-tracked", body.replace("_", "-"))
 
 
+class TestKnownWall(unittest.TestCase):
+    """The 2026-08-13 scar: a run reported "WTTJ /login redirects to home — zombie session,
+    not logged in" as a VERIFIED structural block and logged 0 applications. The session was
+    logged in (the redirect away from /login IS the signal), and
+    references/wttj-checklogin-false-negative.md had documented exactly that since 2026-07-14.
+    known_wall.py makes that prior art findable BEFORE a wall is called structural."""
+
+    def setUp(self):
+        sys.path.insert(0, os.path.join(_HERE, "..", "scripts"))
+        import known_wall
+        self.kw = known_wall
+        self.tmp = tempfile.mkdtemp()
+        self._orig_docs = known_wall._docs
+
+    def tearDown(self):
+        self.kw._docs = self._orig_docs
+
+    def _fake_docs(self, **files):
+        paths = []
+        for name, body in files.items():
+            p = os.path.join(self.tmp, name)
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(body)
+            paths.append(p)
+        self.kw._docs = lambda: paths
+        return paths
+
+    def test_finds_the_false_negative_doc_and_flags_it_resolved(self):
+        self._fake_docs(**{
+            "wttj-false-negative.md": "# WTTJ login\n## Symptom\nlogin redirects to home\n"
+                                      "## Rule\nDo NOT treat it as a wall — reality check the dashboard.\n",
+            "unrelated.md": "# Salary caching\nGlassdoor medians go in salary-cache.csv.\n",
+        })
+        hits = self.kw.search("wttj login redirects to home")
+        self.assertTrue(hits)
+        self.assertIn("wttj-false-negative.md", hits[0]["path"])
+        self.assertTrue(hits[0]["resolved"], "a doc with '## Rule'/'do not treat' has a way through")
+
+    def test_resolved_docs_outrank_dead_ends(self):
+        """A doc offering a way THROUGH must beat one merely recording the dead end,
+        even when both mention the symptom."""
+        self._fake_docs(**{
+            "a-dead-end.md": "# Ashby spam flag\nAshby spam flag blocks submit. No driver. Blocked.\n",
+            "b-way-through.md": "# Ashby spam flag\nAshby spam flag looks fatal.\n"
+                                "## Rule\nreality check: it is not a blocker, use the workaround.\n",
+        })
+        hits = self.kw.search("ashby spam flag blocks submit")
+        self.assertEqual(hits[0]["path"].split(os.sep)[-1], "b-way-through.md")
+
+    def test_generic_token_alone_is_not_a_match(self):
+        """Coverage floor: one generic token ('board') must not make every doc look relevant —
+        a wall of weak hits reads as 'this is known' when it isn't."""
+        self._fake_docs(**{
+            "x.md": "# Some board notes\nThis board has a form and a login.\n"})
+        self.assertEqual(self.kw.search("quantum flux capacitor misalignment on zorblax board"), [])
+
+    def test_single_token_query_still_matches(self):
+        self._fake_docs(**{"g.md": "# Greenhouse\nthe grnhse_iframe is cross-origin\n"})
+        self.assertTrue(self.kw.search("grnhse_iframe"))
+
+    def test_exit_codes_signal_whether_prior_art_exists(self):
+        """0 = prior art (read it first) · 1 = genuinely new (Blocked is defensible)."""
+        self._fake_docs(**{"g.md": "# Greenhouse\nthe grnhse_iframe is cross-origin\n"})
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            self.assertEqual(self.kw.main(["grnhse_iframe"]), 0)
+            self.assertEqual(self.kw.main(["zorblax", "flux", "capacitor", "misalignment"]), 1)
+
+    def test_excerpt_truncates_giant_lines(self):
+        """SKILL.md carries single bullets thousands of chars long; an untruncated excerpt
+        buries the hit under unrelated prose."""
+        self._fake_docs(**{"big.md": "# Greenhouse iframe\n" + ("x" * 5000) + " grnhse_iframe\n"})
+        hits = self.kw.search("grnhse_iframe greenhouse")
+        self.assertTrue(hits)
+        for line in hits[0]["excerpt"].splitlines():
+            self.assertLessEqual(len(line), 160)
+
+    def test_real_repo_has_the_wttj_prior_art_indexed(self):
+        """Guards the wiring, not just the algorithm: the real docs must be reachable."""
+        hits = self.kw.search("wttj login redirects to home not logged in", ats="wttj")
+        self.assertTrue(any("wttj" in h["path"] for h in hits),
+                        "the real references/ tree must surface the WTTJ prior art")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

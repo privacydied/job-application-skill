@@ -131,6 +131,24 @@ only**. Park it — `holds.csv` row + screenshot + `blockers.py record` — then
 the next item in `queue.jsonl`**. Don't retry a mutating submit. Notify the user ONCE per distinct
 blocker; re-reporting the same blocker verbatim is itself a failure mode (SKILL.md §"continue" override).
 
+**⛔ PRIOR-ART GATE — run this BEFORE you log `Blocked` or call any wall "structural":**
+```bash
+python3 scripts/known_wall.py --ats <board> "<the symptom you actually observed>"
+```
+This repo carries ~130 `references/*.md` + per-board `NOTES.md`, **52 of which hold a
+false-negative or a workaround**. You do not have them in context and you will not remember
+them. Exit 0 = prior art exists, **read it before concluding anything**; exit 1 = genuinely
+new, `Blocked` is defensible. This is the difference between "verified structural block" and
+"rediscovered a documented false negative" — the latter has burned whole sessions.
+
+Worked example (2026-08-13, real): a run reported *"WTTJ /login redirects to home — zombie
+session, no email/password fields, so not logged in"* as a verified structural wall and
+applied to nothing. The session was **logged in** — a redirect AWAY from `/login` is the
+logged-in signal — and `references/wttj-checklogin-false-negative.md` had said so, with the
+disproving probe, since 2026-07-14. One `known_wall.py` call would have caught it.
+
+If you solve a NEW wall, write it up in `references/` — that's how this file got useful.
+
 **⛔ You may NOT end the turn while a drivable item remains.** Drivable = any queued on-profile
 posting whose apply path needs no user action. Before ending, you MUST have either hit the target
 or exhausted the queue. State the count in your report: `drivable remaining: 0`.
