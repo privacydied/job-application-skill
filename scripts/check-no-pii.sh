@@ -17,6 +17,29 @@ set -u
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || ROOT=""
 [ -n "$ROOT" ] || ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT" || exit 0
+
+# ── SELF-HEAL BEFORE DETECTING (2026-08-13) ────────────────────────────────────────
+# This hook is the one PII gate that fires identically for EVERY committer (Claude Code,
+# Hermes, a human at a raw shell) because git — not either agent's prompt — invokes it. The
+# "run check-no-pii.sh before every push" rule used to live ONLY in CLAUDE.md (Claude Code's
+# auto-loaded memory); Hermes has no equivalent auto-load, so it never saw the rule and could
+# stage real PII with nothing to stop it until this hook's DETECT pass below (which only warns
+# on untracked files and doesn't fix anything). Closing that gap here, not in either agent's
+# prompt: auto-run the scrubber first, and re-stage any file that was already `git add`ed and
+# got rewritten, so a commit self-heals instead of just failing with no fix applied.
+if [ -f "$ROOT/scripts/scrub_pii.py" ] && command -v python3 >/dev/null 2>&1; then
+  _staged_before="$(git -C "$ROOT" diff --name-only --cached 2>/dev/null)"
+  _scrub_out="$(cd "$ROOT" && python3 scripts/scrub_pii.py --quiet 2>/dev/null)"
+  case "$_scrub_out" in
+    *"scrubbed "[1-9]*)
+      echo "$_scrub_out"
+      while IFS= read -r _f; do
+        [ -n "$_f" ] && [ -f "$ROOT/$_f" ] && git -C "$ROOT" add -- "$_f" 2>/dev/null
+      done <<< "$_staged_before"
+      ;;
+  esac
+fi
+
 CFG="sites/_common/apply-defaults.json"
 PROFILE="references/applicant-profile.md"
 

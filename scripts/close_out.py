@@ -51,6 +51,7 @@ sys.path.insert(0, _HERE)
 sys.path.insert(0, os.path.join(_ROOT, "sites", "_common", "scripts"))
 import audit_proofs as AP   # noqa: E402  (REUSE its artifact index/scoping helpers)
 import journal              # noqa: E402  (slugify — the applications/<slug>/ convention)
+import scrub_pii            # noqa: E402  (PII self-heal — see main()'s call, 2026-08-13)
 
 TRACKER = os.path.join(_ROOT, "application-tracker.csv")
 APPS = os.path.join(_ROOT, "applications")
@@ -296,6 +297,21 @@ def main():
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--min-image", type=int, default=1024)
     a = ap.parse_args()
+
+    # PII self-heal (2026-08-13): SKILL.md step 11 makes THIS script mandatory before ANY
+    # report, for every drive shape (full loop or an ad hoc "drive these N roles" session) and
+    # for either agent — unlike scrub_pii's other call site (loop-preflight.py), which only
+    # fires for the full autonomous loop. Piggybacking it on the one gate both agents already
+    # must run closes the "Hermes never saw the CLAUDE.md-only PII rule" class of leak without
+    # depending on either agent's prompt to remember it.
+    try:
+        scrubbed = scrub_pii.scrub()
+        if scrubbed:
+            n = sum(scrubbed.values())
+            print(f"[close_out] scrub_pii: scrubbed {n} PII occurrence(s) in "
+                  f"{len(scrubbed)} tracked file(s): {', '.join(sorted(scrubbed))}", file=sys.stderr)
+    except Exception as e:   # never let the PII sweep block a close-out from running
+        print(f"[close_out] scrub_pii self-heal skipped (non-fatal): {e}", file=sys.stderr)
 
     res = reconcile(date=a.date, all_rows=a.all, min_image=a.min_image)
     if res.get("error"):

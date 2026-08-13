@@ -1,0 +1,14 @@
+{
+  "url": "https://job-boards.greenhouse.io/liberis/jobs/8118933",
+  "company": "Liberis",
+  "role": "Product Designer",
+  "fill": {
+    "Please provide a link to your portfolio or website": "https://example.com",
+    "What are your salary expectations?": "60000",
+    "When would you be available to start?": "Immediately"
+  },
+  "radios": {
+    "Are you legally authorized to work in the United Kingdom?": "Yes"
+  },
+  "submit": true
+}

@@ -1,0 +1,16 @@
+{
+  "url": "https://jobs.ashbyhq.com/mubi/4245e398-2887-479c-a357-34ef6f43dc87",
+  "company": "MUBI",
+  "role": "Midweight Designer, Brand",
+  "cv": "base-resume.pdf",
+  "fill": {
+    "Please provide a link to your portfolio": "https://example.com",
+    "What is your salary expectation?": "55000",
+    "What is your notice period?": "Immediately"
+  },
+  "location": "London, United Kingdom",
+  "radios": {
+    "right to work": "Yes"
+  },
+  "submit": true
+}

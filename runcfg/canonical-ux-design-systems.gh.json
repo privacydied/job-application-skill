@@ -1,0 +1,16 @@
+{
+  "url": "https://job-boards.greenhouse.io/canonical/jobs/7043028",
+  "company": "Canonical (Ubuntu)",
+  "role": "UX Designer - Design systems",
+  "fill": {
+    "What time zone are you in?": "GMT (London, UK)",
+    "Describe your most complex web design project.": "Jane Doe — Product & UX designer, 6 yrs. Most complex: leading the design system + public-facing service for the NHS COVID-19 App (millions of users, WCAG 2.1 AA, research-driven). Owned discovery-to-ship: user research, component library, accessible patterns, worked with engineers to harden it.",
+    "Which new design patterns have you embraced": "Design tokens + theming, headless component libraries, progressive disclosure. Wary of full-bleed carousels and dark-pattern gamification that hurt comprehension.",
+    "Which companies do you think are innovating best in web design": "Linear (restraint + speed), Vercel (developer-grade tooling), GOV.UK (accessibility as first principle). Canonical's own Ubuntu web work is in that league.",
+    "What was your bachelor's university degree result": "First Class — Information & Interface Design, University of the Arts London.",
+    "How did you perform in mathematics at high school?": "A (strong).",
+    "How did you perform in your native language at high school?": "A (strong).",
+    "Please share your rationale or evidence for the high school": "GCSE/A-level: A in Mathematics and English Language; certificate available on request."
+  },
+  "submit": true
+}

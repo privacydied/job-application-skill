@@ -1,0 +1,16 @@
+{
+  "url": "https://jobs.ashbyhq.com/linear/5b9997fd-7507-4437-8fd7-14178c99ab5d",
+  "company": "Linear",
+  "role": "Production Designer",
+  "cv": "base-resume.pdf",
+  "fill": {
+    "Name": "Jane Doe",
+    "Please provide a link to your portfolio": "https://example.com",
+    "How did you hear about this role?": "LinkedIn"
+  },
+  "toggles": {
+    "Do you have professional experience designing": "Yes",
+    "Have you worked in-house or agency-side": "Yes"
+  },
+  "submit": false
+}
