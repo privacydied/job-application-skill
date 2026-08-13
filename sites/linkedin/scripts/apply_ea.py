@@ -75,12 +75,23 @@ KNOWN = {
     "available to start": "Immediately",
     "years of experience": "5",
     "email alerts": "No",
+    "comfortable commuting": "Yes",
+    "commuting to this job": "Yes",
+    "able to commute": "Yes",
+    "work onsite": "Yes",
+    "work on-site": "Yes",
+    "hybrid work": "Yes",
+    "start immediately": "Yes",
+    "can you start": "Yes",
     "location": "London",
     "city": "London",
 }
 RADIO_KEYS = {"willing to relocate", "legally authorized", "authorized to work",
               "right to work", "require sponsorship", "visa sponsorship", "sponsorship",
-              "notice period", "available to start", "email alerts"}
+              "notice period", "available to start", "email alerts",
+              "comfortable commuting", "commuting to this job", "able to commute",
+              "work onsite", "work on-site", "hybrid work", "start immediately",
+              "can you start"}
 SELECT_KEYS = {"current location", "location", "city"}
 
 
@@ -240,6 +251,28 @@ def run(job, company, role, resume, source, notes, max_attempts, dry_run):
             print("  NO_BUTTON: not a real Easy Apply posting — skipping (rc=7)")
             return 7
         ea("dismiss-save")
+
+        # Pre-fill Contact info from apply-defaults.json (driver gap fix: the
+        # KNOWN map never covered First/Last/Email/Phone, so LinkedIn's required
+        # Contact step bounced to NEEDS_HUMAN). Do it once, before the step walk.
+        try:
+            _cfg = json.load(open(os.path.join(ROOT, "sites", "_common", "apply-defaults.json")))
+            _fill = _cfg.get("fill", {})
+            _contact = {
+                "First name": _fill.get("First name"),
+                "Last name": _fill.get("Last name"),
+                "Email address": _fill.get("Email"),
+                "Mobile phone number": _fill.get("Phone"),
+                "Phone country code": _fill.get("Phone country code", "+44"),
+                "Location (city)": _fill.get("City", "London"),
+            }
+            for _lab, _val in _contact.items():
+                if _val:
+                    _r = ea("fill", _lab, str(_val))
+                    if isinstance(_r, str) and _r.startswith("OK"):
+                        print(f"  contact [{_lab}] = {_val} -> {_r[:30]}")
+        except Exception as _e:
+            print("  contact prefill error:", _e)
 
         # Walk the modal steps.
         reached_review = False

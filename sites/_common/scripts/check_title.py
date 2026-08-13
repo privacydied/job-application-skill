@@ -80,7 +80,7 @@ _DESIGN_ENG_INDUSTRIAL = (
     "structural", "ict", "embedded", "cad", "rf", "hvac", "chemical", "aerospace",
     "automotive", "mechatronic", "pcb", "firmware", "optical", "thermal", "acoustic",
     "instrumentation", "telecoms", "telecommunication", "manufacturing", "process",
-    "controls", "systems", "hydraulic", "piping", "geotechnical", "asic", "fpga",
+    "controls", "system", "systems", "hydraulic", "piping", "geotechnical", "asic", "fpga",
     "building services", "renewable", "heat pump", "mep",
     "project design", "project",
     # --- ELECTRICAL-POWER modifiers (added 2026-07-24 after a live leak) ---

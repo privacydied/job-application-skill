@@ -98,7 +98,16 @@ def _within_window(date_hdr, minutes, now=None):
     if dt.tzinfo is None:               # naive Date -> interpret as local
         dt = dt.astimezone()
     now = now or datetime.now().astimezone()
-    return dt >= now - timedelta(minutes=minutes)
+    # CLOCK-SKEW TOLERANCE (2026-07-25): the NAS host clock lags wall time by
+    # ~20h, so a freshly-emailed code's Date header reads as being in the FUTURE
+    # relative to the NAS `now`. The plain `dt >= now - window` check then rejects
+    # a brand-new code (it looks "too new"), causing get_code() to return '' and
+    # the Greenhouse driver to log CODE_MISSING even though the code is in the
+    # mailbox. Fail-open: if the email appears newer than `now` at all, it is by
+    # definition fresh under skew — accept it. (SINCE already restricts to today,
+    # and get_code picks the freshest matching email, so this can't return a
+    # stale code that a newer one would've superseded.)
+    return dt >= now - timedelta(minutes=minutes) or dt > now
 
 
 def get_code(sender="greenhouse", minutes=20, digits=None, company=None,
