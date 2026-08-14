@@ -25,8 +25,9 @@ python3 sites/ats-direct/scripts/feed.py --verify              # probe every slu
 python3 sites/ats-direct/scripts/feed.py --list-companies
 ```
 
-No browser, no credentials — plain HTTPS GETs, ~68 companies concurrently in ~3s. Runs from
-cron/CI. Yield: ~1,430 London postings / ~3,200 unfiltered.
+No browser, no credentials — plain HTTPS GETs, ~271 companies concurrently in ~5s. Runs from
+cron/CI. Yield: ~4,800 postings, of which ~4,000 are Greenhouse (the only ATS proven to
+submit end-to-end — see "Sourcing ≠ submitting" below), so route there first.
 
 ## Endpoints (all keyless)
 
@@ -64,5 +65,5 @@ Full detail: `references/ats-apply-surface.md`.
 ## searches.csv
 
 **Exactly one row** (`atsdirect,all families,`). pipeline's arg-builder only receives `nav`,
-never `query`, so per-family rows can't pass a `--what` — five family rows just re-fetch all
-68 companies five times for the same result. One pass returns everything; precheck screens.
+never `query`, so per-family rows can't pass a `--what` — five family rows just re-fetch every
+company five times for the same result. One pass returns everything; precheck screens.

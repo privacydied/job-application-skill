@@ -1,5 +1,41 @@
 # Greenhouse embed-iframe CV upload wall + react-select recovery
 
+> ## ⛔ RETRACTED 2026-08-15 — the "iframe CV-upload HARD WALL" below is a FALSE NEGATIVE
+>
+> **Company-site Greenhouse postings ARE drivable. Do not log them `Blocked`.**
+>
+> Verified end-to-end: **Cognism — IT Support Specialist**, submitted and confirmed
+> ("Thanks for applying to Cognism! 🎉" at
+> `job-boards.eu.greenhouse.io/embed/job_app/confirmation?for=cognism&token=4952152101`),
+> CV attached, from `applications/cognism-it-support-specialist/confirmation.png`.
+>
+> **The recipe:** navigate DIRECTLY to the embed URL, then drive it as a normal top-level form:
+> ```
+> https://job-boards.greenhouse.io/embed/job_app?for=<slug>&token=<gh_jid>
+> https://job-boards.eu.greenhouse.io/embed/job_app?for=<slug>&token=<gh_jid>   # EU boards
+> ```
+> At that URL `#resume` IS in the top document (`document.querySelector('#resume')` is
+> non-null before upload), so the camofox `/upload` endpoint binds it correctly. The section
+> below is right that uploading into a *nested* iframe fails — it is wrong that the embed URL
+> "does not help", and the two claims sat in the same paragraph contradicting each other.
+>
+> **Why it was mis-diagnosed as a wall:** the documented "tell" is unreliable. After a
+> SUCCESSFUL upload Greenhouse REPLACES the `<input type=file>` with a filename display, so
+> the post-upload probe
+> `document.querySelector('#resume').files.length` finds no element and yields `-1` (and
+> `atsform.upload` prints `FAIL ... NONE`) — on a **working** upload. Reading that as
+> "files=0, therefore the wall" turns success into a false wall. This is the same
+> false-negative the quirks doc already warns about under "Greenhouse's upload verify
+> false-negatives" — it just wasn't connected to this page.
+>
+> **Correct check:** the chip text, not the input —
+> `document.querySelector('.file-upload__filename').innerText` shows the filename. Better
+> still, ignore the probe and let the submit decide: a genuinely missing CV bounces with
+> "Resume/CV is required".
+>
+> Cost of the stale claim: an entire class of postings (every company-site-hosted Greenhouse
+> job — AKQA, Alloy, Cognism, and many more) was being written off as undrivable.
+
 ## When this bites
 Driving a Greenhouse application via `sites/greenhouse/scripts/gh_apply.py` (or a hand-rolled
 `gh_config.json`). Two distinct failure modes, both specific to **company-site jobs whose apply

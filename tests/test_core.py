@@ -3446,5 +3446,68 @@ class TestKnownWall(unittest.TestCase):
                         "the real references/ tree must surface the WTTJ prior art")
 
 
+class TestAntiAiOathGuard(unittest.TestCase):
+    """INTEGRITY REGRESSION (Canonical/Greenhouse, 2026-08-14): the "I agree to use only my
+    own words — plagiarism or AI-generated content will disqualify my application" oath was
+    default-denied ONLY in the checkbox path (`checkboxes_from_profile`). Canonical asks the
+    IDENTICAL oath as a REQUIRED react-select (Yes/No), which every board config routes
+    through `combobox_pick` — so an autonomous run answered "Yes" and signed a false
+    attestation in the applicant's name, on a real application he cares about.
+
+    The guard must be MEANING-shaped, not widget-shaped. These tests lock that: refuse the
+    oath whatever widget carries it, while never over-blocking ordinary consents (a privacy
+    notice is a legitimate thing to accept) or an honest "No"."""
+
+    def setUp(self):
+        import atsform
+        self.a = atsform
+        self.oath = ("During this application process I agree to use only my own words. I "
+                     "understand that plagiarism, the use of AI or other generated content "
+                     "will disqualify my application.")
+
+    def test_oath_label_is_detected(self):
+        self.assertTrue(self.a._is_anti_ai_oath(self.oath))
+        self.assertTrue(self.a._is_anti_ai_oath("Confirm this work is not AI-generated"))
+
+    def test_ordinary_consents_are_not_oaths(self):
+        # Over-blocking would silently break every normal application.
+        for benign in ("Please confirm that you have read and agree to Canonical's "
+                       "Recruitment Privacy Notice and Privacy Policy.",
+                       "In which country do you currently work?",
+                       "I certify that the information given is true and complete"):
+            self.assertFalse(self.a._is_anti_ai_oath(benign), benign)
+
+    def test_affirmative_detection(self):
+        for yes in ("Yes", "I agree", "Acknowledge/Confirm", "accept", "confirm"):
+            self.assertTrue(self.a._is_affirmative(yes), yes)
+        for no in ("No", "Cannot recall", "United Kingdom", "Prefer not to say"):
+            self.assertFalse(self.a._is_affirmative(no), no)
+
+    def test_guard_blocks_only_signing_the_oath(self):
+        """The exact decision combobox_pick makes before touching the browser."""
+        def blocked(label, opt):
+            return self.a._is_anti_ai_oath(label) and self.a._is_affirmative(opt)
+        self.assertTrue(blocked(self.oath, "Yes"))
+        # Answering the oath honestly with "No" must stay allowed.
+        self.assertFalse(blocked(self.oath, "No"))
+        # A normal consent must stay allowed.
+        self.assertFalse(blocked("Please confirm you agree to the Privacy Notice",
+                                 "Acknowledge/Confirm"))
+
+    def test_checkbox_and_combobox_paths_share_one_pattern(self):
+        """No divergent copy: both paths must consult the same _CB_RULES anti_ai regex, so a
+        future edit to one cannot silently loosen the other."""
+        import atsform
+        rx = next((r for c, r in atsform._CB_RULES if c == "anti_ai"), None)
+        self.assertIsNotNone(rx, "anti_ai rule must live in _CB_RULES")
+        self.assertTrue(rx.search(self.oath))
+        self.assertEqual(atsform._cb_action(self.oath, {})[0], "left_antiai")
+
+    def test_anti_ai_sentinel_is_distinct_from_failure(self):
+        """Callers branch on this: a refusal is not a bug and must not be retried."""
+        import atsform
+        self.assertNotIn(atsform.ANTI_AI, (0, 1, atsform.NOTFOUND))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

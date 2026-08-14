@@ -100,3 +100,529 @@ accurx,ashby,Accurx,health|design
 unmind,ashby,Unmind,health|design
 echo,greenhouse,Echo,health
 lantum,workable,Lantum,health
+
+# ── 2026-08-14 Greenhouse expansion — all verified live (HTTP 200, >=1 job) ──
+# UK/EMEA-hiring employers across fintech, ai/data, devops, security, saas,
+# media/gaming, consumer/travel, health, energy, agency. Probed via
+# boards-api.greenhouse.io/v1/boards/<slug>/jobs?content=false
+
+databricks,greenhouse,Databricks,data|devops
+capco,greenhouse,Capco,fintech|agency
+stripe,greenhouse,Stripe,fintech|saas
+feverup,greenhouse,FeverUp,travel|media
+anthropic,greenhouse,Anthropic,ai
+datadog,greenhouse,Datadog,devops|data
+zscaler,greenhouse,Zscaler,security
+okta,greenhouse,Okta,security
+cloudflare,greenhouse,Cloudflare,devops|security
+braze,greenhouse,Braze,saas|data
+wolt,greenhouse,Wolt,consumer
+janestreet,greenhouse,Jane Street,fintech|data
+wpp,greenhouse,WPP,design|agency
+fivetran,greenhouse,Fivetran,data|devtools
+adyen,greenhouse,Adyen,fintech
+scaleai,greenhouse,Scale AI,ai|data
+thetradedesk,greenhouse,The Trade Desk,media|data
+gitlab,greenhouse,GitLab,devops|devtools
+block,greenhouse,Block (Square),fintech
+airbnb,greenhouse,Airbnb,travel|consumer
+ebury,greenhouse,Ebury,fintech
+clickhouse,greenhouse,ClickHouse,data|devops
+coinbase,greenhouse,Coinbase,fintech
+imc,greenhouse,IMC,fintech|data
+epicgames,greenhouse,Epic Games,media
+riotgames,greenhouse,Riot Games,media
+flexport,greenhouse,Flexport,ecommerce|data
+twilio,greenhouse,Twilio,devtools|saas
+scopely,greenhouse,Scopely,media
+klaviyo,greenhouse,Klaviyo,saas|ecommerce
+grafanalabs,greenhouse,Grafana Labs,devops|data
+valtech,greenhouse,Valtech,design|agency
+doctolib,greenhouse,Doctolib,health
+ogilvy,greenhouse,Ogilvy,design|agency
+asana,greenhouse,Asana,saas
+payoneer,greenhouse,Payoneer,fintech
+betsson,greenhouse,Betsson Group,media|consumer
+intercom,greenhouse,Intercom,saas|ai
+jumptrading,greenhouse,Jump Trading,fintech|data
+oura,greenhouse,Oura,health|consumer
+zoominfo,greenhouse,ZoomInfo,data|saas
+justworks,greenhouse,Justworks,saas|fintech
+taboola,greenhouse,Taboola,media|data
+tripadvisor,greenhouse,Tripadvisor,travel|consumer
+smartsheet,greenhouse,Smartsheet,saas
+thehutgroup,greenhouse,THG,ecommerce|consumer
+gusto,greenhouse,Gusto,saas|fintech
+mozilla,greenhouse,Mozilla,devtools|purpose
+n26,greenhouse,N26,fintech
+hightouch,greenhouse,Hightouch,data|devtools
+proton,greenhouse,Proton,security|consumer
+krafton,greenhouse,KRAFTON,media
+rockstargames,greenhouse,Rockstar Games,media
+duolingo,greenhouse,Duolingo,consumer
+wrike,greenhouse,Wrike,saas
+pubmatic,greenhouse,PubMatic,media|data
+fireblocks,greenhouse,Fireblocks,fintech|security
+bloomreach,greenhouse,Bloomreach,ecommerce|saas
+inmobi,greenhouse,InMobi,media|data
+similarweb,greenhouse,Similarweb,data|saas
+verve,greenhouse,Verve,media|data
+lovable,greenhouse,Lovable,ai|devtools
+newrelic,greenhouse,New Relic,devops|data
+pingidentity,greenhouse,Ping Identity,security
+togetherai,greenhouse,Together AI,ai|devops
+beyondtrust,greenhouse,BeyondTrust,security
+mixpanel,greenhouse,Mixpanel,data|saas
+getyourguide,greenhouse,GetYourGuide,travel|consumer
+peloton,greenhouse,Peloton,health|consumer
+fastly,greenhouse,Fastly,devops
+qualtrics,greenhouse,Qualtrics,research|saas
+akqa,greenhouse,AKQA,design|agency
+appsflyer,greenhouse,AppsFlyer,data|saas
+schonfeld,greenhouse,Schonfeld,fintech|data
+nintendo,greenhouse,Nintendo,media
+thoughtworks,greenhouse,Thoughtworks,design|agency
+recordedfuture,greenhouse,Recorded Future,security|data
+axs,greenhouse,AXS,media|consumer
+flowtraders,greenhouse,Flow Traders,fintech|data
+pendo,greenhouse,Pendo,data|saas
+neo4j,greenhouse,Neo4j,data|devtools
+vonage,greenhouse,Vonage,devtools|saas
+capitalontap,greenhouse,Capital on Tap,fintech
+gemini,greenhouse,Gemini,fintech
+salesloft,greenhouse,Salesloft,saas
+bitpanda,greenhouse,Bitpanda,fintech
+snorkelai,greenhouse,Snorkel AI,data|ai
+blockchain,greenhouse,Blockchain.com,fintech
+attentive,greenhouse,Attentive,saas|ecommerce
+flohealth,greenhouse,Flo Health,health|consumer
+bird,greenhouse,Bird (MessageBird),saas|devtools
+komodohealth,greenhouse,Komodo Health,health|data
+project44,greenhouse,project44,data|saas
+later,greenhouse,Later,media|saas
+bandwidth,greenhouse,Bandwidth,devtools|saas
+dropbox,greenhouse,Dropbox,saas
+raisin,greenhouse,Raisin,fintech
+solarisbank,greenhouse,Solaris,fintech
+jfrog,greenhouse,JFrog,devops|devtools
+akunacapital,greenhouse,Akuna Capital,fintech|data
+showpad,greenhouse,Showpad,saas
+algolia,greenhouse,Algolia,devtools|saas
+vtex,greenhouse,VTEX,ecommerce|saas
+landor,greenhouse,Landor,design|agency
+amplitude,greenhouse,Amplitude,data|saas
+datacamp,greenhouse,DataCamp,consumer|data
+applovin,greenhouse,AppLovin,media|data
+cockroachlabs,greenhouse,Cockroach Labs,data|devops
+givedirectly,greenhouse,GiveDirectly,purpose
+customerio,greenhouse,Customer.io,saas|data
+prolific,greenhouse,Prolific,research|data
+gostudent,greenhouse,GoStudent,consumer
+seatgeek,greenhouse,SeatGeek,media|consumer
+iterable,greenhouse,Iterable,saas|data
+cultureamp,greenhouse,Culture Amp,saas|research
+complyadvantage,greenhouse,ComplyAdvantage,fintech|ai
+axios,greenhouse,Axios,media
+isomorphiclabs,greenhouse,Isomorphic Labs,ai|health
+commercetools,greenhouse,commercetools,ecommerce|saas
+hootsuite,greenhouse,Hootsuite,media|saas
+sumologic,greenhouse,Sumo Logic,devops|data
+bitwarden,greenhouse,Bitwarden,security
+coursera,greenhouse,Coursera,consumer|saas
+alloy,greenhouse,Alloy,fintech|data
+dataiku,greenhouse,Dataiku,data|ai
+squarespace,greenhouse,Squarespace,design|saas
+netcraft,greenhouse,Netcraft,security
+generalassembly,greenhouse,General Assembly,consumer
+mentimeter,greenhouse,Mentimeter,design|saas
+liftoff,greenhouse,Liftoff,media|data
+kaluza,greenhouse,Kaluza,energy
+redbadger,greenhouse,Red Badger,design|agency
+brandwatch,greenhouse,Brandwatch,data|media
+falconx,greenhouse,FalconX,fintech
+newsweek,greenhouse,Newsweek,media
+starburst,greenhouse,Starburst,data|devops
+honeycomb,greenhouse,Honeycomb,devops|data
+fingerprint,greenhouse,Fingerprint,security
+semafor,greenhouse,Semafor,media
+dashlane,greenhouse,Dashlane,security
+fourkites,greenhouse,FourKites,data|saas
+equalexperts,greenhouse,Equal Experts,devops|agency
+make,greenhouse,Make,saas|devtools
+greenhouse,greenhouse,Greenhouse Software,saas
+transmitsecurity,greenhouse,Transmit Security,security
+cognism,greenhouse,Cognism,data|saas
+learnupon,greenhouse,LearnUpon,saas
+veracode,greenhouse,Veracode,security
+udemy,greenhouse,Udemy,consumer
+veriff,greenhouse,Veriff,fintech|security
+brave,greenhouse,Brave,consumer|security
+airship,greenhouse,Airship,saas|data
+speechmatics,greenhouse,Speechmatics,ai
+insider,greenhouse,Business Insider,media
+lastpass,greenhouse,LastPass,security
+luno,greenhouse,Luno,fintech
+branch,greenhouse,Branch,data|saas
+deepmind,greenhouse,DeepMind,ai|research
+planetscale,greenhouse,PlanetScale,data|devops
+carbonchain,greenhouse,CarbonChain,energy|data
+winton,greenhouse,Winton,fintech|data
+myfitnesspal,greenhouse,MyFitnessPal,health|consumer
+descript,greenhouse,Descript,media|ai
+labelbox,greenhouse,Labelbox,data|ai
+elsevier,greenhouse,Elsevier,media|research
+platformsh,greenhouse,Platform.sh,devops|devtools
+watershed,greenhouse,Watershed Informatics,health|data
+lattice,greenhouse,Lattice,saas
+sproutsocial,greenhouse,Sprout Social,media|saas
+emplifi,greenhouse,Emplifi,media|saas
+form3,greenhouse,Form3,fintech
+descope,greenhouse,Descope,security
+climatex,greenhouse,Climate X,energy|data
+postscript,greenhouse,Postscript,saas|ecommerce
+patch,greenhouse,Patch,energy|purpose
+skillsoft,greenhouse,Skillsoft,saas
+plos,greenhouse,PLOS,research|purpose
+stabilityai,greenhouse,Stability AI,ai
+circleci,greenhouse,CircleCI,devops|devtools
+jumpcrypto,greenhouse,Jump Crypto,fintech
+picsart,greenhouse,Picsart,design|consumer
+ghost,greenhouse,Ghost,cms|media
+zwift,greenhouse,Zwift,health|consumer
+distrokid,greenhouse,DistroKid,music
+bandainamco,greenhouse,Bandai Namco Entertainment America Inc.,media
+hungryroot,greenhouse,Hungryroot,consumer
+octopusdeploy,greenhouse,Octopus Deploy,devops|devtools
+arkoselabs,greenhouse,Arkose Labs,security
+consensys,greenhouse,Consensys,fintech|devtools
+dscout,greenhouse,Dscout,research|design
+audiomob,greenhouse,Audiomob,music|media
+prisma,greenhouse,Prisma,devtools|data
+sixfold,greenhouse,Sixfold,data|saas
+thoughtexchange,greenhouse,ThoughtExchange,research|saas
+viagogo,greenhouse,viagogo,media|consumer
+satalia,greenhouse,Satalia,ai|data
+socket,greenhouse,Socket,security|devtools
+spryker,greenhouse,Spryker,ecommerce|saas
+lottoland,greenhouse,Lottoland,media|consumer
+tes,greenhouse,TES Global,consumer|media
+medium,greenhouse,Medium,media
+theverge,greenhouse,The Verge,media
+kayak,greenhouse,KAYAK,travel|consumer
+
+# ── round 2 expansion: live Greenhouse boards, UK/EMEA-weighted (2026-08-14) ──
+carvana,greenhouse,Carvana,ecommerce|consumer
+speechify,greenhouse,Speechify,ai|consumer
+coupang,greenhouse,Coupang,ecommerce|consumer
+wundermanthompson,greenhouse,VML,design|agency
+stone,greenhouse,StoneCo,fintech
+waymo,greenhouse,Waymo,ai|research
+nebius,greenhouse,Nebius,ai|devops
+monks,greenhouse,Monks,design|agency
+onrunning,greenhouse,On,ecommerce|consumer
+onemedical,greenhouse,One Medical,health|consumer
+toast,greenhouse,Toast,saas|fintech
+brex,greenhouse,Brex,fintech|saas
+verkada,greenhouse,Verkada,security
+coreweave,greenhouse,CoreWeave,ai|devops
+roblox,greenhouse,Roblox,media|consumer
+remotecom,greenhouse,Remote,saas
+samsara,greenhouse,Samsara,data|saas
+pinterest,greenhouse,Pinterest,media|consumer
+jdsports,greenhouse,JD Sports,ecommerce|consumer
+agibank,greenhouse,Agibank,fintech
+affirm,greenhouse,Affirm,fintech
+appian,greenhouse,Appian,saas|devtools
+xpinc,greenhouse,XP Inc.,fintech
+lyft,greenhouse,Lyft,travel|consumer
+c6bank,greenhouse,C6 Bank,fintech
+netskope,greenhouse,Netskope,security
+inter,greenhouse,Banco Inter,fintech
+workato,greenhouse,Workato,saas|devtools
+reddit,greenhouse,Reddit,media|consumer
+quince,greenhouse,Quince,ecommerce|consumer
+lush,greenhouse,Lush,ecommerce|consumer
+helsing,greenhouse,Helsing,ai|research
+ripple,greenhouse,Ripple,fintech
+tenstorrent,greenhouse,Tenstorrent,ai|research
+robinhood,greenhouse,Robinhood,fintech
+rubyhotels,greenhouse,Ruby Hotels,travel|consumer
+catonetworks,greenhouse,Cato Networks,security
+rubrik,greenhouse,Rubrik,security|data
+instacart,greenhouse,Instacart,ecommerce|consumer
+postman,greenhouse,Postman,devtools|saas
+nuro,greenhouse,Nuro,ai|research
+ionq,greenhouse,IonQ,research|data
+upstart,greenhouse,Upstart,fintech|ai
+tcs,greenhouse,Thornbury Community Services,health
+baringa,greenhouse,Baringa,agency
+dialpad,greenhouse,Dialpad,saas|ai
+quintoandar,greenhouse,QuintoAndar,ecommerce|consumer
+opentable,greenhouse,OpenTable,travel|consumer
+chainguard,greenhouse,Chainguard,security|devops
+jetbrains,greenhouse,JetBrains,devtools
+onetrust,greenhouse,OneTrust,security|saas
+paypay,greenhouse,PayPay,fintech
+solarwinds,greenhouse,SolarWinds,devops|data
+brilliantearth,greenhouse,Brilliant Earth,ecommerce|consumer
+motional,greenhouse,Motional,ai|research
+knowbe4,greenhouse,KnowBe4,security
+phonepe,greenhouse,PhonePe,fintech
+psiquantum,greenhouse,PsiQuantum,research|data
+kodiak,greenhouse,Kodiak Robotics,ai|research
+stepstone,greenhouse,StepStone Group,consumer|saas
+faire,greenhouse,Faire,ecommerce|saas
+commvault,greenhouse,Commvault,security|data
+cribl,greenhouse,Cribl,devops|data
+science37,greenhouse,Science 37,health|data
+sothebys,greenhouse,Sotheby's,media|consumer
+teneo,greenhouse,Teneo,agency
+twitch,greenhouse,Twitch,media|consumer
+mercury,greenhouse,Mercury,fintech
+sofi,greenhouse,SoFi,fintech
+carta,greenhouse,Carta,fintech|saas
+tailscale,greenhouse,Tailscale,security|devops
+cabify,greenhouse,Cabify,travel|consumer
+chime,greenhouse,Chime,fintech
+mangroup,greenhouse,Man Group,fintech|data
+kaseya,greenhouse,Kaseya,devops|saas
+zocdoc,greenhouse,Zocdoc,health|consumer
+tanium,greenhouse,Tanium,security
+lighthouse,greenhouse,Lighthouse,travel|data
+autoscout24,greenhouse,AutoScout24,ecommerce|consumer
+parloa,greenhouse,Parloa,ai|saas
+classpass,greenhouse,ClassPass,health|consumer
+conga,greenhouse,Conga,saas
+pandadoc,greenhouse,PandaDoc,saas
+discord,greenhouse,Discord,media|consumer
+brainlabs,greenhouse,Brainlabs,design|agency
+aqr,greenhouse,AQR Capital Management,fintech|data
+altruist,greenhouse,Altruist,fintech
+cloudbeds,greenhouse,Cloudbeds,travel|saas
+freenow,greenhouse,FREENOW,travel|consumer
+spire,greenhouse,Spire Global,data|research
+virtu,greenhouse,Virtu Financial,fintech|data
+thunes,greenhouse,Thunes,fintech
+launchdarkly,greenhouse,LaunchDarkly,devtools|saas
+marqeta,greenhouse,Marqeta,fintech
+oliver,greenhouse,OLIVER Agency,design|agency
+slice,greenhouse,Slice,saas|ecommerce
+apolloio,greenhouse,Apollo.io,saas|data
+connectwise,greenhouse,ConnectWise,devops|saas
+singlestore,greenhouse,SingleStore,data|devtools
+collibra,greenhouse,Collibra,data|saas
+zuora,greenhouse,Zuora,fintech|saas
+ziprecruiter,greenhouse,ZipRecruiter,consumer|saas
+forter,greenhouse,Forter,fintech|security
+housecall,greenhouse,Housecall Pro,saas
+coalition,greenhouse,Coalition,fintech|security
+everlane,greenhouse,Everlane,ecommerce|consumer
+ebanx,greenhouse,EBANX,fintech
+feedzai,greenhouse,Feedzai,fintech|ai
+doubleverify,greenhouse,DoubleVerify,media|data
+huntress,greenhouse,Huntress,security
+druva,greenhouse,Druva,security|data
+dexory,greenhouse,Dexory,ai|data
+disco,greenhouse,DISCO,saas|ai
+oportun,greenhouse,Oportun,fintech
+globalizationpartners,greenhouse,G-P,saas
+pantheon,greenhouse,Pantheon Systems,cms|devops
+betterment,greenhouse,Betterment,fintech
+hackerrank,greenhouse,HackerRank,saas|devtools
+eve,greenhouse,Eve,ai|saas
+stockx,greenhouse,StockX,ecommerce|consumer
+shifttechnology,greenhouse,Shift Technology,fintech|ai
+celigo,greenhouse,Celigo,saas|devtools
+jumio,greenhouse,Jumio,security|fintech
+d2l,greenhouse,D2L,consumer|saas
+ifit,greenhouse,iFIT,health|consumer
+onespan,greenhouse,OneSpan,security|fintech
+otter,greenhouse,Otter.ai,ai|saas
+atomicwork,greenhouse,Atomicwork,ai|saas
+octave,greenhouse,Octave,health
+smartbear,greenhouse,SmartBear,devtools|saas
+pagerduty,greenhouse,PagerDuty,devops|saas
+scout24,greenhouse,Scout24,ecommerce|consumer
+tines,greenhouse,Tines,security|devtools
+octopuslegacy,greenhouse,Octopus Legacy,consumer|purpose
+iconiq,greenhouse,ICONIQ,fintech
+riskified,greenhouse,Riskified,fintech|security
+careem,greenhouse,Careem,travel|consumer
+riverlane,greenhouse,Riverlane,research|data
+mesh,greenhouse,Mesh,fintech
+nearform,greenhouse,Nearform,devtools|agency
+thefork,greenhouse,The Fork,travel|consumer
+mindbody,greenhouse,Mindbody,health|saas
+tebra,greenhouse,Tebra,health|saas
+pieinsurance,greenhouse,Pie Insurance,fintech
+glossier,greenhouse,Glossier,ecommerce|consumer
+joblogic,greenhouse,Joblogic,saas
+melio,greenhouse,Melio,fintech
+godaddy,greenhouse,GoDaddy,cms|saas
+moltonbrown,greenhouse,Molton Brown,ecommerce|consumer
+turing,greenhouse,Turing,ai|saas
+infosum,greenhouse,InfoSum,data|security
+truefoundry,greenhouse,TrueFoundry,ai|devops
+bancopan,greenhouse,Banco PAN,fintech
+yext,greenhouse,Yext,saas|data
+autotrader,greenhouse,Auto Trader,ecommerce|media
+aftership,greenhouse,AfterShip,ecommerce|saas
+interbrand,greenhouse,Interbrand,design|agency
+criticalmass,greenhouse,Critical Mass,design|agency
+observeai,greenhouse,Observe.AI,ai|saas
+manychat,greenhouse,Manychat,saas|media
+salsify,greenhouse,Salsify,ecommerce|saas
+heartaerospace,greenhouse,Heart Aerospace,energy|research
+saatva,greenhouse,Saatva,ecommerce|consumer
+axiom,greenhouse,Axiom Law,saas
+idnow,greenhouse,IDnow,security|fintech
+udacity,greenhouse,Udacity,consumer|media
+eudia,greenhouse,Eudia,ai|saas
+amperity,greenhouse,Amperity,data|saas
+tavily,greenhouse,Tavily,ai|devtools
+upgrade,greenhouse,Upgrade,fintech
+yubico,greenhouse,Yubico,security
+generalatlantic,greenhouse,General Atlantic,fintech
+hearst,greenhouse,Hearst,media
+rebag,greenhouse,Rebag,ecommerce|consumer
+ledgy,greenhouse,Ledgy,fintech|saas
+tastytrade,greenhouse,tastytrade,fintech
+taxbit,greenhouse,TaxBit,fintech|data
+babelstreet,greenhouse,Babel Street,data|security
+invgate,greenhouse,InvGate,devops|saas
+polyai,greenhouse,PolyAI,ai|saas
+groupon,greenhouse,Groupon,ecommerce|consumer
+yugabyte,greenhouse,Yugabyte,data|devtools
+voxmedia,greenhouse,Vox Media,media
+rumble,greenhouse,Rumble,media|consumer
+elationhealth,greenhouse,Elation Health,health|saas
+bombas,greenhouse,Bombas,ecommerce|consumer
+incode,greenhouse,Incode Technologies,security|fintech
+sayari,greenhouse,Sayari,data|security
+awardco,greenhouse,Awardco,saas
+yotpo,greenhouse,Yotpo,ecommerce|saas
+anydesk,greenhouse,AnyDesk,devtools|saas
+amplemarket,greenhouse,Amplemarket,ai|saas
+cymulate,greenhouse,Cymulate,security
+sendbird,greenhouse,Sendbird,devtools|saas
+marvelfusion,greenhouse,Marvel Fusion,energy|research
+acquia,greenhouse,Acquia,cms|saas
+cherryventures,greenhouse,Cherry Ventures,fintech
+pagaya,greenhouse,Pagaya,fintech|ai
+calendly,greenhouse,Calendly,saas
+range,greenhouse,Range,saas
+stackblitz,greenhouse,StackBlitz,devtools|ai
+litmos,greenhouse,Litmos,consumer|saas
+springboard,greenhouse,Springboard,consumer|media
+buildkite,greenhouse,Buildkite,devops|devtools
+hiddenlayer,greenhouse,HiddenLayer,security|ai
+narvar,greenhouse,Narvar,ecommerce|saas
+refurbed,greenhouse,refurbed,ecommerce|consumer
+wallapop,greenhouse,Wallapop,ecommerce|consumer
+trivago,greenhouse,trivago,travel|consumer
+bondora,greenhouse,Bondora,fintech
+foundry,greenhouse,Foundry,media|design
+constantcontact,greenhouse,Constant Contact,saas|media
+motive,greenhouse,Motive,data|saas
+bitso,greenhouse,Bitso,fintech
+expel,greenhouse,Expel,security
+bishopfox,greenhouse,Bishop Fox,security
+assemblyai,greenhouse,AssemblyAI,ai|devtools
+sovrn,greenhouse,Sovrn,media|data
+terraquantum,greenhouse,Terra Quantum,research|data
+blend,greenhouse,Blend,fintech|saas
+parsleyhealth,greenhouse,Parsley Health,health|consumer
+saucelabs,greenhouse,Sauce Labs,devtools|devops
+guidde,greenhouse,Guidde,saas|ai
+cybereason,greenhouse,Cybereason,security
+apaleo,greenhouse,Apaleo,travel|saas
+rstudio,greenhouse,Posit,data|devtools
+groww,greenhouse,Groww,fintech
+weave,greenhouse,Weave,health|saas
+bigid,greenhouse,BigID,security|data
+highnote,greenhouse,Highnote,fintech
+future,greenhouse,Future,health|consumer
+strike,greenhouse,Strike,fintech
+upwork,greenhouse,Upwork,consumer|saas
+docugami,greenhouse,Docugami,ai|data
+gooutdoors,greenhouse,GO Outdoors,ecommerce|consumer
+healios,greenhouse,Healios,health|consumer
+optimove,greenhouse,Optimove,media|data
+osano,greenhouse,Osano,security|saas
+flipdish,greenhouse,Flipdish,ecommerce|saas
+sedna,greenhouse,Sedna,data|saas
+rocketlawyer,greenhouse,Rocket Lawyer,saas|consumer
+circleso,greenhouse,Circle,media|saas
+guild,greenhouse,Guild,consumer|purpose
+aweber,greenhouse,AWeber,saas|media
+youcom,greenhouse,You.com,ai|research
+callrail,greenhouse,CallRail,saas|data
+current,greenhouse,Current,fintech
+lightricks,greenhouse,Lightricks,design|consumer
+degreed,greenhouse,Degreed,consumer|saas
+sisense,greenhouse,Sisense,data|saas
+hysata,greenhouse,Hysata,energy|research
+lithic,greenhouse,Lithic,fintech
+numa,greenhouse,Numa,travel|consumer
+builtin,greenhouse,Built In,media|consumer
+duda,greenhouse,Duda,cms|saas
+higherlogic,greenhouse,Higher Logic,saas|media
+grailed,greenhouse,Grailed,ecommerce|consumer
+tatcha,greenhouse,Tatcha,ecommerce|consumer
+appinio,greenhouse,Appinio,research|data
+instabase,greenhouse,Instabase,ai|data
+ceros,greenhouse,Ceros,design|saas
+wunderflats,greenhouse,Wunderflats,travel|consumer
+safebreach,greenhouse,SafeBreach,security
+comet,greenhouse,Comet,ai|devtools
+remedy,greenhouse,Remedy Entertainment,media
+iris,greenhouse,Iris North America,design|agency
+workboard,greenhouse,WorkBoard,saas
+seekout,greenhouse,SeekOut,data|saas
+karat,greenhouse,Karat,saas|consumer
+imply,greenhouse,Imply,data|devtools
+resonate,greenhouse,Resonate,data|media
+beyond,greenhouse,Beyond,design|agency
+warp,greenhouse,Warp,devtools
+akoya,greenhouse,Akoya,fintech|data
+alchemer,greenhouse,Alchemer,research|saas
+cuyana,greenhouse,Cuyana,ecommerce|consumer
+flourish,greenhouse,Flourish,data|design
+tigergraph,greenhouse,TigerGraph,data|devtools
+recycleye,greenhouse,Recycleye,energy|ai
+thrive,greenhouse,Thrive,saas
+grey,greenhouse,GREY,design|agency
+nansen,greenhouse,Nansen,fintech|data
+juno,greenhouse,Juno,fintech
+fastspring,greenhouse,FastSpring,fintech|ecommerce
+canto,greenhouse,Canto,cms|saas
+mabl,greenhouse,mabl,devtools|ai
+mightynetworks,greenhouse,Mighty Networks,media|saas
+primerai,greenhouse,Primer,ai|data
+automox,greenhouse,Automox,security|devops
+cbinsights,greenhouse,CB Insights,research|data
+happymoney,greenhouse,Happy Money,fintech
+housinganywhere,greenhouse,HousingAnywhere,travel|consumer
+knock,greenhouse,Knock,fintech
+dremio,greenhouse,Dremio,data|devtools
+imbue,greenhouse,Imbue,ai|research
+unqork,greenhouse,Unqork,saas|devtools
+startree,greenhouse,StarTree,data|devtools
+timeleft,greenhouse,Timeleft,consumer
+mercari,greenhouse,Mercari,ecommerce|consumer
+capacity,greenhouse,Capacity,ai|saas
+blip,greenhouse,Blip,ai|saas
+recall,greenhouse,Recall,ai|devtools
+zestai,greenhouse,Zest AI,fintech|ai
+housemarque,greenhouse,Housemarque,media
+cudoni,greenhouse,Cudoni,ecommerce|consumer
+tempo,greenhouse,Tempo,saas
+salaryfinance,greenhouse,Salary Finance,fintech|purpose
+blueshift,greenhouse,Blueshift,media|data
+salesmsg,greenhouse,Salesmsg,saas|media
+invoca,greenhouse,Invoca,media|data
+figment,greenhouse,Figment,fintech
+blacks,greenhouse,Blacks,ecommerce|consumer
+millets,greenhouse,Millets,ecommerce|consumer
+bark,greenhouse,BARK,ecommerce|consumer
+regie,greenhouse,Regie.ai,ai|saas

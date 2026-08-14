@@ -173,15 +173,44 @@ def post(path: str, body: dict, timeout: int = 30) -> dict:
         raise CfxError(f"{path} -> connection error: {e}") from None
 
 
-def evaluate(expression: str, timeout: int = 30, tab: str = None):
+def evaluate(expression: str, timeout: int = 30, tab: str = None, _retries: int = 2):
     """Run JS in the page and return the UNWRAPPED result value (not the
     `{ok,result}` envelope). Raises CfxError if the JS threw. Passive read —
     JS-in-page generates no input telemetry, so no human_pause here. `tab`
-    overrides the ambient CFX_TAB for callers driving a specific tab."""
-    resp = post(f"/tabs/{_tab(tab)}/evaluate", {"userId": _uid(), "expression": expression}, timeout)
-    if isinstance(resp, dict) and resp.get("error"):
-        raise CfxError(f"evaluate failed: {resp['error']}")
-    return resp.get("result") if isinstance(resp, dict) else resp
+    overrides the ambient CFX_TAB for callers driving a specific tab.
+
+    RETRIES TRANSIENT BACKEND BLIPS (2026-08-14). `get()` already retried these (B.5) but
+    `evaluate()` goes through `post()`, which deliberately does not — retrying a mutating
+    POST risks a double-submit. `evaluate` is the exception: running read-only JS is
+    idempotent, and it is by far the most-called primitive in the skill. A one-off
+    `HTTP 500 Internal server error` — routine when the OTHER agent is pacing the shared
+    browser (see hermes-apply-loop.md §0.5 "treat transient browser errors as contention")
+    — therefore surfaced as an uncaught CfxError traceback that killed the whole run
+    (verified live: inspect_gh_form.py died mid-probe while /health was green and the very
+    next identical call returned 2).
+
+    Retries ONLY transport/5xx-shaped failures. A genuine JS exception in the page is a real
+    result and is raised immediately — retrying it would just hide the bug and burn time."""
+    last = None
+    for attempt in range(_retries + 1):
+        try:
+            resp = post(f"/tabs/{_tab(tab)}/evaluate",
+                        {"userId": _uid(), "expression": expression}, timeout)
+        except CfxError as e:
+            msg = str(e)
+            # Don't retry a dead/unknown tab — that needs ensure_tab()'s self-heal, not a
+            # replay, and retrying just delays the real fix by ~3s.
+            if "404" in msg or "Tab not found" in msg:
+                raise
+            last = e
+            if attempt < _retries:
+                time.sleep(1.5 * (attempt + 1))
+                continue
+            raise
+        if isinstance(resp, dict) and resp.get("error"):
+            raise CfxError(f"evaluate failed: {resp['error']}")
+        return resp.get("result") if isinstance(resp, dict) else resp
+    raise last  # unreachable; keeps static analysis happy
 
 
 def eval_frame(frame_selector: str, expression: str, timeout: int = 30):
@@ -731,14 +760,46 @@ def find_popup(exclude: str = None) -> list:
     return [t for t in list_tabs() if isinstance(t, dict) and t.get("tabId") != exclude]
 
 
-# Command used to restart the browser container when the engine wedges (see
+# Commands used to restart the browser container when the engine wedges (see
 # CAPABILITY-GAPS.md's "ALL mouse endpoints ... 500 across every tab" section).
-# The default assumes a `compose.yaml` in the current directory; override via
-# CFX_RESTART_CMD (space-separated) for your own path / docker binary / sudo rule, e.g.
-#   export CFX_RESTART_CMD="sudo -n docker compose -f /path/to/compose.yaml restart camofox-browser"
-_RESTART_CMD = os.environ.get("CFX_RESTART_CMD", "").split() or [
-    "docker", "compose", "-f", "compose.yaml", "restart", "camofox-browser",
+#
+# ⚠️ 2026-08-14: the old default was a SINGLE command — `docker compose -f compose.yaml
+# restart camofox-browser` — i.e. a *relative* compose path resolved against the CWD, with
+# no sudo. On the real host that can never work: the repo has no `compose.yaml` (only
+# `compose.example.yaml`), the daemon socket needs root ("permission denied while trying to
+# connect to the Docker daemon socket"), and the actual compose file lives at
+# /volume1/docker/playwright/compose.yaml. So `restart-engine` — the documented recovery for
+# a wedged engine — failed 100% of the time on the one host it exists for, and did it
+# quietly: the caller only saw "Restart failed or engine never came back healthy". A real
+# wedge ("Browser session expired" + POST /tabs -> 500) therefore had NO working self-heal
+# for either agent, and the run stalled before a single application.
+#
+# Fix: try a LIST of candidates in order and keep the per-attempt stderr, so a failure says
+# WHICH command failed and why instead of just "check your sudoers". CFX_RESTART_CMD (space-
+# separated) still wins outright when set — an explicit operator override is never second-
+# guessed. Add a host's path here rather than re-forking this logic elsewhere.
+_RESTART_CMD_CANDIDATES = [
+    # Synology ContainerManager (this host) — matches the NOPASSWD sudoers rules verbatim.
+    ["sudo", "-n", "/var/packages/ContainerManager/target/usr/bin/docker", "compose",
+     "-f", "/volume1/docker/playwright/compose.yaml", "restart", "camofox-browser"],
+    # Standard Linux docker install, same compose path.
+    ["sudo", "-n", "/usr/local/bin/docker", "compose",
+     "-f", "/volume1/docker/playwright/compose.yaml", "restart", "camofox-browser"],
+    # Plain `docker` on PATH (works where the user is in the docker group).
+    ["docker", "compose", "-f", "/volume1/docker/playwright/compose.yaml",
+     "restart", "camofox-browser"],
+    # Container-name restart, no compose file needed.
+    ["sudo", "-n", "/usr/local/bin/docker", "restart", "camofox-browser"],
+    ["docker", "restart", "camofox-browser"],
+    # Legacy relative-path default, kept last so an operator who *does* run from a dir
+    # containing compose.yaml still gets the old behaviour.
+    ["docker", "compose", "-f", "compose.yaml", "restart", "camofox-browser"],
 ]
+
+_RESTART_CMD_OVERRIDE = os.environ.get("CFX_RESTART_CMD", "").split()
+
+# Back-compat: some callers/tests import _RESTART_CMD directly.
+_RESTART_CMD = _RESTART_CMD_OVERRIDE or _RESTART_CMD_CANDIDATES[0]
 
 
 def engine_click_healthy(timeout_s: float = 6.0) -> bool:
@@ -812,20 +873,46 @@ def restart_engine(health_timeout_s: float = 90.0) -> bool:
     than silently giving up, since it means the self-heal path itself needs
     attention, not just this one click."""
     import subprocess
-    try:
-        # 90s, not 30s: verified live (2026-07-13) that `docker compose restart` run
-        # through subprocess (pipes, no TTY) can take noticeably longer to return than
-        # it appears to interactively — the restart itself succeeded server-side
-        # (confirmed via /health going browserConnected:false then true a few seconds
-        # later) even though a 30s subprocess timeout fired first and reported failure.
-        # The health poll below is the real completion signal either way; this timeout
-        # just needs to comfortably outlast the CLI call itself.
-        subprocess.run(_RESTART_CMD, check=True, timeout=90,
-                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    except subprocess.TimeoutExpired:
-        pass  # the restart may still have gone through server-side -- let the health poll decide
-    except Exception:
+
+    # Fresh diagnostics per call — otherwise a later success still carries an earlier
+    # call's failures and the printed reason is misleading.
+    restart_engine.errors = []
+    restart_engine.last_cmd = None
+
+    # An explicit operator override is authoritative — never second-guess it with fallbacks.
+    candidates = [_RESTART_CMD_OVERRIDE] if _RESTART_CMD_OVERRIDE else list(_RESTART_CMD_CANDIDATES)
+
+    ran_something = False
+    for cmd in candidates:
+        try:
+            # 90s, not 30s: verified live (2026-07-13) that `docker compose restart` run
+            # through subprocess (pipes, no TTY) can take noticeably longer to return than
+            # it appears to interactively — the restart itself succeeded server-side
+            # (confirmed via /health going browserConnected:false then true a few seconds
+            # later) even though a 30s subprocess timeout fired first and reported failure.
+            # The health poll below is the real completion signal either way; this timeout
+            # just needs to comfortably outlast the CLI call itself.
+            subprocess.run(cmd, check=True, timeout=90,
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            ran_something = True
+            restart_engine.last_cmd = " ".join(cmd)
+            break
+        except subprocess.TimeoutExpired:
+            # May still have gone through server-side — let the health poll decide.
+            ran_something = True
+            restart_engine.last_cmd = " ".join(cmd) + " (timed out; health poll decides)"
+            break
+        except FileNotFoundError as e:
+            restart_engine.errors.append(f"{' '.join(cmd)} -> not found ({e})")
+        except subprocess.CalledProcessError as e:
+            err = (e.stderr or b"").decode("utf-8", "replace").strip()[:200]
+            restart_engine.errors.append(f"{' '.join(cmd)} -> rc={e.returncode} {err}")
+        except Exception as e:  # noqa: BLE001
+            restart_engine.errors.append(f"{' '.join(cmd)} -> {type(e).__name__}: {e}")
+
+    if not ran_something:
         return False
+
     deadline = time.time() + health_timeout_s
     while time.time() < deadline:
         try:
@@ -836,6 +923,13 @@ def restart_engine(health_timeout_s: float = 90.0) -> bool:
             pass
         time.sleep(2)
     return False
+
+
+# Diagnostics from the most recent restart_engine() call. Attributes rather than globals so
+# a caller can print exactly which command ran (or why every candidate failed) — the old code
+# swallowed this and left "check 'sudo -n -l'" as the only clue.
+restart_engine.errors = []
+restart_engine.last_cmd = None
 
 
 def health_fingerprint(tab: str = None) -> dict:
@@ -1412,11 +1506,16 @@ def _cli():
             print("Restarting camofox-browser (drops all open tabs; login persists)...",
                   file=sys.stderr)
             ok = restart_engine()
-            print(json.dumps({"restarted_and_healthy": ok}, indent=2))
+            print(json.dumps({"restarted_and_healthy": ok,
+                              "command": restart_engine.last_cmd,
+                              "attempts_failed": restart_engine.errors}, indent=2))
             if not ok:
-                print("Restart failed or engine never came back healthy -- check "
-                      "'sudo -n -l' for the camofox-restart rule, or restart manually.",
-                      file=sys.stderr)
+                print("Restart failed or engine never came back healthy.", file=sys.stderr)
+                for e in restart_engine.errors:
+                    print(f"  tried: {e}", file=sys.stderr)
+                print("Set CFX_RESTART_CMD to the command that works on this host, e.g.\n"
+                      "  export CFX_RESTART_CMD=\"sudo -n /usr/local/bin/docker compose "
+                      "-f /path/to/compose.yaml restart camofox-browser\"", file=sys.stderr)
                 return 3
         else:
             print(f"Unknown command: {cmd}", file=sys.stderr)

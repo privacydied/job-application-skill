@@ -496,6 +496,29 @@ def apply(config_path: str, do_submit: bool = False) -> int:
 
     failures = []
 
+    # NAVIGATE FIRST (2026-08-14). Every runcfg carries a "url" and apply() used it only as a
+    # dedup fallback — it never actually went there, silently assuming the caller had already
+    # navigated. When the tab was elsewhere (or on about:blank after an engine restart) the
+    # run died with "FAIL: no Apply CTA found (already on the form? external 'Apply on
+    # website'? wrong page?)" — a misleading message that reads like a page/driver wall rather
+    # than "you are not on the posting". Both agents lose time re-diagnosing this; Hermes,
+    # which has no hook pre-navigating the tab, hits it on essentially every call.
+    # Idempotent: skip the nav when the tab is already on the target URL, so calling reveal/
+    # fill/apply repeatedly on a part-filled form never reloads and discards the entries.
+    target = cfg.get("url")
+    if target:
+        try:
+            here = cfx.current_url()
+        except Exception:  # noqa: BLE001
+            here = ""
+        if target.split("#")[0].rstrip("/") != (here or "").split("#")[0].rstrip("/"):
+            print(f"nav -> {target}")
+            try:
+                cfx.navigate(target)
+            except Exception as e:  # noqa: BLE001
+                print(f"FAIL: could not navigate to {target}: {e}")
+                return 2
+
     if reveal() != 0:
         print("ABORT: form did not reveal.")
         return 2

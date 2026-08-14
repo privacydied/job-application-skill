@@ -148,6 +148,12 @@ def _resolve(label, kinds="input[type=text],input[type=email],input[type=tel],in
 # every primitive is unchanged — quiet_notfound defaults False.
 NOTFOUND = "__ATSFORM_NOTFOUND__"
 
+# Returned when a primitive REFUSES to answer an anti-AI / "own words" attestation
+# affirmatively (see combobox_pick's ANTI-AI OATH GUARD). Distinct from a plain failure (1):
+# nothing is broken and retrying cannot help — the posting simply requires the applicant's own
+# words, so the caller should route it to the human queue rather than treat it as a form bug.
+ANTI_AI = "__ATSFORM_ANTI_AI_ATTESTATION__"
+
 # B.2: current href + visible-text length in ONE evaluate (was two per poll iteration
 # in click_button/_wait_change). Returns (href_or_'', len_or_None); on any evaluate
 # error returns ('', None) so the caller treats the iteration as "no change, keep
@@ -528,13 +534,37 @@ def _combo_open_and_pick(option, multi=False):
     return 1
 
 
-def combobox_pick(target, option, multi=False, clear_first=False, quiet_notfound=False):
+def combobox_pick(target, option, multi=False, clear_first=False, quiet_notfound=False,
+                  allow_attestation=False):
     """THE universal dropdown/combobox primitive — native <select> AND every react-select
     variant, driven by the interaction ladder (see block header). `target` = a CSS/#id
     selector OR a substring of the field's visible label. `multi` = mark-all-that-apply
     (adds, doesn't replace); `clear_first` removes existing chips first (to REPLACE a wrong
     multi-select answer). Returns 0 / 1 / NOTFOUND (the last only with quiet_notfound when
-    no such field exists — the defaults path uses it to skip a missing field cleanly)."""
+    no such field exists — the defaults path uses it to skip a missing field cleanly),
+    or ANTI_AI when it refuses to sign an anti-AI oath (see below).
+
+    ⛔ ANTI-AI OATH GUARD (2026-08-14). `checkboxes_from_profile` has always default-denied the
+    "I confirm this application is entirely my own words / AI-generated content will disqualify
+    me" oath — but that guard lived in the CHECKBOX path only, i.e. it was widget-shaped rather
+    than meaning-shaped. Canonical's Greenhouse forms ask the IDENTICAL oath as a **required
+    react-select** ("During this application process I agree to use only my own words. I
+    understand that plagiarism, the use of AI or other generated content will disqualify my
+    application.*" → Yes/No), and every board config routes that through here — so an agent
+    filling the form would silently answer "Yes" and sign a false attestation on the
+    applicant's behalf. That is worse than a crash: it is a lie told in his name, on the
+    record, that can disqualify a real application he cares about.
+    Refusing is the correct behaviour, so the refusal lives in the ONE shared primitive every
+    board delegates to (AGENTS.md §6) rather than in each caller.
+    `allow_attestation=True` is the deliberate override for a HUMAN who wrote the answers
+    themselves — never set it from an autonomous path."""
+    if not allow_attestation and _is_anti_ai_oath(target) and _is_affirmative(option):
+        print(f"REFUSE combobox_pick {str(target)[:60]!r} -> {option!r}: anti-AI attestation. "
+              "Not signing an 'own words / no AI' oath on the applicant's behalf.")
+        print("  → this posting needs the applicant's own answers: hand it to the human queue "
+              "(scripts/human_queue.py), or re-run with allow_attestation=True once THEY have "
+              "written the free-text answers themselves.")
+        return ANTI_AI
     resolve_js = _COMBO_RESOLVE.replace("__TARGET__", _js(target)).replace("__FIND__", _FIND_CONTROL)
     try:
         info = json.loads(cfx.evaluate(resolve_js))
@@ -1459,14 +1489,51 @@ _CB_RULES = [
     ("accuracy", re.compile(r"information.{0,30}(true|accurate|correct|complete)|"
                             r"declare.{0,20}(true|accurate|correct)|certify.{0,20}(accurate|correct|true)|"
                             r"to the best of my knowledge", re.I)),
+    # NOTE the ordering contract above: `marketing` is matched BEFORE this rule, so a
+    # "retain my data for FUTURE opportunities" talent-pool box still lands in marketing and
+    # stays unticked even though it also talks about storing data. That ordering is what makes
+    # it safe for this pattern to mention store/process at all.
+    # 2026-08-14: added the "I agree to allow <Company> to store and process my data ..."
+    # phrasing (Cognism/Greenhouse). It is a REQUIRED, procedurally-true consent — you cannot
+    # apply without it — but it matched no rule, so it fell through to `left_unknown` and was
+    # left unticked, and the submit bounced with a validation error that named no field. The
+    # applicant genuinely does consent to his application being processed by the employer he
+    # is applying to; that is the whole act of applying.
     ("consent", re.compile(r"privacy (policy|notice)|terms (and|&) conditions|terms of (use|service)|"
                            r"data (protection|processing) (policy|notice|statement)|read and (agree|accept|understood)|"
                            r"consent to.{0,40}(process|store|use).{0,25}(data|application|personal)|\bgdpr\b|"
+                           r"i (agree|consent).{0,50}(stor|process|collect).{0,60}"
+                           r"(data|personal|information|demographic|survey|responses)|"
                            r"i (agree|accept).{0,25}(privacy|terms|processing of)", re.I)),
 ]
 # eligibility categories → apply-defaults.json 'checkbox_truths' key (config-routed, gitignored)
 _CB_FACT = {"right_to_work_uk": "right_to_work_uk", "needs_visa": "needs_visa_sponsorship",
             "veteran": "veteran", "disability": "disability", "over_18": "over_18"}
+
+
+def _is_anti_ai_oath(label):
+    """Does this field's label carry the 'only my own words / no AI-generated content' oath?
+
+    Reuses the SAME `_CB_RULES` anti_ai pattern the checkbox path uses, so the two can never
+    drift apart — the whole point of the 2026-08-14 fix is that this judgement is about the
+    question's MEANING, not about which widget happens to render it (checkbox vs react-select
+    vs radio). Pure + browser-free so it is unit-testable."""
+    rx = next((r for c, r in _CB_RULES if c == "anti_ai"), None)
+    return bool(rx and rx.search(str(label or "")))
+
+
+# Affirmative answers to an oath-shaped question. "Acknowledge/Confirm" is Canonical's literal
+# option text; agree/accept/consent/tick cover the other boards' phrasings.
+_AFFIRMATIVE_RX = re.compile(
+    r"^\s*(yes|y|true|agree[d]?|i agree|accept(ed)?|i accept|confirm(ed)?|i confirm|"
+    r"acknowledge|acknowledge/confirm|consent|i consent|on|checked|tick(ed)?)\b", re.I)
+
+
+def _is_affirmative(option):
+    """Is this option value an affirmative answer? Used only to decide whether an anti-AI oath
+    is being SIGNED — answering such a question "No" is perfectly honest and stays allowed, so
+    the guard must not block it."""
+    return bool(_AFFIRMATIVE_RX.match(str(option or "").strip()))
 
 
 def _cb_action(label, truths):

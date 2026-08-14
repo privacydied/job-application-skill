@@ -310,6 +310,38 @@ def main():
         except Exception as e:  # noqa: BLE001
             print(f"  FILL_TOPUP_WARN {lab!r}: {e}")
 
+    # IDENTITY BACKSTOP (2026-08-15). Greenhouse's core identity inputs have STABLE ids
+    # (#first_name/#last_name/#email/#phone), but they were repeatedly left empty by the
+    # label-driven fill and the submit bounced on "First Name is required." — twice in one
+    # run (Cognism, Capco), each costing a full re-drive plus a wasted verification-code
+    # round-trip. Two causes seen: (a) label collision — a form with BOTH "First Name*" and
+    # "Preferred First Name*" resolves the substring to the wrong control, and (b) Greenhouse
+    # re-renders after the résumé autofill and drops a value that fill() already reported OK.
+    # Neither is worth diagnosing per-form when the ids are stable: assert the values by id,
+    # and only touch a field that is genuinely EMPTY so a correct value is never overwritten.
+    try:
+        d = atsform._load_defaults(True) or {}
+        f = d.get("fill", {}) or {}
+        ident = {"first_name": f.get("First name"), "last_name": f.get("Last name"),
+                 "email": f.get("Email"), "phone": f.get("Phone")}
+        ident = {k: v for k, v in ident.items() if v}
+        if ident:
+            res = cfx.evaluate(
+                "(function(){var m=%s;"
+                "var s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;"
+                "var fixed=[];"
+                "Object.keys(m).forEach(function(id){var el=document.getElementById(id);"
+                "  if(!el||(el.value||'').trim()) return;"
+                "  s.call(el,m[id]);"
+                "  el.dispatchEvent(new Event('input',{bubbles:true}));"
+                "  el.dispatchEvent(new Event('change',{bubbles:true}));"
+                "  fixed.push(id);});"
+                "return fixed.join(',');})()" % json.dumps(ident))
+            if res:
+                print(f"  IDENTITY_BACKSTOP re-bound empty field(s): {res}")
+    except Exception as e:  # noqa: BLE001
+        print(f"  IDENTITY_BACKSTOP_WARN {e}")
+
     for frag in ("UK Right to Work", "right to work"):
         try:
             if atsform.set_radio(frag, "Yes") == 0:
@@ -334,6 +366,19 @@ def main():
                  note=f"camofox tab/engine died mid-fill ({str(e)[:60]}) — retry on a fresh tab",
                  proof=None)
             return 6
+        # ANTI-AI OATH (2026-08-14): the form REQUIRES attesting the answers are the
+        # applicant's own words and that AI-generated content disqualifies the application.
+        # An autonomous run cannot sign that truthfully. Abandon this posting WITHOUT
+        # submitting and route it to the human queue — never fall through to submit, which
+        # would either bounce on the required field or, worse, go through having auto-signed
+        # a false attestation in the applicant's name.
+        if rc == atsform.ANTI_AI:
+            print(f"  combo {label_sub!r} -> ANTI_AI attestation; abandoning submit.")
+            _log(company, role, "Greenhouse", url, "Skipped",
+                 note="requires anti-AI attestation ('own words', AI-generated content "
+                      "disqualifies) — the applicant must write and submit this one himself",
+                 proof=None)
+            return 8
         print(f"  combo {label_sub!r}={val!r} -> {rc}")
 
     # Truthful checkbox auto-fill (replaces a blanket tick-all): post-fill steps can render NEW
