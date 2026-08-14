@@ -33,15 +33,31 @@ For Greenhouse, `el.value` holds the real value even when `singleValue` shows on
 
 ## 2026-07-24 addendum — HEADLESS REACT-SELECT WALL (config-correct but still uncommittable)
 
-> ⛔ **RE-TEST BEFORE BELIEVING THIS — 2026-08-14. See
-> `references/camofox-evaluate-isolated-world-false-walls.md`.** On
-> `canonical/jobs/7043028`, a **real trusted click** (`cfx.click_selector`) opened the menu:
-> options `0 → 2`, menus `0 → 3`, `aria-expanded="true"`. The widget is alive. The
-> "renders ZERO option nodes" evidence below was collected on a **closed** select (react-select
-> renders options only once open), and the supporting "no React fiber / no page globals"
-> readings are invisible-by-construction from `evaluate`'s isolated world — they say nothing
-> about page health. Likely real fix: open the menu with a trusted click, then click the option
-> node by exact text. (An earlier banner here blamed a stripped JS bundle; that was also wrong.)
+> ✅ **NOT REPRODUCIBLE — 2026-08-14. `combobox_pick` WORKS on the exact fields below.**
+> Re-tested live on **Monzo Lead Product Designer** (`monzo/jobs/6758088`), the very form this
+> addendum was written from. Unmodified `atsform.combobox_pick`, first attempt, all four
+> field classes committed — `singleValue` populated, which is precisely the signal this
+> section says stays `NONE`:
+>
+> | field | class | result |
+> |---|---|---|
+> | `question_55443515` 🇺🇸 Are you a US Person? | short Yes/No | `OK:No` |
+> | `question_55443516` 🛂 UK Right to Work | long option text | `OK:I'm a UK or Irish National or have Indefinite Leave to Remain.` |
+> | `country` | country list | `OK:United Kingdom +44` |
+> | `candidate-location` | **async Pelias typeahead** | `OK:London, England, United Kingdom` |
+>
+> The async location typeahead — the "suggestion source returns NOTHING headless" case — also
+> returned real suggestions. **No driver fix was needed; none was made.**
+>
+> So the whole "GENUINE driver wall, do NOT loop" conclusion below does not hold today.
+> `combobox_pick` already carries a 3-rung opener ladder (synthetic pointer → real ArrowDown →
+> trusted click, 6s-bounded). Whatever produced the July symptoms — Greenhouse form changes, or
+> the ladder landing after the fact — the current answer is: **re-drive these, don't route
+> around them.** 17 Greenhouse rows sit `Blocked` on this disproven cause
+> (`scripts/triage_blocked.py --ats greenhouse`).
+>
+> Diagnostic caution that produced two wrong root causes in one day:
+> `references/camofox-evaluate-isolated-world-false-walls.md`.
 
 Verified live across Monzo Lead/Staff Product Designer, Canonical Visual/UX/Usability, Cleo:
 even with the CORRECT `combo` block, submit still bounces `This field is required` + `CODE_MISSING`
