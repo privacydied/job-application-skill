@@ -92,11 +92,11 @@ def load_queue():
 
 def _reed_id(row):
     url = (row.get("url") or "")
+    # 2026-08-13 (this session): Reed is user-decreed EXCLUDED — never route a Reed URL
+    # into reed_apply.py. Returning None makes partition() drop it into needs_model
+    # (logged, never auto-driven), honouring the same standing ban as talent/indeed.
     if "reed.co.uk" not in url.lower():
         return None
-    for i in precheck.canon_ids(url):
-        if i.isdigit() and 5 <= len(i) <= 8:
-            return i
     return None
 
 

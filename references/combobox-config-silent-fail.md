@@ -33,14 +33,15 @@ For Greenhouse, `el.value` holds the real value even when `singleValue` shows on
 
 ## 2026-07-24 addendum — HEADLESS REACT-SELECT WALL (config-correct but still uncommittable)
 
-> ⛔ **ROOT CAUSE SUPERSEDED 2026-08-14 — see
-> `references/greenhouse-remix-bundle-stripped-not-reactselect.md`.** The symptoms below are
-> accurate; the diagnosis is wrong. The option list renders zero nodes because the page's
-> Remix client bundle (`<script type="module">` + `__remixContext`) is **stripped from the DOM
-> in the camofox session**, so no JS runs and there is no react-select instance at all — no
-> React fiber anywhere on the page, `form.method="get"`, 0 named fields. The "future fix"
-> floated at the end of this section (inject via react-select's `onChange`) **cannot work**:
-> there is no component state to inject into. Do not spend more time on driver-side fixes.
+> ⛔ **RE-TEST BEFORE BELIEVING THIS — 2026-08-14. See
+> `references/camofox-evaluate-isolated-world-false-walls.md`.** On
+> `canonical/jobs/7043028`, a **real trusted click** (`cfx.click_selector`) opened the menu:
+> options `0 → 2`, menus `0 → 3`, `aria-expanded="true"`. The widget is alive. The
+> "renders ZERO option nodes" evidence below was collected on a **closed** select (react-select
+> renders options only once open), and the supporting "no React fiber / no page globals"
+> readings are invisible-by-construction from `evaluate`'s isolated world — they say nothing
+> about page health. Likely real fix: open the menu with a trusted click, then click the option
+> node by exact text. (An earlier banner here blamed a stripped JS bundle; that was also wrong.)
 
 Verified live across Monzo Lead/Staff Product Designer, Canonical Visual/UX/Usability, Cleo:
 even with the CORRECT `combo` block, submit still bounces `This field is required` + `CODE_MISSING`
