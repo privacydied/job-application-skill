@@ -131,6 +131,17 @@ only**. Park it — `holds.csv` row + screenshot + `blockers.py record` — then
 the next item in `queue.jsonl`**. Don't retry a mutating submit. Notify the user ONCE per distinct
 blocker; re-reporting the same blocker verbatim is itself a failure mode (SKILL.md §"continue" override).
 
+**⛔ JS-HEALTH GATE — run ONCE per firing, at bootstrap, before driving anything:**
+```bash
+python3 scripts/js_health.py     # exit 0 = fine · 1 = page JS dead (INFRA) · 2 = can't check
+```
+On exit 1, **STOP driving forms and report it as one infrastructure fault.** When page JS
+doesn't execute, EVERY JS-driven ATS fails and each failure impersonates a different
+board-specific wall (Greenhouse "react-select renders zero options", Ashby "fields won't
+commit", WTTJ "won't bind", Lumesse "Continue won't advance"). They are one bug in eight
+costumes. Do NOT log those as `Blocked`, and do NOT write per-board driver workarounds for
+them — that has burned entire sessions.
+
 **⛔ PRIOR-ART GATE — run this BEFORE you log `Blocked` or call any wall "structural":**
 ```bash
 python3 scripts/known_wall.py --ats <board> "<the symptom you actually observed>"

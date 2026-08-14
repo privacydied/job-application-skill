@@ -1,6 +1,19 @@
-# Greenhouse "react-select renders zero options headless" is a STRIPPED JS BUNDLE, not a widget wall
+# Greenhouse "react-select renders zero options headless" is PAGE JS NOT EXECUTING, not a widget wall
 
 Captured 2026-08-14 (Claude Code, live probe against the shared camofox backend).
+
+> **CORRECTION (same day, later probe).** The title's original claim — that the `<script
+> type="module">` tag is *stripped* — was based on repeated loads showing `moduleTags: 0`.
+> A later run showed `moduleTags: 1` on the same URL, so **tag presence is inconsistent and
+> is NOT the reliable signal**. The reproducible fault, stable across every probe and every
+> site tested (including `example.com`), is narrower and more fundamental:
+>
+> **No page JavaScript executes at all.** Page inline globals (`window.ENV`), external
+> script globals (`grecaptcha`/`gapi`/`Dropbox`), and a freshly-injected inline script are
+> ALL absent/non-executing. Check it in one call: `python3 scripts/js_health.py`.
+>
+> Everything below about react-select is still correct — there is no React instance to
+> drive — but attribute it to "page JS is dead", not "the tag was removed".
 
 **This supersedes the root-cause analysis in
 `references/combobox-config-silent-fail.md` §"2026-07-24 addendum — HEADLESS REACT-SELECT
