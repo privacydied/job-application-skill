@@ -33,6 +33,15 @@ For Greenhouse, `el.value` holds the real value even when `singleValue` shows on
 
 ## 2026-07-24 addendum — HEADLESS REACT-SELECT WALL (config-correct but still uncommittable)
 
+> ⛔ **ROOT CAUSE SUPERSEDED 2026-08-14 — see
+> `references/greenhouse-remix-bundle-stripped-not-reactselect.md`.** The symptoms below are
+> accurate; the diagnosis is wrong. The option list renders zero nodes because the page's
+> Remix client bundle (`<script type="module">` + `__remixContext`) is **stripped from the DOM
+> in the camofox session**, so no JS runs and there is no react-select instance at all — no
+> React fiber anywhere on the page, `form.method="get"`, 0 named fields. The "future fix"
+> floated at the end of this section (inject via react-select's `onChange`) **cannot work**:
+> there is no component state to inject into. Do not spend more time on driver-side fixes.
+
 Verified live across Monzo Lead/Staff Product Designer, Canonical Visual/UX/Usability, Cleo:
 even with the CORRECT `combo` block, submit still bounces `This field is required` + `CODE_MISSING`
 on specific required fields — **notably "Please confirm your UK Right to Work" / "🛂 UK Right to
