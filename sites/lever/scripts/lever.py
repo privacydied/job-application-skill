@@ -113,33 +113,48 @@ def set_location(city="London"):
     ({"name": …, "id": …}), which is what the server actually validates. Prefers a UK match so
     "London" can't silently resolve to London, Ontario or London, Ohio — both of which Lever
     offers first-class. Returns 0 on a structured pick."""
-    try:
-        cfx.evaluate("""(function(){var i=document.getElementById('location-input');
-          if(!i) return 'NO_INPUT'; i.scrollIntoView({block:'center'}); i.focus();
-          var s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
-          s.call(i,''); i.dispatchEvent(new Event('input',{bubbles:true})); return 'ready';})()""")
-    except cfx.CfxError as e:
-        print(f"FAIL location: {e}")
-        return 1
-    for ch in str(city)[:24]:
+    marked = "NO_OPTIONS"
+    # Two rounds: keystrokes only land in a field the browser considers focused, and a JS
+    # .focus() alone is not always enough after the résumé re-render. Round 2 uses a TRUSTED
+    # click to focus, and a shorter query (a longer prefix over-filters some geo lists).
+    for attempt, query in enumerate((str(city)[:24], str(city)[:4]), start=1):
         try:
-            cfx.press(ch)
-        except cfx.CfxError:
-            pass
-        time.sleep(0.08)
-    time.sleep(2.5)
-    try:
-        marked = cfx.evaluate("""(function(){
-          var els=[].slice.call(document.querySelectorAll('.dropdown-location'));
-          if(!els.length) return 'NO_OPTIONS';
-          var t=els.filter(function(e){return /GBR|United Kingdom|England|Scotland|Wales/i
-                 .test(e.innerText||'');})[0] || els[0];
-          t.setAttribute('data-lever-loc','1'); return t.innerText.trim();})()""")
-    except cfx.CfxError as e:
-        print(f"FAIL location list: {e}")
-        return 1
+            ready = cfx.evaluate("""(function(){var i=document.getElementById('location-input');
+              if(!i) return 'NO_INPUT'; i.scrollIntoView({block:'center'});
+              i.setAttribute('data-lever-locin','1'); i.focus();
+              var s=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
+              s.call(i,''); i.dispatchEvent(new Event('input',{bubbles:true})); return 'ready';})()""")
+        except cfx.CfxError as e:
+            print(f"FAIL location: {e}")
+            return 1
+        if ready == "NO_INPUT":
+            return 1
+        if attempt == 2:
+            try:
+                cfx.click_selector('[data-lever-locin="1"]', timeout=6)
+            except cfx.CfxError:
+                pass
+        for ch in query:
+            try:
+                cfx.press(ch)
+            except cfx.CfxError:
+                pass
+            time.sleep(0.08)
+        time.sleep(2.5)
+        try:
+            marked = cfx.evaluate("""(function(){
+              var els=[].slice.call(document.querySelectorAll('.dropdown-location'));
+              if(!els.length) return 'NO_OPTIONS';
+              var t=els.filter(function(e){return /GBR|United Kingdom|England|Scotland|Wales/i
+                     .test(e.innerText||'');})[0] || els[0];
+              t.setAttribute('data-lever-loc','1'); return t.innerText.trim();})()""")
+        except cfx.CfxError as e:
+            print(f"FAIL location list: {e}")
+            return 1
+        if marked not in ("NO_INPUT", "NO_OPTIONS"):
+            break
     if marked in ("NO_INPUT", "NO_OPTIONS"):
-        print(f"FAIL location: {marked} (geo list empty even after real keystrokes)")
+        print(f"FAIL location: {marked} (geo list empty after 2 keystroke rounds)")
         return 1
     try:
         cfx.click_selector('[data-lever-loc="1"]', timeout=8)
