@@ -403,9 +403,9 @@ def _source_one(s, force, env=None):
     return s["board"], posts, err, time.time() - t0
 
 
-def run(target=None, no_screen=False, screen_limit=40, force=False,
-        only_boards=None, out_path=None, now=None, min_queue=0, http_concurrent=False,
-        http_workers=6, own_tab=False):
+def _run_funnel(target=None, no_screen=False, screen_limit=40, force=False,
+                only_boards=None, out_path=None, now=None, min_queue=0,
+                http_concurrent=False, http_workers=6, own_tab=False):
     """Importable funnel (F.2): run the WHOLE sourcing→screening pipeline in code and
     return (result, exit_code). `result` is the machine summary dict (verdict/counts/
     queue path/review items) on WORK, or {"verdict": …} on SLEEP/HOLD/DONE. queue.jsonl
@@ -487,34 +487,24 @@ def run(target=None, no_screen=False, screen_limit=40, force=False,
     # moves the pure-HTTP boards off-tab (HTTP_ONLY_BOARDS), and every camofox board stays
     # here. hermes-apply-loop.md §0.5 already tells each AGENT to use its own tab; this makes
     # the same rule true for a background sourcing run within one agent.
-    tab_env = None
-    own_tab_id = None
-    if tab_clear and own_tab:
-        try:
-            own_tab_id = cfx.open_tab()
-            tab_env = dict(os.environ, CFX_TAB=own_tab_id)
-            print(f"  sourcing on its OWN tab {own_tab_id[:8]}… (apply tab untouched)",
-                  file=sys.stderr)
-        except Exception as e:  # noqa: BLE001 — fall back to the shared tab, as before
-            print(f"  --own-tab: could not open a sourcing tab ({str(e)[:60]}); "
-                  f"falling back to the shared tab", file=sys.stderr)
-    try:
-        for s in tab_clear:
-            board, posts, err, secs = _source_one(s, force, env=tab_env)
-            per_board[board] = per_board.get(board, 0) + len(posts)
-            all_posts.extend(posts)
-            if err:
-                errors.append(err)
-            print(f"  sourced {board:<9} {len(posts):>3} cards in {secs:4.0f}s"
-                  + ("  (own tab)" if tab_env else "")
-                  + (f"  ERR: {err}" if err else ""), file=sys.stderr)
-    finally:
-        # Camofox strands a run past ~8 open tabs (SKILL.md step 9) — always give this one back.
-        if own_tab_id:
-            try:
-                cfx.close_tab(own_tab_id)
-            except Exception:  # noqa: BLE001
-                pass
+    # ⚠️ It is NOT enough to hand the sourcing subprocesses a different env: step 4's JD
+    # screening (jd.screen_one) runs IN-PROCESS and navigates via cfx, which reads CFX_TAB
+    # from os.environ. A first cut that only passed `env=` to the feeds still walked the apply
+    # tab away — from the SCREEN phase instead of the source phase (caught live: the tab landed
+    # on a SumUp/Greenhouse JD mid-application). So rebind os.environ['CFX_TAB'] for the whole
+    # run and restore it in `finally`, which covers both phases with one mechanism.
+    # The tab swap itself is owned by run() (the wrapper below), so it spans BOTH the
+    # sourcing loop here and the in-process JD screening in step 4.
+    own_tab_id = os.environ.get("_PIPELINE_OWN_TAB") or None
+    for s in tab_clear:
+        board, posts, err, secs = _source_one(s, force)
+        per_board[board] = per_board.get(board, 0) + len(posts)
+        all_posts.extend(posts)
+        if err:
+            errors.append(err)
+        print(f"  sourced {board:<9} {len(posts):>3} cards in {secs:4.0f}s"
+              + ("  (own tab)" if own_tab_id else "")
+              + (f"  ERR: {err}" if err else ""), file=sys.stderr)
 
     # ── 2) merge (dedup by canonical id) ─────────────────────────────────────
     # C.1: merge the in-memory list directly — no serialize-to-tmp + read-back of the
@@ -657,6 +647,46 @@ def run(target=None, no_screen=False, screen_limit=40, force=False,
           + (f" ⚠️ {_capped} queued UNSCREENED past --screen-limit={screen_limit}."
              if _capped else ""), file=sys.stderr)
     return result, 0
+
+
+def run(*args, own_tab=False, **kwargs):
+    """Public funnel entrypoint — owns the `--own-tab` lifecycle, then delegates to
+    `_run_funnel` (which holds the actual sourcing→screening logic, unchanged).
+
+    WHY A WRAPPER RATHER THAN A FLAG INSIDE THE FUNNEL. The tab swap has to span BOTH phases
+    that touch the browser: the sourcing subprocesses (which inherit `os.environ`) and step
+    4's JD screening (`jd.screen_one`, which runs IN-PROCESS and reads `CFX_TAB` from
+    `os.environ`). A first cut passed `env=` only to the feeds and still walked the apply tab
+    away — from the SCREEN phase instead of the source phase. Owning it here gives one open,
+    one restore, and one close on EVERY exit path, including an exception mid-screen: leaking
+    a tab would also leave `CFX_TAB` pointing at it, and camofox strands a run past ~8 open
+    tabs, so a leak here eventually wedges the whole loop."""
+    if not own_tab:
+        return _run_funnel(*args, **kwargs)
+    prev_tab = os.environ.get("CFX_TAB")
+    tab_id = None
+    try:
+        tab_id = cfx.open_tab()
+    except Exception as e:  # noqa: BLE001 — degrade to the shared tab, the old behaviour
+        print(f"  --own-tab: could not open a sourcing tab ({str(e)[:60]}); "
+              f"falling back to the shared tab", file=sys.stderr)
+        return _run_funnel(*args, **kwargs)
+    os.environ["CFX_TAB"] = tab_id
+    os.environ["_PIPELINE_OWN_TAB"] = tab_id
+    print(f"  sourcing+screening on its OWN tab {tab_id[:8]}… "
+          f"(apply tab {(prev_tab or '?')[:8]}… untouched)", file=sys.stderr)
+    try:
+        return _run_funnel(*args, **kwargs)
+    finally:
+        os.environ.pop("_PIPELINE_OWN_TAB", None)
+        if prev_tab is not None:
+            os.environ["CFX_TAB"] = prev_tab
+        else:
+            os.environ.pop("CFX_TAB", None)
+        try:
+            cfx.close_tab(tab_id)
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def main():
