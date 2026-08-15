@@ -73,6 +73,12 @@ def probe(ats, company, role, url):
     # version of this probe consequently reported "NONE (ready to submit)" for eight postings
     # that were in fact blocked — a false all-clear, which is the worst possible answer here.
     # Read the live form instead: every unmet REQUIRED control, grouped, with its question.
+    # A CLOSED posting has no form at all, so `open` comes back empty — which reads as
+    # "ready to submit", the same false all-clear the DOM check was added to kill. Detect it
+    # explicitly (Lever: "we couldn't find anything here… might have closed").
+    if re.search(r"couldn.t find anything here|posting .{0,20}might have closed|"
+                 r"no longer accepting|position (has been )?closed", out, re.I):
+        return {"config": path, "open": ["__POSTING_CLOSED__"], "submitted_ok": False}
     open_qs += _dom_unmet()
     seen, uniq = set(), []
     for q in open_qs:
