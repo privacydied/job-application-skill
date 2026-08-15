@@ -626,3 +626,293 @@ blacks,greenhouse,Blacks,ecommerce|consumer
 millets,greenhouse,Millets,ecommerce|consumer
 bark,greenhouse,BARK,ecommerce|consumer
 regie,greenhouse,Regie.ai,ai|saas
+# ── SmartRecruiters expansion (2026-08-15) — all verified live (HTTP 200, >=1 ──
+# job) and company-name-checked via the posting-detail endpoint. Demo/sandbox
+# boards and name-squats were rejected; see the round report.
+# api.smartrecruiters.com/v1/companies/<slug>/postings
+wise,smartrecruiters,Wise,fintech
+legalandgeneral,smartrecruiters,Legal & General,fintech
+wtw,smartrecruiters,WTW,fintech
+socure,smartrecruiters,Socure,security|fintech
+servicenow,smartrecruiters,ServiceNow,saas
+freshworks,smartrecruiters,Freshworks,saas
+canva,smartrecruiters,Canva,design|saas
+hibob,smartrecruiters,HiBob,saas
+smartrecruiters,smartrecruiters,SmartRecruiters,saas
+hirevue,smartrecruiters,HireVue,ai|saas
+mindtickle,smartrecruiters,MindTickle,saas
+yardi,smartrecruiters,Yardi,saas
+mirantis,smartrecruiters,Mirantis,devops|devtools
+endava,smartrecruiters,Endava,agency
+sportradar,smartrecruiters,Sportradar,data|media
+entain,smartrecruiters,Entain,media|consumer
+evolution,smartrecruiters,Evolution,media|consumer
+playtech,smartrecruiters,Playtech,media|saas
+believe,smartrecruiters,Believe,music
+reachplc,smartrecruiters,Reach plc,media
+newscorp,smartrecruiters,News Corp,media
+springernature,smartrecruiters,Springer Nature,media|research
+genomicsengland,smartrecruiters,Genomics England,health|data
+lonza,smartrecruiters,Lonza,health
+kenvue,smartrecruiters,Kenvue,health|consumer
+asos,smartrecruiters,ASOS,ecommerce|consumer
+primark,smartrecruiters,Primark,ecommerce|consumer
+picnic,smartrecruiters,Picnic,ecommerce|consumer
+wayfair,smartrecruiters,Wayfair,ecommerce|consumer
+auto1,smartrecruiters,AUTO1 Group,ecommerce|consumer
+omio,smartrecruiters,Omio,travel|consumer
+accor,smartrecruiters,Accor,travel|consumer
+grab,smartrecruiters,Grab,consumer
+kpn,smartrecruiters,KPN,consumer
+alorica,smartrecruiters,Alorica,consumer
+averydennison,smartrecruiters,Avery Dennison,consumer
+kimberlyclark,smartrecruiters,Kimberly-Clark,consumer
+vattenfall,smartrecruiters,Vattenfall,energy
+ecovadis,smartrecruiters,EcoVadis,energy|data
+
+# ── recruitee expansion (2026-08-15) — live boards, NL/BE/DE/FR/Nordics-weighted ──
+bunq,recruitee,bunq,fintech
+multisafepay,recruitee,MultiSafepay,fintech
+pay,recruitee,Pay.,fintech
+cmcom,recruitee,CM.com,saas|media
+copernica,recruitee,Copernica,saas|media
+meltwater,recruitee,Meltwater,media|data
+zeotap,recruitee,Zeotap,data|media
+eventim,recruitee,EVENTIM Benelux,media|consumer
+hygraph,recruitee,Hygraph,cms|saas
+channable,recruitee,Channable,ecommerce|saas
+channelengine,recruitee,ChannelEngine,ecommerce|saas
+rebuy,recruitee,rebuy,ecommerce|consumer
+tonyschocolonely,recruitee,Tony's Chocolonely,ecommerce|consumer
+trunkrs,recruitee,Trunkrs,ecommerce|consumer
+formitable,recruitee,Zenchef,saas|consumer
+macpaw,recruitee,MacPaw,saas|consumer
+nmbrs,recruitee,Nmbrs,saas
+studytube,recruitee,Studytube,saas
+azumuta,recruitee,Azumuta,saas
+axual,recruitee,Axual,data|devtools
+manual,recruitee,Manual,health|consumer
+transavia,recruitee,Transavia,travel|consumer
+otovo,recruitee,Otovo,energy
+fastned,recruitee,Fastned,energy
+allego,recruitee,Allego,energy
+greenchoice,recruitee,Greenchoice,energy
+vandebron,recruitee,Vandebron,energy
+sunrock,recruitee,Sunrock,energy
+arturia,recruitee,Arturia,music
+adesso,recruitee,adesso Netherlands,agency
+appunite,recruitee,AppUnite,agency
+espeo,recruitee,Espeo Software,agency
+inovex,recruitee,inovex,agency
+conclusion,recruitee,Conclusion,agency
+iodigital,recruitee,iO,design|agency
+
+# ── recruitee expansion (2026-08-15) — second pass ──
+holded,recruitee,Holded,fintech|saas
+livestorm,recruitee,Livestorm,saas|media
+dpgmedia,recruitee,DPG Media,media
+rtl,recruitee,RTL Nederland,media
+televic,recruitee,Televic,media|data
+dataroots,recruitee,dataroots,ai|data
+radix,recruitee,Superlinear,ai|data
+robovision,recruitee,Robovision,ai|data
+loavies,recruitee,LOAVIES,ecommerce|consumer
+mantel,recruitee,Mantel,ecommerce|consumer
+# ── greenhouse expansion (2026-08-15) ─ live boards (HTTP 200, >=1 job), board ──
+# name checked against the intended company; squats/mismatches rejected.
+# boards-api.greenhouse.io/v1/boards/<slug>/jobs?content=false
+flatironhealth,greenhouse,Flatiron Health,health|data
+mavenclinic,greenhouse,Maven Clinic,health
+carrotfertility,greenhouse,Carrot,health
+pacaso,greenhouse,Pacaso,consumer
+masterclass,greenhouse,MasterClass,media|consumer
+outschool,greenhouse,Outschool,saas
+everlaw,greenhouse,Everlaw,saas
+cision,greenhouse,Cision,media|data
+abnormalsecurity,greenhouse,Abnormal Security,security
+orcasecurity,greenhouse,Orca Security,security
+keepersecurity,greenhouse,Keeper Security,security
+hypr,greenhouse,HYPR,security
+riskledger,greenhouse,Risk Ledger,security
+securityscorecard,greenhouse,SecurityScorecard,security
+invisible,greenhouse,Invisible Technologies,ai|data
+cresta,greenhouse,Cresta,ai|saas
+forbes,greenhouse,Forbes,media
+easyship,greenhouse,Easyship,ecommerce|saas
+checkr,greenhouse,Checkr,saas
+hugeinc,greenhouse,Huge,design|agency
+dept,greenhouse,DEPT,design|agency
+lokalise,greenhouse,Lokalise,saas
+smartling,greenhouse,Smartling,saas
+ivalua,greenhouse,Ivalua,saas
+public,greenhouse,Public,fintech
+sigmacomputing,greenhouse,Sigma Computing,data|saas
+threatlocker,greenhouse,ThreatLocker,security
+dragos,greenhouse,Dragos,security
+axonius,greenhouse,Axonius,security
+runzero,greenhouse,runZero,security
+censys,greenhouse,Censys,security
+typeface,greenhouse,Typeface,ai|saas
+blueconic,greenhouse,BlueConic,data|saas
+gumgum,greenhouse,GumGum,data|media
+kargo,greenhouse,Kargo,data|media
+id5,greenhouse,ID5,data|media
+guardsquare,greenhouse,Guardsquare,security
+apiiro,greenhouse,Apiiro,security|devtools
+tigera,greenhouse,Tigera,security|devops
+edb,greenhouse,EDB,data|devtools
+acryldata,greenhouse,DataHub,data|saas
+dotmatics,greenhouse,Dotmatics,health|data
+physicsx,greenhouse,PhysicsX,ai|research
+trolley,greenhouse,Trolley,fintech
+geniussports,greenhouse,Genius Sports,media|data
+hudl,greenhouse,Hudl,media|data
+scandit,greenhouse,Scandit,ecommerce|saas
+reformation,greenhouse,Reformation,ecommerce|consumer
+catawiki,greenhouse,Catawiki,ecommerce|consumer
+okx,greenhouse,OKX,fintech
+bybit,greenhouse,Bybit,fintech
+binance,greenhouse,Binance,fintech
+b2c2,greenhouse,B2C2,fintech
+mattermost,greenhouse,Mattermost,saas
+wikimedia,greenhouse,Wikimedia Foundation,purpose
+udio,greenhouse,Udio,music
+highradius,greenhouse,HighRadius,fintech|saas
+billtrust,greenhouse,Billtrust,fintech|saas
+contentstack,greenhouse,Contentstack,cms|saas
+fourthline,greenhouse,Fourthline,security|fintech
+britive,greenhouse,Britive,security
+obsidiansecurity,greenhouse,Obsidian Security,security
+jamf,greenhouse,Jamf,security
+nintex,greenhouse,Nintex,saas
+relex,greenhouse,RELEX Solutions,data|saas
+anaplan,greenhouse,Anaplan,data|saas
+staffbase,greenhouse,Staffbase,saas
+simpplr,greenhouse,Simpplr,saas
+quantifind,greenhouse,Quantifind,fintech|ai
+talonone,greenhouse,Talon.One,ecommerce|saas
+treasuryprime,greenhouse,Treasury Prime,fintech
+truveta,greenhouse,Truveta,health|data
+freenome,greenhouse,Freenome,health|data
+natera,greenhouse,Natera,health|data
+valencelabs,greenhouse,Valence Labs,ai|research
+suki,greenhouse,Suki,ai|health
+modernhealth,greenhouse,Modern Health,health
+talkspace,greenhouse,Talkspace,health
+betterhelp,greenhouse,BetterHelp,health
+twochairs,greenhouse,Two Chairs,health
+amwell,greenhouse,Amwell,health
+gympass,greenhouse,Wellhub,health|consumer
+urbansportsclub,greenhouse,Urban Sports Club,health|consumer
+grin,greenhouse,GRIN,media|saas
+fairmarkit,greenhouse,Fairmarkit,saas
+mitratech,greenhouse,Mitratech,saas
+logicgate,greenhouse,LogicGate,saas
+clarityai,greenhouse,Clarity AI,energy|data
+indeedflex,greenhouse,Indeed Flex,saas
+instawork,greenhouse,Instawork,saas
+planetlabs,greenhouse,Planet,research|data
+epirus,greenhouse,Epirus,energy|research
+agilityrobotics,greenhouse,Agility Robotics,ai|research
+figureai,greenhouse,Figure,ai|research
+apptronik,greenhouse,Apptronik,ai|research
+tulip,greenhouse,Tulip Interfaces,data|saas
+augury,greenhouse,Augury,data|saas
+indiecampers,greenhouse,Indie Campers,travel|consumer
+myheritage,greenhouse,MyHeritage,consumer|data
+heatgeek,greenhouse,Heat Geek,energy
+glide,greenhouse,Glide,devtools|saas
+6sense,greenhouse,6sense,saas|data
+bombora,greenhouse,Bombora,saas|data
+fieldwire,greenhouse,Fieldwire,saas
+buildops,greenhouse,BuildOps,saas
+bloomerang,greenhouse,Bloomerang,saas
+donorbox,greenhouse,Donorbox,saas
+gofundme,greenhouse,GoFundMe,consumer|purpose
+accela,greenhouse,Accela,saas
+litify,greenhouse,Litify,saas
+gigs,greenhouse,Gigs,fintech
+silvr,greenhouse,Silvr,fintech
+roofstock,greenhouse,Roofstock,fintech
+gongio,greenhouse,Gong.io,saas|data
+espresa,greenhouse,Espresa,saas
+7shifts,greenhouse,7shifts,saas
+legion,greenhouse,Legion,saas
+
+# ── lever expansion (2026-08-15) ── all verified live (HTTP 200, >=1 job) and
+# name-checked against the board title at jobs.lever.co/<slug>. Squatted / name-collision
+# and dead-stub boards were rejected; see the round report.
+# api.lever.co/v0/postings/<slug>?mode=json
+100ms,lever,100ms,ai|health
+15five,lever,15Five,saas
+360learning,lever,360Learning,saas
+acceldata,lever,Acceldata,data|devtools
+activecampaign,lever,ActiveCampaign,saas|media
+agicap,lever,Agicap,fintech|saas
+aircall,lever,Aircall,saas
+aleph,lever,Aleph,media|data
+arcadia,lever,Arcadia,health|data
+avalanchestudios,lever,Avalanche Studios Group,media|consumer
+bazaarvoice,lever,Bazaarvoice,ecommerce|saas
+bekk,lever,Bekk,design|agency
+bighealth,lever,Big Health,health|consumer
+blablacar,lever,BlaBlaCar,travel|consumer
+cloudinary,lever,Cloudinary,media|saas
+deliverect,lever,Deliverect,ecommerce|saas
+didomi,lever,Didomi,security|saas
+dlocal,lever,dLocal,fintech
+dreamgames,lever,Dream Games,media|consumer
+educative,lever,Educative,devtools|saas
+equativ,lever,Equativ,media|data
+finch,lever,Finch,devtools|saas
+frontify,lever,Frontify,design|saas
+healx,lever,Healx,ai|health
+immuta,lever,Immuta,data|security
+incorta,lever,Incorta,data|saas
+jobandtalent,lever,Jobandtalent,saas
+jumpcloud,lever,JumpCloud,security|saas
+kapwing,lever,Kapwing,media|ai
+keboola,lever,Keboola,data|devtools
+kinsta,lever,Kinsta,cms|devops
+logrocket,lever,LogRocket,data|devtools
+malt,lever,Malt,saas
+matillion,lever,Matillion,data|devtools
+mendix,lever,Mendix,devtools|saas
+metabase,lever,Metabase,data|devtools
+nium,lever,Nium,fintech
+ogury,lever,Ogury,media|data
+oliverwyman,lever,Oliver Wyman Labs,agency
+omnisend,lever,Omnisend,saas|media
+openx,lever,OpenX,media|data
+outreach,lever,Outreach,saas
+palantir,lever,Palantir Technologies,ai|data
+pipedrive,lever,Pipedrive,saas
+qonto,lever,Qonto,fintech
+quantcast,lever,Quantcast,media|data
+quantummetric,lever,Quantum Metric,data|design
+recognisebank,lever,Recognise Bank,fintech
+revinate,lever,Revinate,travel|saas
+saviynt,lever,Saviynt,security|saas
+scaleway,lever,Scaleway,devops|devtools
+scottlogic,lever,Scott Logic,agency
+secureframe,lever,Secureframe,security|saas
+siteground,lever,SiteGround,devops|saas
+snaplogic,lever,SnapLogic,devtools|saas
+superannotate,lever,SuperAnnotate,ai|data
+sysdig,lever,Sysdig,security|devops
+theathletic,lever,The Athletic,media
+theodo,lever,Theodo,design|agency
+tinybird,lever,Tinybird,data|devtools
+toptal,lever,Toptal,saas
+trendyol,lever,Trendyol,ecommerce|consumer
+veepee,lever,Veepee,ecommerce|consumer
+veeva,lever,Veeva Systems,health|saas
+verkor,lever,Verkor,energy|research
+vestiairecollective,lever,Vestiaire Collective,ecommerce|consumer
+vevo,lever,Vevo,media|music
+watchguard,lever,WatchGuard Technologies,security
+whereby,lever,Whereby,devtools|saas
+younited,lever,Younited,fintech
+zerotier,lever,ZeroTier,devops|security
+zilliz,lever,Zilliz,ai|devtools
+zoox,lever,Zoox,ai|research

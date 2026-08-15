@@ -50,6 +50,24 @@ warning, never a hard failure.
 To add a company: find its careers page on one of the six ATSes, take the slug from the URL,
 then `feed.py --verify --companies <slug>`.
 
+### Bulk slug-probing a new ATS — two traps (learned on the Recruitee round, 2026-08-15)
+
+1. **Recruitee rate-limits hard.** 8 concurrent bare GETs to `<slug>.recruitee.com/api/offers/`
+   returns **HTTP 429 for ~86% of them** — which looks exactly like "no board". Probe it at
+   ≤4 workers with a ~0.3s global pace and a 429 retry/backoff, or you will throw away almost
+   every real hit. (Greenhouse tolerates 8 concurrent fine; Recruitee does not.)
+2. **HTTP 200 with ≥1 job is not proof of a live board.** Recruitee seeds every trial account
+   with a demo posting, so abandoned sign-ups answer 200 forever. Reject a board whose only
+   titles are the seed/test rows — `Senior Marketer (Sample)` / `Marketer Senior (Exemple)` /
+   `Senior marketeer (voorbeeld)` / `Test May 19` / `API Job - Berlin`. That pattern alone
+   killed 9 otherwise-plausible slugs (`personio`, `adecco`, `improvado`, `userpilot`,
+   `sportcity`, `qare`, `multiplier`, `accenture`, `alvalabs`). Check `titles`, not just `n`.
+
+Also: several slugs resolve to a **rename or acquirer** rather than a squatter (`graphcms`→
+Hygraph, `formitable`→Zenchef, `radix`→Superlinear, `paylogic`/`seetickets`→EVENTIM Benelux).
+Those are legitimate, but aliases of one board — dedupe on the `careers_url` host before
+adding, or you double-source the same jobs under two slugs.
+
 ## ⚠️ Sourcing ≠ submitting
 
 The account-less premise holds for **sourcing**. It does **not** mean the submit goes
