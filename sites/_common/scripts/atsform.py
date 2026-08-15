@@ -1753,6 +1753,43 @@ def fill_eeo(config=None):
     return done
 
 
+# Label ALIASES for the defaults pass (2026-08-15). `_resolve` matches a field whose visible
+# label CONTAINS the target string, which is directionally wrong for short labels: the default
+# key "Full name" cannot match a field simply labelled "Name", so Linear's Ashby form left the
+# required Name field EMPTY and the orchestrator aborted the submit over it. Each entry maps a
+# defaults key to shorter/alternate labels to try when the primary misses. Ordered
+# most-specific-first, and only consulted on NOTFOUND, so a form that does have the precise
+# label is unaffected.
+_LABEL_ALIASES = {
+    "full name": ["name"],
+    "linkedin": ["linkedin profile", "linkedin url"],
+    "portfolio": ["website/portfolio", "portfolio url", "website"],
+    "website": ["website/portfolio", "personal website"],
+    "phone": ["phone number", "mobile", "telephone"],
+    "city": ["location", "where are you located", "current location"],
+    "location": ["city", "where are you located", "current location"],
+}
+
+
+def _fill_with_aliases(label, value, quiet_notfound=True):
+    """fill() the default `label`, falling back to its known aliases on NOTFOUND.
+    Returns the primitive's rc (NOTFOUND only if no alias matched either).
+
+    Signature-compatible with `fill` — the `_run_defaults` helpers in atsform.apply() and
+    ashby.apply() call every primitive as `fn(label, value, quiet_notfound=True)`, so this
+    must accept that kwarg to be a drop-in. (It is always a quiet lookup in practice: a
+    default that isn't on this form is expected, not an error.)"""
+    rc = fill(label, value, quiet_notfound=True)
+    if rc != NOTFOUND:
+        return rc
+    for alt in _LABEL_ALIASES.get(label.strip().lower(), []):
+        rc = fill(alt, value, quiet_notfound=True)
+        if rc != NOTFOUND:
+            print(f"  (matched {label!r} via alias {alt!r})")
+            return rc
+    return NOTFOUND
+
+
 def _default_entries(defaults, section, cfg_section):
     """Yield (label, value) defaults for `section`, minus any that overlap an
     explicit config key (case-insensitive substring either way — a config 'Name'
@@ -1857,7 +1894,8 @@ def apply(config_path, do_submit=False):
     # 2) text, 3) selects, 4) radios, 5) checkboxes — defaults first within each
     # phase (optional facts), then the config's own entries (explicit, always win
     # on overlap because overlapping defaults were already suppressed).
-    _run_defaults("fill", "fill", fill)
+    # Alias-aware: the "Full name" default must still bind a field labelled just "Name".
+    _run_defaults("fill", "fill", _fill_with_aliases)
     for label, val in (cfg.get("fill") or {}).items():
         _run(f"fill {label!r}", fill, label, val)
     _run_defaults("select", "select", select)

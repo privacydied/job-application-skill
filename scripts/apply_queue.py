@@ -34,6 +34,7 @@ Exit: 0 ran (see tally) · 10 SLEEP · 11 HOLD · 12 DONE · 9 no-tab · 2 error
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -50,8 +51,86 @@ from precheck import load_tracker, canon_ids, _norm  # noqa: E402  (canonical de
 
 QUEUE = os.path.join(ROOT, "queue.jsonl")
 APPLY_EA = os.path.join(ROOT, "sites", "linkedin", "scripts", "apply_ea.py")
+ASHBY = os.path.join(ROOT, "sites", "ashbyhq", "scripts", "ashby.py")
+GH_APPLY = os.path.join(ROOT, "sites", "greenhouse", "scripts", "gh_apply.py")
+RUNCFG = os.path.join(ROOT, "runcfg")
 COUNT_FILE = "/tmp/apply_queue_count.json"
 DEFAULT_HEADLESS_ATS = {"linkedin-easyapply"}
+# Hard-board lanes (2026-08-15). SKILL.md §"apply_queue.py is the WRONG tool for the
+# HARD-BOARD loop" was true only because dispatch was hardcoded to apply_ea.py. Ashby and
+# Greenhouse are the two GUEST-DRIVABLE ATSes (sites/_common/scripts/ats_router.py), each with
+# a shipped driver that fills from apply-defaults.json and refuses to submit unless its own
+# pre-submit `check` is clean — so they can be drained headlessly, exactly like Easy Apply,
+# without the model in the loop per field. Opt in with `--ats ashby,greenhouse`.
+HARD_BOARD_ATS = {"ashby", "greenhouse"}
+# Easy Apply is FORBIDDEN as a logged application (SKILL.md §Forbidden). Selecting any hard
+# board implies "not Easy Apply" unless the caller asks for it by name.
+EASYAPPLY_ATS = {"linkedin-easyapply", "reed-easyapply"}
+
+
+def _slug(*parts):
+    s = "-".join(str(p or "") for p in parts).lower()
+    return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", s)).strip("-")[:80] or "posting"
+
+
+def _hard_board_config(row, resume, ats):
+    """Write (and return the path of) the per-application driver config for a hard-board row.
+
+    Deliberately MINIMAL: identity/contact/EEO all come from the gitignored
+    sites/_common/apply-defaults.json at drive time via `"defaults": true` — this file is
+    written into runcfg/, which is TRACKED, so it must never carry a real personal value
+    (SKILL.md step 12 PII gate). Company/role/url are posting facts, not PII."""
+    os.makedirs(RUNCFG, exist_ok=True)
+    cfg = {
+        "cv": os.path.basename(resume),
+        "company": row.get("company") or "Unknown",
+        "role": row.get("title") or "",
+        "url": row.get("url"),
+        "source": "Ashby" if ats == "ashby" else "Greenhouse",
+        "defaults": True,
+        "fill": {},
+    }
+    path = os.path.join(RUNCFG, f"{_slug(cfg['company'], cfg['role'])}.{ats}.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2)
+    return path
+
+
+def _drive_hard_board(row, ats, resume, dry_run):
+    """Navigate to the posting and hand it to its shipped driver.
+
+    Returns the driver's rc, mapped onto apply_ea's contract so main()'s tally is unchanged:
+    0 applied · 3 failed · 5 dry-ok · 7 needs-human · 9 no tab.
+    The driver itself owns the irreversible step: `ashby.py apply --submit` submits ONLY when
+    every fill step passed AND its pre-submit `check` is clean, so a form with an unanswered
+    required field is left filled-but-unsubmitted rather than force-pushed."""
+    # goto(), not navigate(): it VERIFIES the page actually rendered. A blank render would
+    # otherwise read as "no apply button" and the posting would be written off as a wall.
+    try:
+        nav = cfx.goto(row["url"])
+    except Exception as e:  # noqa: BLE001 — a dead nav is this posting's problem, not the run's
+        print(f"    nav failed: {e}", file=sys.stderr)
+        return 3
+    if not nav.get("ok"):
+        print(f"    nav rendered blank ({nav.get('attempts')} attempts) — skipping",
+              file=sys.stderr)
+        return 3
+    cfg_path = _hard_board_config(row, resume, ats)
+    if dry_run:
+        print(f"    dry-run: would drive {ats} with {os.path.relpath(cfg_path, ROOT)}",
+              file=sys.stderr)
+        return 5
+    if ats == "ashby":
+        cmd = [sys.executable, ASHBY, "apply", cfg_path, "--submit"]
+    else:
+        cmd = [sys.executable, GH_APPLY, cfg_path]
+    try:
+        rc = subprocess.run(cmd, cwd=ROOT, env=os.environ, timeout=420).returncode
+    except subprocess.TimeoutExpired:
+        return 3
+    # A driver that filled but refused to submit (unanswered required field, attestation
+    # refusal, CAPTCHA) is NOT a failure of the run — it is one posting needing a human.
+    return 0 if rc == 0 else (7 if rc == 1 else 3)
 
 
 def heal_tab():
@@ -189,21 +268,29 @@ def main():
             tab_dead = True
             break
         attempted += 1
-        print(f"\n>>> apply [{r.get('ats_hint')}] {company} :: {role}", file=sys.stderr)
-        cmd = [sys.executable, APPLY_EA, url, company, role,
-               "--resume", resume, "--source", "LinkedIn Easy Apply"]
-        if dry_run:
-            cmd.append("--dry-run")
-        try:
-            rc = subprocess.run(cmd, cwd=ROOT, env=os.environ, timeout=360).returncode
-        except subprocess.TimeoutExpired:
-            rc = 3
+        ats = (r.get("ats_hint") or "").strip()
+        print(f"\n>>> apply [{ats}] {company} :: {role}", file=sys.stderr)
+        if ats in HARD_BOARD_ATS:
+            rc = _drive_hard_board(r, ats, resume, dry_run)
+        else:
+            cmd = [sys.executable, APPLY_EA, url, company, role,
+                   "--resume", resume, "--source", "LinkedIn Easy Apply"]
+            if dry_run:
+                cmd.append("--dry-run")
+            try:
+                rc = subprocess.run(cmd, cwd=ROOT, env=os.environ, timeout=360).returncode
+            except subprocess.TimeoutExpired:
+                rc = 3
         # LinkedIn daily submission cap. apply_ea returns rc==8 when it detected the limit
         # banner AT THE SOURCE (most reliable). Fall back to our own scan for any other
         # non-success rc (older apply_ea, or a limit that surfaced after the modal closed).
         # Either way: SAVE this posting, TRIP the board cooldown, STOP the drain so the loop
         # switches boards. (Detection only — no submit is ever retried.)
-        if rc == 8 or (rc not in (0, 5) and ratelimit.detect(cfx)):
+        # ...and ONLY for an Easy Apply row. A failed Ashby/Greenhouse submit has nothing to do
+        # with LinkedIn's daily cap, but `ratelimit.detect()` reads whatever page is open — on a
+        # hard-board failure that could trip the cooldown and BREAK the whole drain off one
+        # unrelated posting.
+        if ats not in HARD_BOARD_ATS and (rc == 8 or (rc not in (0, 5) and ratelimit.detect(cfx))):
             until = ratelimit.trip()
             ratelimit.defer(r)
             rate_limited = True

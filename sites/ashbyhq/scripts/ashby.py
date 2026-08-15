@@ -101,6 +101,18 @@ _MARK_TOGGLE = (r"""
   document.querySelectorAll('[data-ashby-target]').forEach(e => e.removeAttribute('data-ashby-target'));
 """ + _TOGGLE_HELPERS + r"""
   const yesButtons = [...document.querySelectorAll('button')].filter(b => b.innerText.trim() === 'Yes');
+  // ⛔ TIGHTEST-CONTAINER MATCH (2026-08-15). The old code took the FIRST (yes, box) pair whose
+  // box text contained `want` and returned immediately. When two toggles share an ancestor,
+  // climbing from toggle #1's Yes eventually reaches a container that also holds toggle #2's
+  // question text — so asking for toggle #2 matched, but `target` resolved to the button
+  // NEAREST toggle #1's Yes, i.e. toggle #1's own button. Live on Linear's Ashby form that
+  // made set_toggle('in-house or agency-side for a SaaS','Yes') report `OK (already Yes)`
+  // while `check` still listed that toggle as EMPTY — a required field left unanswered behind
+  // a success message, which then aborted the submit with no clue why.
+  // Fix: collect EVERY matching container and keep the SMALLEST one (shortest innerText).
+  // A field's own container is always tighter than any ancestor shared with a sibling field,
+  // so the tightest match is the correct field by construction.
+  let best = null;
   for (const yes of yesButtons) {
     let box = yes;
     for (let i = 0; i < 8 && box; i++) {
@@ -109,23 +121,29 @@ _MARK_TOGGLE = (r"""
       const btns = [...box.querySelectorAll('button')];
       const hasNo = btns.some(b => b.innerText.trim() === 'No');
       if (hasNo && box.innerText.toLowerCase().includes(want)) {
-        // Target = the answer button of THIS field (nearest to this field's Yes),
-        // not merely the first same-labelled button in the box (which could
-        // belong to a sibling toggle question sharing the container).
-        const answerBtns = btns.filter(b => b.innerText.trim() === answer);
-        let target = null, tbest = 9999;
-        for (const ab of answerBtns) { const d = toggleDist(yes, ab); if (d < tbest) { tbest = d; target = ab; } }
-        if (!target) return JSON.stringify({ found: false, reason: 'no ' + answer + ' button' });
-        target.setAttribute('data-ashby-target', '1');
-        // The field's opposite button = the nearest button with the other label.
-        const other = answer === 'Yes' ? 'No' : 'Yes';
-        let opp = null, obest = 9999;
-        for (const b of btns) { if (b.innerText.trim() === other) { const d = toggleDist(target, b); if (d < obest) { obest = d; opp = b; } } }
-        return JSON.stringify({ found: true, selected: opp ? selectedOf([target, opp]) : null });
+        const len = (box.innerText || '').length;
+        if (!best || len < best.len) best = { yes, box, btns, len };
+        break;   // tightest box for THIS yes button; keep scanning the others
       }
     }
   }
-  return JSON.stringify({ found: false, reason: 'question not found' });
+  if (!best) return JSON.stringify({ found: false, reason: 'question not found' });
+  {
+    const { yes, btns } = best;
+    // Target = the answer button of THIS field (nearest to this field's Yes),
+    // not merely the first same-labelled button in the box (which could
+    // belong to a sibling toggle question sharing the container).
+    const answerBtns = btns.filter(b => b.innerText.trim() === answer);
+    let target = null, tbest = 9999;
+    for (const ab of answerBtns) { const d = toggleDist(yes, ab); if (d < tbest) { tbest = d; target = ab; } }
+    if (!target) return JSON.stringify({ found: false, reason: 'no ' + answer + ' button' });
+    target.setAttribute('data-ashby-target', '1');
+    // The field's opposite button = the nearest button with the other label.
+    const other = answer === 'Yes' ? 'No' : 'Yes';
+    let opp = null, obest = 9999;
+    for (const b of btns) { if (b.innerText.trim() === other) { const d = toggleDist(target, b); if (d < obest) { obest = d; opp = b; } } }
+    return JSON.stringify({ found: true, selected: opp ? selectedOf([target, opp]) : null });
+  }
 })()
 """).strip()
 
@@ -551,7 +569,9 @@ def apply(config_path: str, do_submit: bool = False) -> int:
     for target, fn in (cfg.get("files") or {}).items():
         if upload(target, fn) != 0:
             failures.append(f"file:{target}")
-    _run_defaults("fill", "fill", fill)
+    # Alias-aware: the "Full name" default must still bind a field labelled just "Name"
+    # (Linear's Ashby form) — see atsform._LABEL_ALIASES.
+    _run_defaults("fill", "fill", atsform._fill_with_aliases)
     for label, val in (cfg.get("fill") or {}).items():
         try:
             if fill(label, resolve(val)) != 0:
