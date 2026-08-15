@@ -166,7 +166,27 @@ def solve_altcha(timeout_s=25.0):
     if not has_gate:
         return False
     print("[feed] ALTCHA gate — auto-solving (sanctioned, CSJ-only)", file=sys.stderr)
-    cfx.click_selector("input[type=checkbox][id^=altcha]")
+    # Ticking the box: TRUSTED click first, JS .click() as the fallback.
+    # 2026-08-15: the trusted click alone made this fail outright — it raised
+    # `CfxError: /tabs/<id>/click -> timed out after 30s`, solve_altcha propagated that as
+    # `altcha_solve_err`, and csj_login returned LOGIN_STATE_UNKNOWN. That single timeout
+    # locks the agent out of Civil Service Jobs entirely, which is the applicant's single
+    # best-fit board (ex-UKHSA, GOV.UK Design System) — so the whole channel was dark.
+    # A plain in-page `.click()` ticks it and the proof-of-work completes normally
+    # (verified live: checked=true, ~520-char payload within ~2s, Continue then advanced).
+    # Trusted-first preserves the original, more human-looking path when it works; the JS
+    # fallback only runs when that path has already failed, so nothing regresses.
+    try:
+        cfx.click_selector("input[type=checkbox][id^=altcha]", timeout=8)
+    except Exception as e:  # noqa: BLE001
+        print(f"[feed] ALTCHA trusted click failed ({str(e)[:60]}) — falling back to JS click",
+              file=sys.stderr)
+        try:
+            cfx.evaluate("(()=>{const c=document.querySelector("
+                         "'input[type=checkbox][id^=altcha]'); if(c) c.click();})()")
+        except Exception as e2:  # noqa: BLE001
+            print(f"[feed] ALTCHA JS click also failed: {str(e2)[:80]}", file=sys.stderr)
+            return False
     checked = cfx.poll(
         "(()=>{const c=document.querySelector('input[type=checkbox][id^=altcha]');"
         "return c ? c.checked : false;})()",
