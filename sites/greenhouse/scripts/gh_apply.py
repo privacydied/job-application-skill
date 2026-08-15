@@ -238,13 +238,44 @@ def _fill_eeo():
 
 
 def _log(company, role, source, url, status, note=None, proof=None):
-    cmd = ["python3", os.path.join(_ROOT, "sites", "_common", "scripts", "log-application.py"),
-           company, role, source, url, status]
+    """Write the tracker row — and VERIFY it was written.
+
+    ⛔ WHY THE RETURN CODE MATTERS (2026-08-15, cost a duplicate application).
+    This used to be a bare `subprocess.run(...)` that ignored the exit code. log-application.py
+    deliberately REFUSES a blind pair-merge when an existing (Company, Role) row carries a
+    DIFFERENT url — the dedup-collision case — and tells you to re-run with --append-new. That
+    refusal was swallowed, so:
+      * Graphcore "Infrastructure and MLOps Engineer" was submitted successfully, the older
+        2026-07-24 row for the same title (different job id) triggered the refusal, and NO row
+        was written;
+      * because no row existed, the next drain's tracker dedup did not see it and applied to
+        THE SAME POSTING A SECOND TIME.
+    A silent logging failure is therefore not a bookkeeping nit: it re-submits real
+    applications to real employers, and under-reports the count at the same time (SKILL.md
+    §Count integrity calls this the dangerous UNDER_REPORTED conflict).
+
+    A different job id at the same company+title IS a genuinely new posting, which is exactly
+    what --append-new means, so retry with it once and shout if that still fails."""
+    base = ["python3", os.path.join(_ROOT, "sites", "_common", "scripts", "log-application.py"),
+            company, role, source, url, status]
     if proof:
-        cmd += ["--proof", proof]
+        base += ["--proof", proof]
     if note:
-        cmd += ["--note", note]
-    subprocess.run(cmd, cwd=_ROOT)
+        base += ["--note", note]
+    r = subprocess.run(base, cwd=_ROOT, capture_output=True, text=True)
+    out = (r.stdout or "") + (r.stderr or "")
+    print(out.strip())
+    if r.returncode == 0:
+        return True
+    if "--append-new" in out:
+        r2 = subprocess.run(base + ["--append-new"], cwd=_ROOT, capture_output=True, text=True)
+        print(((r2.stdout or "") + (r2.stderr or "")).strip())
+        if r2.returncode == 0:
+            return True
+    print(f"⛔ LOG_FAILED {company} | {role} | {status} — the tracker was NOT updated. "
+          f"A submitted application that is not logged WILL be applied to again by the next "
+          f"drain. Fix the row by hand before re-running.", file=sys.stderr)
+    return False
 
 
 def main():
