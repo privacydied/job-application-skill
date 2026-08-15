@@ -858,7 +858,7 @@ _OPTION_SYNONYMS = {
 }
 
 
-def set_radio(question, option, quiet_notfound=False):
+def set_radio(question, option, quiet_notfound=False, _tried=None):
     # ⛔ MATCH PRECEDENCE, NOT FIRST-SUBSTRING (2026-08-15 — a real wrong answer).
     # This used to take the FIRST radio whose label merely CONTAINED the wanted option, in DOM
     # order. Asking for gender "Man" therefore matched **"Woman"** ("woman".includes("man")),
@@ -874,10 +874,24 @@ def set_radio(question, option, quiet_notfound=False):
       const wq = norm({_js(question)}), wo = norm({_js(option)});
       const esc = wo.replace(/[-/\\\\^$*+?.()|[\\]{{}}]/g, '\\\\$&');
       const wb = new RegExp('(^|[^a-z0-9])' + esc + '([^a-z0-9]|$)');
+      // QUESTION RESOLUTION (2026-08-15). The old fallback when a group had no
+      // <fieldset>/<legend> was `r.name` — which on Ashby/Greenhouse is a random UUID, so the
+      // question could NEVER match and every such group returned NOT_FOUND. Live on
+      // Freetrade's form the right-to-work group is a bare div, so both set_radio AND the
+      // screener bank silently failed on a required field. Climb to the nearest ancestor
+      // carrying real text (the same walk _UNANSWERED uses) before giving up.
+      const qtext = r => {{
+        const fs = r.closest('fieldset');
+        const leg = fs ? fs.querySelector('legend,label') : null;
+        if (leg && norm(leg.innerText)) return leg.innerText;
+        let b = r;
+        for (let k = 0; k < 8 && b; k++) {{ b = b.parentElement;
+          if (b && norm(b.innerText).length > 8) return b.innerText; }}
+        return r.name || '';
+      }};
       let best = null, bestRank = 99;
       for (const r of document.querySelectorAll('input[type=radio]')) {{
-        const fs = r.closest('fieldset');
-        const q = (fs ? (fs.querySelector('legend,label')||{{}}).innerText : r.name) || '';
+        const q = qtext(r);
         const lbl = norm((r.labels && r.labels[0]) ? r.labels[0].innerText : (r.value||''));
         if (!norm(q).includes(wq)) continue;
         const rank = (lbl === wo) ? 0 : (wb.test(lbl) ? 1 : (lbl.includes(wo) ? 2 : 99));
@@ -899,10 +913,17 @@ def set_radio(question, option, quiet_notfound=False):
     # NOT_FOUND and left a required EEO radio blank, aborting the submit. These are exact
     # synonyms of the SAME answer (never a broadening: "Bi"→"Queer" is deliberately absent),
     # so retrying with them changes only the wording, never the claim.
+    # `_tried` is load-bearing, not defensive: the synonym map is deliberately SYMMETRIC
+    # ("heterosexual"->"Straight" and "straight"->"Heterosexual"), so an unguarded retry
+    # recurses mutually forever — which it did, surfacing as a RecursionError deep inside
+    # urllib's email parser rather than anywhere near this function.
     if res == "NOT_FOUND":
+        tried = _tried if _tried is not None else {option.strip().lower()}
         for alt in _OPTION_SYNONYMS.get(option.strip().lower(), []):
-            alt_rc = set_radio(question, alt, quiet_notfound=True)
-            if alt_rc == 0:
+            if alt.strip().lower() in tried:
+                continue
+            tried.add(alt.strip().lower())
+            if set_radio(question, alt, quiet_notfound=True, _tried=tried) == 0:
                 print(f"  (matched {option!r} via synonym {alt!r})")
                 return 0
     # Workday fallback: its Yes/No radios carry NO visible label on the input

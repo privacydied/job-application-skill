@@ -35,6 +35,14 @@ USAGE (needs a live tab on the browser-driving path — CFX_KEY/CFX_TAB in env):
   --http-concurrent   source the pure-HTTP boards off-tab, concurrently (CFX creds stripped
                       so they can't touch the browser); browser-bound boards stay serial on
                       the tab. Reclaims the scarce camofox tab for applying.
+  --own-tab           run the browser-bound feeds on a FRESH tab of their own instead of
+                      $CFX_TAB, then close it. REQUIRED whenever sourcing runs alongside an
+                      apply drive: those feeds navigate whatever CFX_TAB points at, so a
+                      backgrounded sourcing run otherwise walks the APPLY tab away
+                      mid-application (verified live — an Ashby form in progress was
+                      navigated to totaljobs, and the driver then read the totaljobs search
+                      box as the application's fields). --http-concurrent does NOT cover
+                      this: it only moves HTTP_ONLY_BOARDS off-tab.
 
 Exit codes: 0 WORK (queue written; may be empty) · 10 SLEEP · 11 HOLD · 12 DONE · 2 ERROR.
 """
@@ -397,7 +405,7 @@ def _source_one(s, force, env=None):
 
 def run(target=None, no_screen=False, screen_limit=40, force=False,
         only_boards=None, out_path=None, now=None, min_queue=0, http_concurrent=False,
-        http_workers=6):
+        http_workers=6, own_tab=False):
     """Importable funnel (F.2): run the WHOLE sourcing→screening pipeline in code and
     return (result, exit_code). `result` is the machine summary dict (verdict/counts/
     queue path/review items) on WORK, or {"verdict": …} on SLEEP/HOLD/DONE. queue.jsonl
@@ -470,14 +478,43 @@ def run(target=None, no_screen=False, screen_limit=40, force=False,
                 print(f"  sourced {board:<9} {len(posts):>3} cards in {secs:4.0f}s (off-tab)"
                       + (f"  ERR: {err}" if err else ""), file=sys.stderr)
 
-    for s in tab_clear:
-        board, posts, err, secs = _source_one(s, force)
-        per_board[board] = per_board.get(board, 0) + len(posts)
-        all_posts.extend(posts)
-        if err:
-            errors.append(err)
-        print(f"  sourced {board:<9} {len(posts):>3} cards in {secs:4.0f}s"
-              + (f"  ERR: {err}" if err else ""), file=sys.stderr)
+    # ⛔ OWN-TAB SOURCING (2026-08-15). The browser-bound feeds drive whatever CFX_TAB points
+    # at — which, in a normal loop, is the APPLY tab. Sourcing concurrently with a drive
+    # therefore NAVIGATES THE FORM AWAY MID-APPLICATION: verified live, a backgrounded
+    # `pipeline.py --force` walked the apply tab to totaljobs while an Ashby form was being
+    # filled, so the driver's own `check` reported the totaljobs search box ("Keywords") as
+    # the application's fields and aborted. `--http-concurrent` does NOT prevent this; it only
+    # moves the pure-HTTP boards off-tab (HTTP_ONLY_BOARDS), and every camofox board stays
+    # here. hermes-apply-loop.md §0.5 already tells each AGENT to use its own tab; this makes
+    # the same rule true for a background sourcing run within one agent.
+    tab_env = None
+    own_tab_id = None
+    if tab_clear and own_tab:
+        try:
+            own_tab_id = cfx.open_tab()
+            tab_env = dict(os.environ, CFX_TAB=own_tab_id)
+            print(f"  sourcing on its OWN tab {own_tab_id[:8]}… (apply tab untouched)",
+                  file=sys.stderr)
+        except Exception as e:  # noqa: BLE001 — fall back to the shared tab, as before
+            print(f"  --own-tab: could not open a sourcing tab ({str(e)[:60]}); "
+                  f"falling back to the shared tab", file=sys.stderr)
+    try:
+        for s in tab_clear:
+            board, posts, err, secs = _source_one(s, force, env=tab_env)
+            per_board[board] = per_board.get(board, 0) + len(posts)
+            all_posts.extend(posts)
+            if err:
+                errors.append(err)
+            print(f"  sourced {board:<9} {len(posts):>3} cards in {secs:4.0f}s"
+                  + ("  (own tab)" if tab_env else "")
+                  + (f"  ERR: {err}" if err else ""), file=sys.stderr)
+    finally:
+        # Camofox strands a run past ~8 open tabs (SKILL.md step 9) — always give this one back.
+        if own_tab_id:
+            try:
+                cfx.close_tab(own_tab_id)
+            except Exception:  # noqa: BLE001
+                pass
 
     # ── 2) merge (dedup by canonical id) ─────────────────────────────────────
     # C.1: merge the in-memory list directly — no serialize-to-tmp + read-back of the
@@ -649,6 +686,7 @@ def main():
         min_queue=opt("--min-queue", 0, int),
         http_concurrent=flag("--http-concurrent"),
         http_workers=opt("--http-workers", 6, int),
+        own_tab=flag("--own-tab"),
     )
     print(json.dumps(result, ensure_ascii=False))  # E.5: no indent on the machine line
     if result.get("verdict") != "WORK":
