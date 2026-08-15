@@ -342,6 +342,48 @@ def main():
     except Exception as e:  # noqa: BLE001
         print(f"  IDENTITY_BACKSTOP_WARN {e}")
 
+    # EDUCATION BACKSTOP (2026-08-15). Some Greenhouse postings render a required Education
+    # block (School / Degree / Discipline react-selects + start/end year). It is NOT part of
+    # the `questions` API and neither inspect_gh_form nor gen_gh_config can see it, so a
+    # config built from either looks complete and the submit still bounces with
+    # "School is required." — hit on IMC and YugabyteDB. The controls have STABLE ids
+    # (school--0 / degree--0 / discipline--0 / start-year--0 / end-year--0), so bind them
+    # directly from the gitignored applicant config rather than teaching every generator
+    # about a section it cannot introspect. Skipped silently when the block is absent.
+    try:
+        if cfx.evaluate("!!document.querySelector('#school--0')"):
+            d = atsform._load_defaults(True) or {}
+            ap = d.get("applicant", {}) or {}
+            school = ap.get("school")
+            disc = ap.get("area_of_study")
+            degree = ap.get("degree") or "Bachelor's Degree"
+            if school:
+                for target, val in (("School", school), ("Degree", degree), ("Discipline", disc)):
+                    if not val:
+                        continue
+                    try:
+                        rc = atsform.combobox_pick(target, val, quiet_notfound=True)
+                        print(f"  education {target}={val!r} -> {rc}")
+                    except Exception as e:  # noqa: BLE001
+                        print(f"  education {target} WARN {e}")
+                yrs = ap.get("education_years")  # e.g. "2016-2019"
+                if yrs and "-" in str(yrs):
+                    s, e = str(yrs).split("-", 1)
+                    cfx.evaluate(
+                        "(function(){var set=Object.getOwnPropertyDescriptor("
+                        "window.HTMLInputElement.prototype,'value').set;"
+                        "[['start-year--0',%s],['end-year--0',%s]].forEach(function(p){"
+                        "var el=document.getElementById(p[0]);"
+                        "if(el&&!el.value){set.call(el,p[1]);"
+                        "el.dispatchEvent(new Event('input',{bubbles:true}));"
+                        "el.dispatchEvent(new Event('change',{bubbles:true}));}});"
+                        "return 1;})()" % (json.dumps(s.strip()), json.dumps(e.strip())))
+            else:
+                print("  EDUCATION_REQUIRED but apply-defaults.json has no applicant.school "
+                      "— add it there (gitignored), do not hardcode it here.")
+    except Exception as e:  # noqa: BLE001
+        print(f"  EDUCATION_BACKSTOP_WARN {e}")
+
     for frag in ("UK Right to Work", "right to work"):
         try:
             if atsform.set_radio(frag, "Yes") == 0:

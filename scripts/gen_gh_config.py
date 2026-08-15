@@ -1,0 +1,252 @@
+#!/usr/bin/env python3
+"""gen_gh_config.py — build a gh_apply config from Greenhouse's KEYLESS questions API.
+
+WHY (2026-08-15): building a config used to mean driving the browser to the posting, running
+inspect_gh_form.py, opening every react-select to read its options, and hand-writing JSON —
+several minutes of the single serial camofox tab per application, which is the scarcest
+resource in the whole loop. But Greenhouse publishes the entire application form over a
+keyless HTTP endpoint:
+
+    https://boards-api.greenhouse.io/v1/boards/<slug>/jobs/<id>?questions=true
+
+…returning every question's label, `required` flag, field type, AND — for selects — the exact
+`.values[].label` strings a combo must match byte-for-byte. So a complete, correct config can
+be produced with NO browser at all, and the tab is reserved purely for submitting.
+
+USAGE (no browser, no credentials needed):
+    python3 scripts/gen_gh_config.py <slug> <jobid> [--eu] [--out <path>]
+    python3 scripts/gen_gh_config.py --batch <file>     # lines: slug|jobid[|eu]
+
+Writes applications/_cfg/<slug>-<role-slug>.json and prints a report. Questions it cannot
+answer TRUTHFULLY are left out and listed under NEEDS_HUMAN — never guessed. Review the
+generated file before driving: free-text answers get a generic truthful value, and a role
+worth applying to deserves a tailored one.
+"""
+import argparse
+import json
+import os
+import re
+import sys
+import urllib.request
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+CFG_DIR = os.path.join(ROOT, "applications", "_cfg")
+
+API = "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs/{jid}?questions=true"
+
+# Identity + résumé are filled by gh_apply from apply-defaults.json — never put them in a config.
+SKIP = re.compile(
+    r"^(first name|last name|full name|preferred name|email|phone|resume|cv|resume/cv|"
+    r"cover letter|"
+    # Personal links/pronouns: gh_apply fills these from the gitignored apply-defaults.json
+    # via `defaults`. Emitting them here would mean hardcoding PII in a TRACKED file.
+    r"linkedin.*|.*portfolio.*|website.*|.*github.*|pronouns?)$", re.I)
+
+# (label pattern, answer). Order matters — first match wins, so put specific before generic.
+# Every answer here is TRUE for this applicant: British citizen, London-based, no sponsorship,
+# immediately available, no current employment at the target company.
+TRUTHS = [
+    (r"require.{0,30}(visa )?sponsorship|need.{0,20}sponsorship|sponsorship.{0,20}(now|future)", "No"),
+    (r"authoris?z?ed to work|legal right to work|right to work|eligible to work", "Yes"),
+    (r"notice period", "Available immediately"),
+    (r"earliest.{0,20}(start|available)|when.{0,20}(can you|could you).{0,15}start", "Immediately"),
+    (r"salary (expectation|requirement)|expected salary|compensation expectation", "GBP 55,000"),
+    (r"referred.{0,30}(by|to this role)|employee referral", "No"),
+    (r"(currently|ever|previously).{0,25}(employed|worked|been).{0,20}(by|at|for|part of)", "No"),
+    (r"current or former .{0,20}employee", "No"),
+    (r"interviewed.{0,25}(with|at|before)|previously (applied|interviewed)", "No"),
+    (r"related to anyone|relatives.{0,20}work|know anyone.{0,25}(who works|at)", "No"),
+    (r"who do you know that works", "No one"),
+    (r"at least 18|over 18|18 years", "Yes"),
+    (r"do you have a linkedin", "Yes"),
+    # He IS a crypto/blockchain-sector alum — CryptoKnowledge (Frontend Dev & DevOps,
+    # Dec 2024-Jul 2025) was a crypto/finance education company. Answering "Yes" is true.
+    (r"(worked|experience).{0,30}(crypto|blockchain|digital asset)", "Yes"),
+    (r"current (employer|company)", "CryptoKnowledge (most recent)"),
+    (r"current job title|current.{0,10}role|most recent (job )?title", "Frontend Developer & DevOps"),
+    (r"desired compensation", "GBP 55,000"),
+    # Office-attendance questions: he lives in London, so a London-office requirement is a
+    # truthful Yes. Deliberately narrow — it must name an office/days, not relocation.
+    (r"(london )?office.{0,30}(days?|week)|work from our .{0,20}office", "Yes"),
+    (r"interview.{0,40}(record|transcri|metaview|notetak)", "Yes"),
+    (r"confidentiality regime|privacy and confidentiality", "__CONSENT__"),
+    (r"data transfer", "__CONSENT__"),
+    (r"willing to relocate|open to relocat", "No"),
+    (r"reasonable adjustment|accommodation", "No"),
+    (r"how did you hear", "Job Board"),
+    # NOTE: LinkedIn / portfolio / website / GitHub / pronouns are deliberately NOT here.
+    # They are personal data, and this file is TRACKED — hardcoding them is exactly the leak
+    # AGENTS.md §PII forbids ("drivers must not hardcode PII"), which is why scrub_pii.py
+    # rewrote an earlier version of these lines to placeholders. Placeholders would then be
+    # written into real applications, which is worse than useless. They live in the gitignored
+    # apply-defaults.json and gh_apply already fills them via `defaults`, so the right move is
+    # to emit nothing and let the config-routing model supply the real values at drive time.
+    # They are listed in SKIP below for the same reason.
+    (r"country.{0,20}(reside|based|located|work)|where are you based|current country", "United Kingdom"),
+    (r"^location|location \(city\)|city", "London"),
+    (r"privacy (notice|policy|statement)|data protection|acknowledge", "__CONSENT__"),
+    (r"gender", "Male"),
+]
+
+# Questions we must NOT answer without the applicant: personal preferences and facts the
+# profile genuinely does not record. Guessing these is fabrication, and shift/travel/clearance
+# answers in particular are life constraints, not form-filling details.
+NEEDS_HUMAN = re.compile(
+    r"shift|night|weekend|on-call|rota|"
+    r"security clearance|\bSC\b|\bDV\b|vetting|"
+    r"driving licen[cs]e|driver|own vehicle|"
+    r"years of experience with|how many years",
+    re.I)
+
+# Anti-AI oath — never sign one (see atsform.combobox_pick's ANTI-AI OATH GUARD).
+ANTI_AI = re.compile(r"only my own words|\bno ai\b|ai[- ]?generated|use of ai", re.I)
+
+
+def fetch(slug, jid, eu=False):
+    url = API.format(slug=slug, jid=jid)
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=25) as r:
+        return json.load(r)
+
+
+def pick_option(values, want):
+    """Choose the option whose label best matches `want`, EXACTLY where possible.
+    Greenhouse binds on exact option text, so a near-miss silently fails to bind."""
+    labels = [v.get("label", "") for v in values if v.get("label")]
+    if not labels:
+        return None
+    if want == "__CONSENT__":
+        # A consent/acknowledgement select usually has ONE affirmative option — and it is
+        # often the entire policy text as the label, so match loosely and fall back to the
+        # sole option when there is exactly one.
+        for l in labels:
+            if re.search(r"acknowledge|i agree|^agree|confirm|accept|^yes\b|consent", l, re.I):
+                return l
+        return labels[0] if len(labels) == 1 else None
+
+    if want == "Job Board":
+        # "How did you hear about this job?" option sets are per-company and rarely contain
+        # the literal words "Job Board". Prefer the company's own careers site (true: these
+        # postings were sourced from the employer's own ATS board), then a generic job board,
+        # then LinkedIn, then Other. Never leave it to a blind substring match, which would
+        # happily pick "Facebook".
+        for pat in (r"career site|careers? page|company (web)?site|our website|jobs page",
+                    r"job ?board|job ?site|other job",
+                    r"linkedin", r"^other$"):
+            for l in labels:
+                if re.search(pat, l, re.I):
+                    return l
+        return None
+    for l in labels:                                  # exact
+        if l.strip().lower() == want.strip().lower():
+            return l
+    for l in labels:                                  # startswith
+        if l.strip().lower().startswith(want.strip().lower()):
+            return l
+    for l in labels:                                  # substring
+        if want.strip().lower() in l.strip().lower():
+            return l
+    return None
+
+
+def build(slug, jid, eu=False, out=None):
+    data = fetch(slug, jid, eu)
+    role = data.get("title", "").strip()
+    host = "job-boards.eu.greenhouse.io" if (eu or str(jid).endswith("101")) else "job-boards.greenhouse.io"
+    cfg = {
+        "company": (data.get("company_name") or slug).strip(),
+        "role": role,
+        "url": f"https://{host}/embed/job_app?for={slug}&token={jid}",
+        "cv": "base-resume.pdf",
+        "eeo": True,
+        "fill": {},
+        "combo": {},
+    }
+    unanswered, human, oath = [], [], False
+
+    for q in data.get("questions", []):
+        label = (q.get("label") or "").strip()
+        if not label or SKIP.match(label.rstrip("*").strip()):
+            continue
+        fields = q.get("fields") or [{}]
+        ftype = fields[0].get("type", "")
+        values = fields[0].get("values") or []
+        required = bool(q.get("required"))
+
+        if ANTI_AI.search(label):
+            oath = True
+            continue
+        if NEEDS_HUMAN.search(label):
+            if required:
+                human.append(label[:90])
+            continue
+
+        answer = next((a for pat, a in TRUTHS if re.search(pat, label, re.I)), None)
+        if answer is None:
+            if required:
+                unanswered.append(f"{label[:80]}  [{ftype}]")
+            continue
+
+        if "select" in ftype:
+            chosen = pick_option(values, answer)
+            if chosen:
+                cfg["combo"][label[:60]] = chosen
+            elif required:
+                opts = [v.get("label") for v in values][:6]
+                unanswered.append(f"{label[:70]}  [options: {opts}]")
+        else:
+            if answer == "__CONSENT__":
+                answer = "Yes"
+            cfg["fill"][label[:60]] = answer
+
+    os.makedirs(CFG_DIR, exist_ok=True)
+    slugrole = re.sub(r"[^a-z0-9]+", "-", role.lower()).strip("-")[:44] or "role"
+    path = out or os.path.join(CFG_DIR, f"{slug}-{slugrole}.json")
+    with open(path, "w") as f:
+        json.dump(cfg, f, indent=2)
+
+    return path, cfg, unanswered, human, oath
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("slug", nargs="?")
+    ap.add_argument("jobid", nargs="?")
+    ap.add_argument("--eu", action="store_true")
+    ap.add_argument("--out")
+    ap.add_argument("--batch", help="file of slug|jobid[|eu] lines")
+    a = ap.parse_args()
+
+    targets = []
+    if a.batch:
+        for line in open(a.batch):
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            p = line.split("|")
+            targets.append((p[0], p[1], len(p) > 2 and p[2] == "eu"))
+    elif a.slug and a.jobid:
+        targets.append((a.slug, a.jobid, a.eu))
+    else:
+        ap.error("give <slug> <jobid> or --batch")
+
+    for slug, jid, eu in targets:
+        try:
+            path, cfg, unanswered, human, oath = build(slug, jid, eu, a.out)
+        except Exception as e:  # noqa: BLE001
+            print(f"FAIL {slug}/{jid}: {e}")
+            continue
+        status = "OK" if not (unanswered or human or oath) else "REVIEW"
+        print(f"{status} {cfg['company']} | {cfg['role'][:44]} -> {os.path.basename(path)} "
+              f"(fill={len(cfg['fill'])} combo={len(cfg['combo'])})")
+        if oath:
+            print("   ⛔ ANTI-AI OATH on this posting — the applicant must apply himself.")
+        for h in human:
+            print(f"   NEEDS_HUMAN: {h}")
+        for u in unanswered:
+            print(f"   UNANSWERED_REQUIRED: {u}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -447,6 +447,28 @@ def _combo_options():
         return []
 
 
+def _combo_clear_input():
+    """Empty the focused combobox's search input before re-typing a shorter prefix.
+    Without this the retry APPENDS to the existing text and filters even harder — the
+    opposite of what the prefix retry is for. Uses the React native setter so react-select
+    actually registers the change, then a Backspace as a belt-and-braces nudge."""
+    try:
+        cfx.evaluate("""
+        (function(){
+          var t=document.querySelector('[data-ats-target]');
+          var cb=(t&&t.tagName==='INPUT')?t:(t?t.querySelector('input'):null);
+          if(!cb) return 'NO_INPUT';
+          cb.focus();
+          var set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
+          set.call(cb,'');
+          cb.dispatchEvent(new Event('input',{bubbles:true}));
+          return 'CLEARED';
+        })()""")
+    except cfx.CfxError:
+        pass
+    time.sleep(0.25)
+
+
 def _combo_type(option):
     """Real per-char keystrokes into the focused combobox input — synthetic input events are
     IGNORED by react-select and the /type endpoint 500s, so this is how big async/typeahead
@@ -511,9 +533,39 @@ def _combo_open_and_pick(option, multi=False):
             break
     if not _has_match(opts):        # 4) big typeahead (Country/Location) — filter then re-read
         _combo_type(option)
+        # 8s, not 2.5s (2026-08-15). Rungs 1-3 are LOCAL widgets whose options are already in
+        # the DOM, so a short poll is right for them. This rung is the ASYNC path: the
+        # keystrokes fire a server fetch (Greenhouse's School / Degree / Discipline education
+        # typeaheads, Country, Location), and that round-trip routinely takes 4-6s. At 2.5s the
+        # read landed on an empty list, combobox_pick reported `NO_OPTION:No options`, and the
+        # field was written off as an unbindable widget — while typing the SAME text by hand
+        # and waiting ~5s returned the option and picked it cleanly (verified live on
+        # #school--0: 1 option, "University of the Arts", picked). So this was a race being
+        # misread as a driver wall, on required fields that block the whole submit.
+        # Only this fallback rung waits longer, so nothing that already worked gets slower.
         cfx.poll(_COMBO_READ_OPTS,
-                 predicate=lambda r: isinstance(r, str) and r not in ("", "[]"), timeout=2.5)
+                 predicate=lambda r: isinstance(r, str) and r not in ("", "[]"), timeout=8.0)
         opts = _combo_options()
+        # PREFIX RETRY (2026-08-15). _combo_type types the full desired string (up to 24
+        # chars), which OVER-FILTERS whenever the real option label is SHORTER than what we
+        # asked for. Concretely: wanting "University of the Arts London" types
+        # "University of the Arts L", and the actual option is "University of the Arts" —
+        # which does not contain that — so the list came back EMPTY and the field was
+        # reported `NO_OPTION:No options`, i.e. a perfectly bindable typeahead looked like an
+        # unbindable widget and blocked the submit (Greenhouse education: School, Discipline).
+        # Retry with progressively shorter prefixes, which strictly widens the filter.
+        if not opts:
+            for n in (16, 10, 6):
+                if n >= len(str(option)):
+                    continue
+                _combo_clear_input()
+                _combo_type(str(option)[:n])
+                cfx.poll(_COMBO_READ_OPTS,
+                         predicate=lambda r: isinstance(r, str) and r not in ("", "[]"),
+                         timeout=8.0)
+                opts = _combo_options()
+                if opts:
+                    break
     clicked = cfx.evaluate(_COMBO_CLICK.replace("__OPT__", _js(option)))
     if isinstance(clicked, str) and clicked.startswith("OK"):
         print(clicked)
