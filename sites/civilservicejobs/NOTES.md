@@ -121,3 +121,45 @@ for the one legitimate case: a row mis-logged `Applied` after S1 while S2 is gen
   banner's accept/hide button is fine (it's a consent banner, not a wall).
 - `board_cooldown.query_from_url()` can't extract a query from SID URLs — the feed
   uses the fixed key `london-search` (same pattern as WTTJ's `home`).
+
+## Section 2 end-to-end — VERIFIED 2026-08-15 (ONS Content Designer, "Application received")
+
+Section 1 and Section 2 are **separate eforms**. Submitting S1 does NOT open S2 in place:
+the S1 eform locks ("submitted and can not be edited") and its `/page/N` URLs then redirect
+to the Applications list. Reach S2 via the Applications centre:
+`.../candidate/application/<APP_ID>` → **"Continue application"**.
+
+S2 pages: **Your CV → Personal statement → Preferences → Declaration.**
+
+Three things cost a full cycle and are not obvious:
+
+1. **`/save_page` in the URL does NOT mean submitted.** After walking the pages the URL
+   becomes `.../eform/<ID>/save_page` with only a "Back" button, which reads like a finished
+   submission. It isn't. The **authoritative** signal is the Applications list status:
+   `Application started` = NOT submitted · `Application received` = submitted.
+   Always confirm there before logging `Applied`.
+
+2. **An unfilled Preferences page silently blocks the submit.** "Select your preferred
+   location" (`datafield_53467_1_1`, e.g. London / Home Working / Manchester) errors on that
+   page but the walker still advances to Declaration — so the Declaration looks reachable
+   while the form can never submit. Fill Preferences BEFORE the Declaration.
+
+3. **The Submit button does not exist until the gate is set** (as SKILL.md says, but the
+   ordering matters): tick the declaration checkbox (`datafield_205967_1_1`) AND set the
+   "Full Application Form Submitted?" select (`datafield_76575_1_1`) to **Yes** — only then
+   does `<input type=submit value="Submit">` render. Before that, enumerating buttons returns
+   only cookie-banner controls and "Back", which looks like a structural wall and is not one.
+
+**Name-blind recruitment:** the CV and personal statement pages each carry their own
+"I have removed all personal information" checkbox and BOTH must be ticked. Strip name,
+educational institutions, age, gender, email, address, phone, nationality. Employers may
+stay — only *educational institutions* are named in the strip list — but describing an
+employer generically ("a music technology startup") is safer and reads fine.
+
+**AI policy (important, and DIFFERENT from Canonical's):** Civil Service adverts say
+"Artificial intelligence can be a useful tool to support your application, however, all
+examples and statements provided must be truthful, factually accurate and taken directly from
+your own experience." So AI-assisted drafting of the applicant's REAL experience is
+explicitly permitted — what is forbidden is presenting invented or borrowed examples as his
+own. That is a *lower* bar than Canonical's outright ban, and CSJ must NOT be lumped in with
+it. Draft only from `references/applicant-profile.md`; never invent a STAR anecdote.

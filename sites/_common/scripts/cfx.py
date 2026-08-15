@@ -779,6 +779,16 @@ def find_popup(exclude: str = None) -> list:
 # separated) still wins outright when set — an explicit operator override is never second-
 # guessed. Add a host's path here rather than re-forking this logic elsewhere.
 _RESTART_CMD_CANDIDATES = [
+    # `start` FIRST (2026-08-15): the container's real-world failure mode here is being
+    # OOM-KILLED by the host — `docker ps -a` shows "Exited (137)" — which happens when a
+    # parallel agent fleet and the browser together exhaust RAM. On an already-STOPPED
+    # container `compose restart` does not reliably bring it back: it sat past the 90s
+    # subprocess timeout while the container stayed Exited, so restart_engine reported
+    # failure even though it had picked the correct command. `docker start` on a stopped
+    # container returns immediately and the engine was healthy ~90s later. `start` is also a
+    # harmless no-op on an already-running container, so trying it first costs nothing.
+    ["sudo", "-n", "/var/packages/ContainerManager/target/usr/bin/docker", "start", "camofox-browser"],
+    ["sudo", "-n", "/usr/local/bin/docker", "start", "camofox-browser"],
     # Synology ContainerManager (this host) — matches the NOPASSWD sudoers rules verbatim.
     ["sudo", "-n", "/var/packages/ContainerManager/target/usr/bin/docker", "compose",
      "-f", "/volume1/docker/playwright/compose.yaml", "restart", "camofox-browser"],
@@ -860,7 +870,7 @@ def engine_click_healthy(timeout_s: float = 6.0) -> bool:
             pass
 
 
-def restart_engine(health_timeout_s: float = 90.0) -> bool:
+def restart_engine(health_timeout_s: float = 180.0) -> bool:
     """Restart camofox-browser via the passwordless sudoers rule set up specifically
     for this fault, then poll `/health` until it reports `browserConnected` again.
     Works identically on Hermes (real terminal_tool) and Claude Code (real Bash) —
