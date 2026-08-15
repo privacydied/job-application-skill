@@ -101,6 +101,20 @@ NEEDS_HUMAN = re.compile(
 # Anti-AI oath — never sign one (see atsform.combobox_pick's ANTI-AI OATH GUARD).
 ANTI_AI = re.compile(r"only my own words|\bno ai\b|ai[- ]?generated|use of ai", re.I)
 
+# Consent/acknowledgement questions rendered as a SELECT whose only option is the whole policy
+# text. Deliberately narrow: it must read like an acknowledgement, not merely mention data.
+_CONSENTISH = re.compile(
+    r"by checking this box|i (confirm|agree|acknowledge|understand|consent)|"
+    r"please confirm|acknowledge|privacy (notice|policy|statement)|"
+    r"keeping your data safe|terms and conditions|data protection", re.I)
+
+
+def _is_affirmative_answer(ans):
+    """Only escalate to the __CONSENT__ matcher for an answer that is already a YES. Guards
+    against turning a truthful refusal into agreement."""
+    return str(ans or "").strip().lower() in {
+        "yes", "y", "true", "agree", "i agree", "accept", "acknowledge", "__consent__"}
+
 
 def fetch(slug, jid, eu=False):
     url = API.format(slug=slug, jid=jid)
@@ -211,6 +225,17 @@ def build(slug, jid, eu=False, out=None):
 
         if "select" in ftype:
             chosen = pick_option(values, answer)
+            if not chosen and _CONSENTISH.search(label) and _is_affirmative_answer(answer or bank_answer):
+                # CONSENT SELECTS (2026-08-15). A tick-to-acknowledge question is rendered as a
+                # select whose single option is the ENTIRE policy text ("By checking this box,
+                # I confirm I have read, reviewed and understood the guidelines…"), so an
+                # answer of "Yes" matches nothing and the required field stays empty — 10
+                # postings in one drain died on exactly this. pick_option already knows how to
+                # resolve these via the __CONSENT__ sentinel (acknowledge / I agree / accept /
+                # the sole option); it simply was never reached once a truthful "Yes" had been
+                # produced. Only fires when the question IS consent-shaped and the intended
+                # answer is affirmative, so it can never turn a "No" into agreement.
+                chosen = pick_option(values, "__CONSENT__")
             if not chosen and bank_answer and bank_answer != answer:
                 # TRUTHS matched but its answer has the wrong SHAPE for this option list.
                 # Live: "Please select your right to work status" hit the generic
