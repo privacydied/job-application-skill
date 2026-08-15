@@ -644,6 +644,15 @@ def apply(config_path: str, do_submit: bool = False) -> int:
         print(f"defaults: {n_default_skips} entr{'y' if n_default_skips == 1 else 'ies'} "
               f"skipped (no matching field on this form) — expected, not an error")
 
+    # LAST fill pass: answer anything still empty from the shared, learnable screener bank
+    # (salary expectation, right-to-work, sponsorship, notice, time zone…). Runs after config
+    # + defaults so an explicit answer always wins, and before `check` so the result is
+    # reflected in the pre-submit state. See atsform.fill_gaps_from_bank.
+    try:
+        atsform.fill_gaps_from_bank()
+    except Exception as e:  # noqa: BLE001 — a bank miss must never block an otherwise-good form
+        print(f"  screener-bank note: {str(e)[:80]}")
+
     print("\n===== pre-submit check =====")
     chk = check()
 

@@ -841,25 +841,70 @@ def select(label, option, quiet_notfound=False):
     return _combo_open_and_pick(option)
 
 
+# EXACT synonyms of the SAME answer — different employer wording, identical claim. Used only
+# as a retry when the profile's canonical wording finds no option (see set_radio). Keep these
+# strictly equivalent: anything that would BROADEN or change the answer does not belong here.
+_OPTION_SYNONYMS = {
+    "heterosexual": ["Straight", "Heterosexual/Straight"],
+    "straight": ["Heterosexual", "Heterosexual/Straight"],
+    "male": ["Man"],
+    "man": ["Male"],
+    "female": ["Woman"],
+    "woman": ["Female"],
+    "prefer not to say": ["I don't wish to answer", "I do not wish to answer",
+                          "Decline to self identify", "Prefer not to disclose"],
+    "yes": ["True"],
+    "no": ["False"],
+}
+
+
 def set_radio(question, option, quiet_notfound=False):
+    # ⛔ MATCH PRECEDENCE, NOT FIRST-SUBSTRING (2026-08-15 — a real wrong answer).
+    # This used to take the FIRST radio whose label merely CONTAINED the wanted option, in DOM
+    # order. Asking for gender "Man" therefore matched **"Woman"** ("woman".includes("man")),
+    # which is the option listed first on Paddle's Ashby form — so a real submission stated the
+    # applicant's gender as Woman. The same trap is one character away everywhere else in EEO
+    # ("male" inside "female", "Asian" inside "Caucasian", "No" inside "Not applicable").
+    # Fix: score every candidate in the matching group and pick the BEST, in strict order —
+    # exact match → whole-word match → substring — instead of whichever appeared first.
+    # `_COMBO_NATIVE_SET` already used the word-boundary regex; set_radio simply never did.
     res = cfx.evaluate(f"""
     (() => {{
-      const wq = {_js(question)}.toLowerCase(), wo = {_js(option)}.toLowerCase();
+      const norm = s => (s||'').replace(/\\s+/g,' ').trim().toLowerCase();
+      const wq = norm({_js(question)}), wo = norm({_js(option)});
+      const esc = wo.replace(/[-/\\\\^$*+?.()|[\\]{{}}]/g, '\\\\$&');
+      const wb = new RegExp('(^|[^a-z0-9])' + esc + '([^a-z0-9]|$)');
+      let best = null, bestRank = 99;
       for (const r of document.querySelectorAll('input[type=radio]')) {{
         const fs = r.closest('fieldset');
         const q = (fs ? (fs.querySelector('legend,label')||{{}}).innerText : r.name) || '';
-        const lbl = (r.labels && r.labels[0]) ? r.labels[0].innerText : (r.value||'');
-        if (q.toLowerCase().includes(wq) && lbl.toLowerCase().includes(wo)) {{
-          if (!r.checked) r.click();
-          return r.checked ? ('OK:'+lbl.slice(0,40)) : 'CLICK_FAILED';
-        }}
+        const lbl = norm((r.labels && r.labels[0]) ? r.labels[0].innerText : (r.value||''));
+        if (!norm(q).includes(wq)) continue;
+        const rank = (lbl === wo) ? 0 : (wb.test(lbl) ? 1 : (lbl.includes(wo) ? 2 : 99));
+        if (rank < bestRank) {{ bestRank = rank; best = r;
+          if (rank === 0) break; }}
       }}
-      return 'NOT_FOUND';
+      if (!best) return 'NOT_FOUND';
+      const lbl = ((best.labels && best.labels[0]) ? best.labels[0].innerText : (best.value||'')).trim();
+      if (!best.checked) best.click();
+      return best.checked ? ('OK:'+lbl.slice(0,40)) : 'CLICK_FAILED';
     }})()
     """)
     if isinstance(res, str) and res.startswith("OK"):
         print(res)
         return 0
+    # SYNONYM RETRY (2026-08-15). The profile records ONE canonical wording per fact, but
+    # employer forms word the same option differently — Paddle's Ashby form offers "Straight"
+    # where apply-defaults.json says "Heterosexual", so a truthful, known answer resolved to
+    # NOT_FOUND and left a required EEO radio blank, aborting the submit. These are exact
+    # synonyms of the SAME answer (never a broadening: "Bi"→"Queer" is deliberately absent),
+    # so retrying with them changes only the wording, never the claim.
+    if res == "NOT_FOUND":
+        for alt in _OPTION_SYNONYMS.get(option.strip().lower(), []):
+            alt_rc = set_radio(question, alt, quiet_notfound=True)
+            if alt_rc == 0:
+                print(f"  (matched {option!r} via synonym {alt!r})")
+                return 0
     # Workday fallback: its Yes/No radios carry NO visible label on the input
     # (r.labels is empty, r.value is "true"/"false"), so the text-match loop above
     # can't find them. Match the enclosing [data-automation-id^="formField-"] by the
@@ -1790,6 +1835,97 @@ def _fill_with_aliases(label, value, quiet_notfound=True):
     return NOTFOUND
 
 
+# Enumerate every UNANSWERED field with its FULL question text. Deliberately separate from
+# ashby.check(), which truncates labels to 30-45 chars for human display — a truncated question
+# is useless for a screener-bank lookup ("What is your current right-to-work stat…").
+_UNANSWERED = r"""
+(() => {
+  const clean = s => (s||'').replace(/\s+/g,' ').trim();
+  const out = {texts: [], radios: []};
+  for (const i of document.querySelectorAll(
+      'input[type=text],input[type=email],input[type=tel],input[type=number],input[type=url],textarea')) {
+    if (i.name === 'g-recaptcha-response' || i.value) continue;
+    let lbl = clean(i.labels && i.labels[0] ? i.labels[0].innerText : '');
+    if (!lbl) { let b = i; for (let k = 0; k < 4 && b; k++) { b = b.parentElement;
+      if (b && clean(b.innerText)) { lbl = clean(b.innerText); break; } } }
+    if (lbl) out.texts.push(lbl.slice(0, 220));
+  }
+  const groups = {};
+  for (const r of document.querySelectorAll('input[type=radio]')) (groups[r.name] ||= []).push(r);
+  for (const rs of Object.values(groups)) {
+    if (rs.some(r => r.checked)) continue;
+    let box = rs[0];
+    for (let k = 0; k < 8 && box; k++) { box = box.parentElement;
+      if (box && clean(box.innerText).length > 8) break; }
+    const lines = clean(box ? box.innerText : '').split(' | ');
+    const opts = rs.map(r => clean(r.labels && r.labels[0] ? r.labels[0].innerText
+                                  : (r.nextElementSibling ? r.nextElementSibling.innerText : r.value)));
+    const q = clean(box ? box.innerText : '');
+    if (q) out.radios.push({q: q.slice(0, 220), opts: opts.filter(Boolean).slice(0, 12)});
+  }
+  return JSON.stringify(out);
+})()
+"""
+
+
+def fill_gaps_from_bank():
+    """Answer every still-unanswered field from the SHARED screener bank (screener.py).
+
+    WHY THIS EXISTS (2026-08-15). screener.py's own docstring said "apply_ea.py had a
+    hardcoded LinkedIn-only KNOWN map; **atsform had nothing**" — and that was still literally
+    true: neither atsform.apply() nor ashby.apply() ever imported it, so the persistent,
+    learnable answer bank only helped LinkedIn Easy Apply, the one lane SKILL.md forbids
+    logging. Every hard-board form therefore re-hit the SAME handful of gating questions
+    (salary expectation, right-to-work, sponsorship, notice, time zone) with no answer, and
+    the orchestrator aborted the submit over questions already answered in the CSV.
+    Measured on one Ashby drain: 6 of 6 postings aborted, and salary-expectation alone
+    accounted for 4 of them — while `screener-answers.csv` had held the answer since July.
+
+    Runs AFTER config + defaults (so an explicit answer always wins) and BEFORE the pre-submit
+    check. Only fills what is still EMPTY, and only where the bank has a match — an unknown
+    question stays unanswered and still blocks the submit, which is the correct behaviour.
+    Returns (filled, skipped)."""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import screener  # noqa: PLC0415 — optional dependency of this one pass
+    except ImportError:
+        return (0, 0)
+    try:
+        data = json.loads(cfx.evaluate(_UNANSWERED))
+    except (ValueError, TypeError, cfx.CfxError):
+        return (0, 0)
+    filled = skipped = 0
+    for label in data.get("texts", []):
+        hit = screener.lookup(label)
+        if not hit:
+            skipped += 1
+            continue
+        if fill(label, hit["answer"], quiet_notfound=True) == 0:
+            print(f"  bank: {label[:52]!r} <- {hit['answer'][:40]!r} ({hit['source']})")
+            filled += 1
+    for grp in data.get("radios", []):
+        q, opts = grp.get("q", ""), grp.get("opts") or []
+        hit = screener.lookup(q)
+        if not hit:
+            skipped += 1
+            continue
+        ans = hit["answer"]
+        # The bank stores the canonical answer ("Yes", "No", "Heterosexual"); this form's
+        # option wording may be longer ("Heterosexual/Straight"). Prefer a real option whose
+        # text contains the bank answer, so set_radio matches on the FORM's own text.
+        match = next((o for o in opts if o.strip().lower() == ans.strip().lower()), None) \
+            or next((o for o in opts if ans.strip().lower() in o.strip().lower()), None)
+        if set_radio(q, match or ans, quiet_notfound=True) == 0:
+            print(f"  bank: {q[:52]!r} <- {(match or ans)[:40]!r} ({hit['source']})")
+            filled += 1
+        else:
+            skipped += 1
+    if filled or skipped:
+        print(f"screener bank: {filled} answered, {skipped} unknown "
+              f"(teach one with: screener.py learn)")
+    return (filled, skipped)
+
+
 def _default_entries(defaults, section, cfg_section):
     """Yield (label, value) defaults for `section`, minus any that overlap an
     explicit config key (case-insensitive substring either way — a config 'Name'
@@ -1927,6 +2063,13 @@ def apply(config_path, do_submit=False):
                 print(f"  left unticked [{cat[5:]}]: {', '.join(rep[cat])[:120]}")
     except Exception as e:  # noqa: BLE001 — truthful auto-fill is best-effort, never blocks apply
         print(f"  checkbox auto-fill note: {str(e)[:80]}")
+
+    # LAST fill pass: answer anything still empty from the shared, learnable screener bank.
+    # After config + defaults (explicit always wins), before the review.
+    try:
+        fill_gaps_from_bank()
+    except Exception as e:  # noqa: BLE001 — a bank miss must never block an otherwise-good form
+        print(f"  screener-bank note: {str(e)[:80]}")
 
     review_rc = 0
     if cfg.get("review"):
