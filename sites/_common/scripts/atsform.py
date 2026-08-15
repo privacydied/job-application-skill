@@ -229,7 +229,18 @@ def fill(label, value, quiet_notfound=False):
         except OSError as e:
             print(f"FAIL fill: cannot read value file {value[1:]!r}: {e}")
             return 1
-    sel = _resolve(label)
+    # A CSS selector may be passed instead of a label — `combobox_pick` has always accepted
+    # one, and `fill_gaps_from_bank` needs it to address a SPECIFIC element when two fields
+    # share a label (see the data-ats-gap note in _UNANSWERED).
+    if re.match(r"^[#.\[]", label.strip()):
+        sel = label.strip()
+        try:
+            if not cfx.evaluate(f"!!document.querySelector({_js(sel)})"):
+                return NOTFOUND if quiet_notfound else 1
+        except cfx.CfxError:
+            return NOTFOUND if quiet_notfound else 1
+    else:
+        sel = _resolve(label)
     if not sel:
         if quiet_notfound:      # E.2: defaults path skips a missing field silently
             return NOTFOUND
@@ -1878,7 +1889,7 @@ def fill_eeo(config=None):
 # most-specific-first, and only consulted on NOTFOUND, so a form that does have the precise
 # label is unaffected.
 _LABEL_ALIASES = {
-    "full name": ["name"],
+    "full name": ["name", "legal name", "full legal name"],
     "linkedin": ["linkedin profile", "linkedin url"],
     "portfolio": ["website/portfolio", "portfolio url", "website"],
     "website": ["website/portfolio", "personal website"],
@@ -1920,7 +1931,14 @@ _UNANSWERED = r"""
     let lbl = clean(i.labels && i.labels[0] ? i.labels[0].innerText : '');
     if (!lbl) { let b = i; for (let k = 0; k < 4 && b; k++) { b = b.parentElement;
       if (b && clean(b.innerText)) { lbl = clean(b.innerText); break; } } }
-    if (lbl) out.texts.push(lbl.slice(0, 220));
+    // ⛔ TAG THE ELEMENT, don't just report its label (2026-08-15). fill_gaps_from_bank used
+    // to call fill(label), which re-resolves by label and returns the FIRST match — so on a
+    // form carrying the SAME label twice (Lever posts a "Full Name" input AND a separate
+    // required "Full Name" card textarea) the gap-filler kept re-resolving to the input it
+    // had already filled and the required textarea stayed empty forever, aborting the submit.
+    // Marking each unanswered element gives the filler an exact address for THIS field.
+    if (lbl) { i.setAttribute('data-ats-gap', String(out.texts.length));
+               out.texts.push(lbl.slice(0, 220)); }
   }
   const groups = {};
   for (const r of document.querySelectorAll('input[type=radio]')) (groups[r.name] ||= []).push(r);
@@ -1967,14 +1985,21 @@ def fill_gaps_from_bank():
     except (ValueError, TypeError, cfx.CfxError):
         return (0, 0)
     filled = skipped = 0
-    for label in data.get("texts", []):
+    for idx, label in enumerate(data.get("texts", [])):
         hit = screener.lookup(label)
         if not hit:
             skipped += 1
             continue
-        if fill(label, hit["answer"], quiet_notfound=True) == 0:
+        # Address THIS element (see the data-ats-gap note in _UNANSWERED) rather than
+        # re-resolving by label, which returns the first match and re-fills a done field.
+        rc = fill(f'[data-ats-gap="{idx}"]', hit["answer"], quiet_notfound=True)
+        if rc != 0:
+            rc = fill(label, hit["answer"], quiet_notfound=True)   # legacy path, just in case
+        if rc == 0:
             print(f"  bank: {label[:52]!r} <- {hit['answer'][:40]!r} ({hit['source']})")
             filled += 1
+        else:
+            skipped += 1
     for grp in data.get("radios", []):
         q, opts = grp.get("q", ""), grp.get("opts") or []
         hit = screener.lookup(q)
