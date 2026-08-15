@@ -163,3 +163,33 @@ your own experience." So AI-assisted drafting of the applicant's REAL experience
 explicitly permitted — what is forbidden is presenting invented or borrowed examples as his
 own. That is a *lower* bar than Canonical's outright ban, and CSJ must NOT be lumped in with
 it. Draft only from `references/applicant-profile.md`; never invent a STAR anecdote.
+
+### ⚠️ OPEN BUG: forms WITH a "Role specific questions" page never render Submit
+
+Verified 2026-08-15 across three applications on the same account, same session, same spec:
+
+| Application | Has "Role specific questions"? | Result |
+|---|---|---|
+| ONS — Content Designer | **no** | ✅ submitted, "Application received" |
+| GDS — Interaction Designer | **yes** | ⛔ Submit never renders |
+| DfE — Digital Content Producer | **yes** | ⛔ Submit never renders |
+
+In all three the Declaration state was identical and correct: declaration checkbox ticked
+(`datafield_205967_1_1`) and `datafield_76575_1_1` set to the option whose text is exactly
+"Yes" (verified by reading `.value` back). On ONS the `<input type=submit value="Submit">`
+appeared within seconds; on the other two, enumerating every `input[type=submit]`/`button`
+returns only the cookie-banner controls and "Back", indefinitely — including after
+re-dispatching `change` with the native setter and waiting ~20s.
+
+So the blocker correlates with the extra page, NOT with the declaration gate. Working
+hypothesis (UNPROVEN — do not treat as fact): the role-specific answers are being written
+with the React native-setter + `input`/`change` and the page ADVANCES past its "Enter your
+response…" error, but the server may still consider that page incomplete, and the Declaration
+renders Submit only when every prior page is complete server-side.
+
+**Next thing to try** (cheapest first): fill the role-specific textareas with REAL keystrokes
+(`POST /tabs/<tab>/type` with `mode:"keyboard"`) instead of a native-setter write, click
+Continue, then re-open the Declaration. If that renders Submit, the rule is "TAL persists
+only genuinely-typed input on this page" and `tal_eform.py`/`tal_sec2.py` should use keystrokes
+for role-specific pages. Both affected applications are filled and saved, so this can be
+tested without redoing any content.
