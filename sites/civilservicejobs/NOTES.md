@@ -164,42 +164,39 @@ explicitly permitted — what is forbidden is presenting invented or borrowed ex
 own. That is a *lower* bar than Canonical's outright ban, and CSJ must NOT be lumped in with
 it. Draft only from `references/applicant-profile.md`; never invent a STAR anecdote.
 
-### ⚠️ OPEN BUG: forms WITH a "Role specific questions" page never render Submit
+### ✅ SOLVED: "the Submit button never renders" = a SECOND required CV textarea is empty
 
-Verified 2026-08-15 across three applications on the same account, same session, same spec:
+**Root cause (2026-08-15): the "Your CV" page has TWO required textareas, not one.**
 
-| Application | Has "Role specific questions"? | Result |
-|---|---|---|
-| ONS — Content Designer | **no** | ✅ submitted, "Application received" |
-| GDS — Interaction Designer | **yes** | ⛔ Submit never renders |
-| DfE — Digital Content Producer | **yes** | ⛔ Submit never renders |
+  `datafield_99856_1_1` — "Provide your employment history details"
+  `datafield_99863_1_1` — **"Provide details of your previous skills and experience"**
 
-In all three the Declaration state was identical and correct: declaration checkbox ticked
-(`datafield_205967_1_1`) and `datafield_76575_1_1` set to the option whose text is exactly
-"Yes" (verified by reading `.value` back). On ONS the `<input type=submit value="Submit">`
-appeared within seconds; on the other two, enumerating every `input[type=submit]`/`button`
-returns only the cookie-banner controls and "Back", indefinitely — including after
-re-dispatching `change` with the native setter and waiting ~20s.
+Fill only the first and the page still advances on Continue, every later page fills
+normally, and the Declaration renders **only "Back"** — no Submit, forever. Tick the
+declaration checkbox and set "Full Application Form Submitted?"=Yes and *still* no Submit,
+because TAL renders it server-side only when every prior page is complete. Fill
+`datafield_99863_1_1` and Submit appears immediately. Verified by fixing exactly that on two
+stuck applications, both of which then submitted to "Application received":
+DfE Digital Content Producer (ref 475477) and GDS Interaction Designer (ref 473690).
 
-So the blocker correlates with the extra page, NOT with the declaration gate. Working
-hypothesis (UNPROVEN — do not treat as fact): the role-specific answers are being written
-with the React native-setter + `input`/`change` and the page ADVANCES past its "Enter your
-response…" error, but the server may still consider that page incomplete, and the Declaration
-renders Submit only when every prior page is complete server-side.
+**I first mis-diagnosed this** as "forms with a Role specific questions page can't submit",
+because the one form that DID submit (ONS Content Designer) happened to lack both that page
+and the second textarea. That correlation was a coincidence. The role-specific page is
+irrelevant. Recording the wrong diagnosis here cost a cycle; the lesson is that the
+"There is a problem" banner naming the missing field is on the **CV page**, not on the
+Declaration where the symptom appears — so when Submit is missing, go back and re-read every
+earlier page's banner rather than theorising about the Declaration.
 
-**Tried and DISPROVEN (2026-08-15):** refilling the role-specific textareas with REAL
-keystrokes (`POST /tabs/<tab>/type`, `mode:"keyboard"`, after clearing them) and clicking
-Continue does NOT make Submit appear. The page advances exactly as before and the Declaration
-still shows only "Back". So this is NOT a synthetic-input persistence problem — do not spend
-another cycle on that theory.
+**Finding it:** the Continue-walker does not necessarily land on every page. Enumerate pages
+directly — `.../eform/<ID>/page/1..N` — and read each one's error banner. On the DfE form the
+incomplete CV page was `page/6`, *after* the Declaration at `page/5`, so walking forward from
+page 1 never revisited it.
 
-**Still untried, in rough order of cost:**
-1. Read the Applications-list status for these two after filling. If it reads "Application in
-   progress" rather than "Application started", S2 IS persisting and the missing Submit is
-   purely a render condition.
-2. Check for a page the Table of Contents lists but the Continue-walker never lands on (the
-   walker follows Continue; a page reachable only from the ToC would stay incomplete and
-   invisible).
-3. Compare the Declaration HTML against the ONS one (which DID render Submit) — diff the
-   form's hidden inputs; the gate may need a field the ONS form set implicitly.
-4. Do one by hand in noVNC and watch which action makes Submit appear.
+**Checklist before expecting Submit on any CSJ Section 2:**
+1. BOTH CV textareas filled (`99856` employment history, `99863` skills/experience).
+2. Personal statement filled.
+3. Preferences — every select set (an unset preferred location silently blocks submit too).
+4. Role-specific questions answered, if the form has them.
+5. Then declaration checkbox + "Full Application Form Submitted?"=Yes → Submit renders.
+6. Confirm via the Applications list: **"Application received"** is the only proof.
+
