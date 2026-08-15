@@ -502,6 +502,19 @@ def main():
     except cfx.CfxError:
         pass
 
+    # LAST fill pass — answer anything STILL empty from the shared screener bank.
+    # gh_apply has its own flow rather than going through atsform.apply(), so it did not
+    # inherit fill_gaps_from_bank when that was wired into atsform.apply and ashby.apply.
+    # That gap was costing whole submissions: Twilio bounced on "Location (City)",
+    # "How did you hear about Twilio?" and two consent selects that are all ALREADY in
+    # screener-answers.csv — the config just didn't happen to name them, and nothing
+    # afterwards looked. Runs after config + EEO + combos so an explicit answer always wins,
+    # and before the review screenshot so what's captured is what gets submitted.
+    try:
+        atsform.fill_gaps_from_bank()
+    except Exception as e:  # noqa: BLE001 — a bank miss must never block an otherwise-good form
+        print(f"  screener-bank note: {str(e)[:80]}")
+
     if cfg.get("no_submit"):
         print(f"FILLED_ONLY {company} {role}")
         return 0
