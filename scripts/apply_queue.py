@@ -73,13 +73,59 @@ def _slug(*parts):
     return re.sub(r"-+", "-", re.sub(r"[^a-z0-9]+", "-", s)).strip("-")[:80] or "posting"
 
 
+_GH_URL = re.compile(r"greenhouse\.io/(?:embed/job_app\?for=([\w.-]+)&token=(\d+)|"
+                     r"([\w.-]+)/jobs/(\d+))")
+
+
+def _gh_config_from_api(row):
+    """Build a Greenhouse config via gen_gh_config (keyless questions API). None if not
+    derivable, so the caller can fall back to the minimal config."""
+    m = _GH_URL.search(row.get("url") or "")
+    if not m:
+        return None
+    slug, jid = (m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))
+    try:
+        sys.path.insert(0, HERE)
+        import gen_gh_config  # noqa: PLC0415
+        path, _cfg, unanswered, human, oath = gen_gh_config.build(
+            slug, jid, eu="eu.greenhouse.io" in (row.get("url") or ""))
+    except Exception as e:  # noqa: BLE001 — API hiccup → minimal config, not a dead posting
+        print(f"    gen_gh_config failed ({str(e)[:60]}) — minimal config", file=sys.stderr)
+        return None
+    if oath:
+        print("    anti-AI oath on this posting — needs the applicant's own words",
+              file=sys.stderr)
+        return False        # BLOCKED, not "fall back to a minimal config"
+    if unanswered or human:
+        for u in (unanswered + human)[:4]:
+            print(f"    UNANSWERED_REQUIRED: {u[:90]}", file=sys.stderr)
+        return False        # driving this would bounce on a required field — don't spend the tab
+    return path
+
+
 def _hard_board_config(row, resume, ats):
     """Write (and return the path of) the per-application driver config for a hard-board row.
 
     Deliberately MINIMAL: identity/contact/EEO all come from the gitignored
     sites/_common/apply-defaults.json at drive time via `"defaults": true` — this file is
     written into runcfg/, which is TRACKED, so it must never carry a real personal value
-    (SKILL.md step 12 PII gate). Company/role/url are posting facts, not PII."""
+    (SKILL.md step 12 PII gate). Company/role/url are posting facts, not PII.
+
+    GREENHOUSE gets a RICHER config than this (2026-08-15): its forms carry per-posting
+    REQUIRED screeners (right-to-work status, "have you added your full legal name",
+    consent selects) whose options must match the employer's exact option TEXT. A minimal
+    config leaves those empty and every submit bounces with a bare "This field is required."
+    gen_gh_config.py already builds a correct one with NO browser, straight from Greenhouse's
+    keyless questions API (which publishes each select's exact `values[].label`) — so use it
+    and reserve the tab for submitting. Falls back to the minimal config if the API can't be
+    read, and if the generator reports UNANSWERED_REQUIRED we say so rather than driving a
+    form that cannot submit."""
+    if ats == "greenhouse":
+        gh = _gh_config_from_api(row)
+        if gh is False:
+            return None     # caller maps this to needs-human
+        if gh:
+            return gh
     os.makedirs(RUNCFG, exist_ok=True)
     cfg = {
         "cv": os.path.basename(resume),
@@ -139,6 +185,8 @@ def _drive_hard_board(row, ats, resume, dry_run):
               file=sys.stderr)
         return 3
     cfg_path = _hard_board_config(row, resume, ats)
+    if cfg_path is None:
+        return 7            # a required question this run cannot answer truthfully
     if dry_run:
         print(f"    dry-run: would drive {ats} with {os.path.relpath(cfg_path, ROOT)}",
               file=sys.stderr)
