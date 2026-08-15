@@ -106,7 +106,28 @@ _RESOLVE = r"""
     if (el.labels && el.labels[0]) return el.labels[0].innerText;
     if (el.getAttribute('aria-label')) return el.getAttribute('aria-label');
     const fs = el.closest('fieldset,label,div');
-    return fs ? (fs.querySelector('label,legend') || fs).innerText || '' : '';
+    const viaFs = fs ? ((fs.querySelector('label,legend') || fs).innerText || '') : '';
+    if (viaFs.trim()) return viaFs;
+    // ⛔ LABEL-LESS FIELDS (2026-08-15). Lever renders every CUSTOM question as
+    // `cards[<uuid>][fieldN]` with NO <label> element at all — the question text sits in an
+    // ancestor. `closest('fieldset,label,div')` often lands on a bare wrapper whose innerText
+    // is empty, so labelText returned '' and _resolve SKIPPED the field entirely (`if (!lab)
+    // continue`). Net effect: fill_gaps_from_bank could SEE those questions (it climbs
+    // ancestors) and had answers for them, but fill() could never bind one — the bank
+    // reported "0 answered" on a form where it knew every answer. Climb until real text
+    // appears, exactly like the _UNANSWERED walk, so the two agree on what a field is called.
+    let b = el;
+    for (let k = 0; k < 5 && b; k++) {
+      b = b.parentElement;
+      if (!b) break;
+      const t = (b.innerText || '').trim();
+      // Stop at the first ancestor with text, but not one so large it's the whole form.
+      if (t && t.length < 400) return t;
+    }
+    // LAST resort only. A placeholder is frequently generic filler — Lever's card inputs all
+    // say "Type your response" — so preferring it over the ancestor text would make every
+    // custom question on the form resolve to the SAME meaningless string.
+    return el.getAttribute('placeholder') || '';
   };
   // strip required marker + trailing parenthetical, collapse whitespace
   const norm = s => (s || '')

@@ -53,6 +53,7 @@ QUEUE = os.path.join(ROOT, "queue.jsonl")
 APPLY_EA = os.path.join(ROOT, "sites", "linkedin", "scripts", "apply_ea.py")
 ASHBY = os.path.join(ROOT, "sites", "ashbyhq", "scripts", "ashby.py")
 GH_APPLY = os.path.join(ROOT, "sites", "greenhouse", "scripts", "gh_apply.py")
+LEVER = os.path.join(ROOT, "sites", "lever", "scripts", "lever.py")
 RUNCFG = os.path.join(ROOT, "runcfg")
 COUNT_FILE = "/tmp/apply_queue_count.json"
 DEFAULT_HEADLESS_ATS = {"linkedin-easyapply"}
@@ -62,7 +63,9 @@ DEFAULT_HEADLESS_ATS = {"linkedin-easyapply"}
 # a shipped driver that fills from apply-defaults.json and refuses to submit unless its own
 # pre-submit `check` is clean — so they can be drained headlessly, exactly like Easy Apply,
 # without the model in the loop per field. Opt in with `--ats ashby,greenhouse`.
-HARD_BOARD_ATS = {"ashby", "greenhouse"}
+# lever added 2026-08-15: ats_router called it "recognised ATS, no shipped driver", which
+# was true only because nobody had turned sites/lever/NOTES.md's recipe into a file.
+HARD_BOARD_ATS = {"ashby", "greenhouse", "lever"}
 # Easy Apply is FORBIDDEN as a logged application (SKILL.md §Forbidden). Selecting any hard
 # board implies "not Easy Apply" unless the caller asks for it by name.
 EASYAPPLY_ATS = {"linkedin-easyapply", "reed-easyapply"}
@@ -132,7 +135,7 @@ def _hard_board_config(row, resume, ats):
         "company": row.get("company") or "Unknown",
         "role": row.get("title") or "",
         "url": row.get("url"),
-        "source": "Ashby" if ats == "ashby" else "Greenhouse",
+        "source": {"ashby": "Ashby", "lever": "Lever"}.get(ats, "Greenhouse"),
         "defaults": True,
         "fill": {},
     }
@@ -193,6 +196,8 @@ def _drive_hard_board(row, ats, resume, dry_run):
         return 5
     if ats == "ashby":
         cmd = [sys.executable, ASHBY, "apply", cfg_path, "--submit"]
+    elif ats == "lever":
+        cmd = [sys.executable, LEVER, "apply", cfg_path, "--submit"]
     else:
         cmd = [sys.executable, GH_APPLY, cfg_path]
     try:

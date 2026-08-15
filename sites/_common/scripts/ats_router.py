@@ -5,7 +5,7 @@ website", escapecity / adzuna / LinkedIn "Apply on company website" redirects �
 lands on some employer's own ATS and we need to know *which* recipe drives it.
 
 Design honesty (matches references/convertible-drive-preaudit.md + SKILL.md):
-  * Only **Ashby** and **Greenhouse** have shipped guest-submit drivers ("Greenhouse + Ashby are
+  * **Ashby**, **Greenhouse** and **Lever** have shipped guest-submit drivers ("Greenhouse + Ashby are
     GUEST-DRIVABLE and convert — lead with those"). For those, `classify()` returns drivable=True
     plus the exact driver command template (a per-application config JSON is still built by the
     caller — there is no auto-config generator, by design; this router routes, it doesn't fabricate
@@ -30,6 +30,7 @@ from urllib.parse import urlparse
 # after building the application config (name/email/CV/answers) — the router never fabricates it.
 _ASHBY = "python3 sites/ashbyhq/scripts/ashby.py apply <config.json> --submit"
 _GREENHOUSE = "python3 sites/greenhouse/scripts/gh_apply.py <config.json>"
+_LEVER = "python3 sites/lever/scripts/lever.py apply <config.json> --submit"
 
 # host/URL pattern → (ats, drivable, driver-path-or-None, invoke-or-None, note)
 # Order matters: first match wins, so put the most specific patterns first.
@@ -40,8 +41,12 @@ _RULES = [
     (r"(^|\.)greenhouse\.io($|/)|boards\.greenhouse\.io|job-boards\.greenhouse\.io|(^|\.)grnh\.se($|/)|greenhouse\.io/embed",
      ("greenhouse", True, "sites/greenhouse/scripts/gh_apply.py", _GREENHOUSE, "guest-drivable")),
     # ── RECOGNISED ATSes with NO shipped submit driver → route to manual/VNC ───────────────────
+    # lever: promoted to DRIVABLE 2026-08-15. sites/lever/NOTES.md had carried a correct
+    # recipe since July while this router still routed every Lever posting to manual/VNC — the
+    # gap was a missing FILE, not a missing capability. sites/lever/scripts/lever.py is a thin
+    # orchestrator over atsform (no board-local widget logic).
     (r"jobs\.lever\.co|(^|\.)lever\.co($|/)",
-     ("lever", False, None, None, "recognised ATS, no shipped driver — manual/VNC")),
+     ("lever", True, "sites/lever/scripts/lever.py", _LEVER, "guest-drivable")),
     (r"(^|\.)myworkdayjobs\.com|(^|\.)workday\.com($|/)",
      ("workday", False, None, None, "Workday — only nav_to_link.py exists, no submit driver — manual/VNC")),
     (r"(^|\.)smartrecruiters\.com",
