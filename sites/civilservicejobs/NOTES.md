@@ -187,9 +187,19 @@ with the React native-setter + `input`/`change` and the page ADVANCES past its "
 response…" error, but the server may still consider that page incomplete, and the Declaration
 renders Submit only when every prior page is complete server-side.
 
-**Next thing to try** (cheapest first): fill the role-specific textareas with REAL keystrokes
-(`POST /tabs/<tab>/type` with `mode:"keyboard"`) instead of a native-setter write, click
-Continue, then re-open the Declaration. If that renders Submit, the rule is "TAL persists
-only genuinely-typed input on this page" and `tal_eform.py`/`tal_sec2.py` should use keystrokes
-for role-specific pages. Both affected applications are filled and saved, so this can be
-tested without redoing any content.
+**Tried and DISPROVEN (2026-08-15):** refilling the role-specific textareas with REAL
+keystrokes (`POST /tabs/<tab>/type`, `mode:"keyboard"`, after clearing them) and clicking
+Continue does NOT make Submit appear. The page advances exactly as before and the Declaration
+still shows only "Back". So this is NOT a synthetic-input persistence problem — do not spend
+another cycle on that theory.
+
+**Still untried, in rough order of cost:**
+1. Read the Applications-list status for these two after filling. If it reads "Application in
+   progress" rather than "Application started", S2 IS persisting and the missing Submit is
+   purely a render condition.
+2. Check for a page the Table of Contents lists but the Continue-walker never lands on (the
+   walker follows Continue; a page reachable only from the ToC would stay incomplete and
+   invisible).
+3. Compare the Declaration HTML against the ONS one (which DID render Submit) — diff the
+   form's hidden inputs; the gate may need a field the ONS form set implicitly.
+4. Do one by hand in noVNC and watch which action makes Submit appear.
