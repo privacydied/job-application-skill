@@ -1931,13 +1931,29 @@ def fill_gaps_from_bank():
             skipped += 1
             continue
         ans = hit["answer"]
-        # The bank stores the canonical answer ("Yes", "No", "Heterosexual"); this form's
-        # option wording may be longer ("Heterosexual/Straight"). Prefer a real option whose
-        # text contains the bank answer, so set_radio matches on the FORM's own text.
-        match = next((o for o in opts if o.strip().lower() == ans.strip().lower()), None) \
-            or next((o for o in opts if ans.strip().lower() in o.strip().lower()), None)
-        if set_radio(q, match or ans, quiet_notfound=True) == 0:
-            print(f"  bank: {q[:52]!r} <- {(match or ans)[:40]!r} ({hit['source']})")
+        # ⛔ THE BANK ANSWER MUST BE ONE OF THIS FORM'S OPTIONS (2026-08-15).
+        # screener.py matches patterns by SUBSTRING, which is fine for the yes/no gating
+        # questions it was built for but dangerous once every hard board consults it: the row
+        # `bachelor,radio,Yes` (meant for "do you have a bachelor's degree?") also matches
+        # "What was your bachelor's university degree RESULT, or equivalent?" — a question
+        # whose honest answer is a classification, not "Yes". Caught live on a Greenhouse form,
+        # where this pass had already pushed "Yes" into it.
+        # A radio's options are a CLOSED SET, so validate against them: answer only when the
+        # bank value maps to a real option (exact, then whole-word/containment). If nothing
+        # maps, leave it EMPTY — an unanswered required field blocks the submit and asks for a
+        # human, which is the correct outcome; a confidently wrong answer is not.
+        low = ans.strip().lower()
+        match = next((o for o in opts if o.strip().lower() == low), None) \
+            or next((o for o in opts if re.search(
+                r"(^|[^a-z0-9])" + re.escape(low) + r"([^a-z0-9]|$)", o.strip().lower())), None)
+        if not match:
+            if opts:
+                print(f"  bank SKIP {q[:46]!r}: banked {ans[:20]!r} is not one of this "
+                      f"form's options {opts[:4]} — left unanswered on purpose")
+            skipped += 1
+            continue
+        if set_radio(q, match, quiet_notfound=True) == 0:
+            print(f"  bank: {q[:52]!r} <- {match[:40]!r} ({hit['source']})")
             filled += 1
         else:
             skipped += 1
