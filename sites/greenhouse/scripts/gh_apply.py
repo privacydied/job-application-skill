@@ -363,6 +363,21 @@ def main():
                         continue
                     try:
                         rc = atsform.combobox_pick(target, val, quiet_notfound=True)
+                        # Greenhouse's Discipline list is a FIXED taxonomy, so a specific real
+                        # course title ("Information & Interface Design") is often absent from
+                        # it and the field stays empty on a REQUIRED control. Fall back to the
+                        # course's own category word — a narrowing to the employer's
+                        # vocabulary, not a different claim (same rule as the ethnicity
+                        # leading-token fallback in atsform.fill_eeo).
+                        if rc not in (0, atsform.NOTFOUND) and target == "Discipline":
+                            for word in reversed(str(val).replace("&", " ").split()):
+                                if len(word) < 4:
+                                    continue
+                                rc = atsform.combobox_pick(target, word, quiet_notfound=True)
+                                if rc == 0:
+                                    print(f"  education Discipline matched via category "
+                                          f"{word!r} (taxonomy has no {val!r})")
+                                    break
                         print(f"  education {target}={val!r} -> {rc}")
                     except Exception as e:  # noqa: BLE001
                         print(f"  education {target} WARN {e}")
@@ -378,6 +393,25 @@ def main():
                         "el.dispatchEvent(new Event('input',{bubbles:true}));"
                         "el.dispatchEvent(new Event('change',{bubbles:true}));}});"
                         "return 1;})()" % (json.dumps(s.strip()), json.dumps(e.strip())))
+                # START/END MONTH (2026-08-15). Several postings require month as well as
+                # year — IMC bounced with "Start month is required. End month is required."
+                # while every other field was correct, so the whole application failed on two
+                # dropdowns. These are NOT guessable: the profile records years only, and a
+                # month is a real-world fact about the applicant. So read them from the
+                # gitignored applicant config and, when absent, say so and let the posting go
+                # to the human queue rather than inventing a date (SKILL.md §No fabrication).
+                sm, em = ap.get("education_start_month"), ap.get("education_end_month")
+                if cfx.evaluate("!!document.querySelector('#start-month--0')"):
+                    if sm and em:
+                        for tgt, val in (("Start month", sm), ("End month", em)):
+                            try:
+                                atsform.combobox_pick(tgt, val, quiet_notfound=True)
+                            except Exception:  # noqa: BLE001
+                                pass
+                    else:
+                        print("  EDUCATION_MONTHS_REQUIRED but apply-defaults.json has no "
+                              "applicant.education_start_month / education_end_month — add "
+                              "the real months there (gitignored). NOT guessing a date.")
             else:
                 print("  EDUCATION_REQUIRED but apply-defaults.json has no applicant.school "
                       "— add it there (gitignored), do not hardcode it here.")
