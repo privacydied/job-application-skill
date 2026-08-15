@@ -3555,5 +3555,52 @@ class TestComboboxRadioGuard(unittest.TestCase):
         self.assertLess(notfound_at, radio_at)
 
 
+class TestRemoteSynonymsAndApplyLaneLocationGate(unittest.TestCase):
+    """Location screening has to be right in BOTH directions, and the apply lane has to ask.
+
+    Two live failures on 2026-08-15, opposite in sign:
+      * FALSE NEGATIVE — `screen_location` only knew the word "remote", but Canonical posts
+        every distributed role as "Home based - EMEA"/"Home based - Worldwide". Seven
+        UK-eligible roles read as `abroad (Home based - EMEA)` and were skipped.
+      * FALSE POSITIVE — apply_queue's hard-board lane never called the screen at all, so it
+        drove Lendable (Virginia), Plaid (San Francisco), Quantexa (Ottawa), Notion (New York)
+        and Paddle (Toronto). Lendable's form spelled out why that is unfixable: its
+        right-to-work options were "I am a US Citizen" / "I require Visa Sponsorship" — no
+        truthful, eligible answer exists, so the tab was spent on an impossible form."""
+
+    def test_home_based_regions_are_remote_and_uk_eligible(self):
+        from precheck import screen_location
+        for loc in ("Home based - EMEA", "Home based - Worldwide", "Home-based, Europe",
+                    "Homeworking (UK)", "Work from anywhere"):
+            verdict, reason = screen_location(loc)
+            self.assertEqual(verdict, "keep", f"{loc!r} should be keep, got {reason!r}")
+
+    def test_genuinely_abroad_still_blocked(self):
+        from precheck import screen_location
+        for loc in ("Virginia", "San Francisco HQ", "Ottawa", "New York, New York", "Toronto"):
+            verdict, _ = screen_location(loc)
+            self.assertNotEqual(verdict, "keep", f"{loc!r} must not be keep")
+
+    def test_london_and_uk_unaffected(self):
+        from precheck import screen_location
+        self.assertEqual(screen_location("Office Based - London, UK")[0], "keep")
+        self.assertEqual(screen_location("London, UK")[0], "keep")
+        self.assertEqual(screen_location("Cardiff, London or Remote (UK)")[0], "keep")
+
+    def test_apply_lane_blocks_abroad_rows(self):
+        """The gate exists AND is consulted — a lane that only *has* a screen is the bug."""
+        import inspect
+
+        sys.path.insert(0, os.path.join(_HERE, "..", "scripts"))
+        import apply_queue
+        self.assertIsNone(apply_queue._location_block({"location": "Home based - EMEA"}))
+        self.assertIsNone(apply_queue._location_block({"location": "London, UK"}))
+        for loc in ("Virginia", "San Francisco HQ", "Ottawa", "New York, New York"):
+            self.assertIsNotNone(apply_queue._location_block({"location": loc}),
+                                 f"{loc!r} must be blocked before the tab is spent")
+        # …and the drive loop must actually call it.
+        self.assertIn("_location_block", inspect.getsource(apply_queue.main))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

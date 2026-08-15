@@ -47,7 +47,7 @@ sys.path.insert(0, os.path.join(ROOT, "sites", "linkedin", "scripts"))
 import cfx            # noqa: E402
 import pipeline       # noqa: E402  (F.2 importable funnel)
 import ratelimit      # noqa: E402  (LinkedIn daily-limit: detect/save/switch boards)
-from precheck import load_tracker, canon_ids, _norm  # noqa: E402  (canonical dedup)
+from precheck import load_tracker, canon_ids, _norm, screen_location  # noqa: E402  (canonical dedup + location screen)
 
 QUEUE = os.path.join(ROOT, "queue.jsonl")
 APPLY_EA = os.path.join(ROOT, "sites", "linkedin", "scripts", "apply_ea.py")
@@ -94,6 +94,29 @@ def _hard_board_config(row, resume, ats):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2)
     return path
+
+
+def _location_block(row):
+    """-> reason string if this row is OFF-LOCATION and must not be driven, else None.
+
+    WHY (2026-08-15, caught by driving them): the hard-board lane happily drove Lendable
+    (Virginia), Plaid (San Francisco), Quantexa (Ottawa), Notion (New York) and Paddle
+    (Toronto) — every one abroad-onsite for a UK-based applicant with no work authorisation
+    there. Lendable's form made it explicit: its right-to-work options were "I am a US
+    Citizen" / "I require Visa Sponsorship", neither of which is a truthful, eligible answer.
+    Each one burned the single serial apply tab on a form that could never be honestly
+    submitted. The queue row ALREADY carries `location`, and precheck.screen_location is the
+    shipped screen for it — the lane just never asked. Only a hard `drop` blocks; `review`
+    (ambiguous/generic-UK) still drives, since the JD is authoritative there."""
+    verdict, reason = screen_location(row.get("location") or "")
+    if verdict == "drop":
+        return reason
+    # screen_location returns `review` for abroad-onsite too ("JD decides"). Inside the
+    # apply lane there is no model to decide, and driving is the expensive branch, so treat
+    # an explicit abroad reading as a block rather than a maybe.
+    if verdict == "review" and reason.startswith("abroad"):
+        return reason
+    return None
 
 
 def _drive_hard_board(row, ats, resume, dry_run):
@@ -270,6 +293,12 @@ def main():
         attempted += 1
         ats = (r.get("ats_hint") or "").strip()
         print(f"\n>>> apply [{ats}] {company} :: {role}", file=sys.stderr)
+        blocked = _location_block(r) if ats in HARD_BOARD_ATS else None
+        if blocked:
+            print(f"    SKIP off-location: {blocked}", file=sys.stderr)
+            tally["skipped_location"] = tally.get("skipped_location", 0) + 1
+            attempted -= 1
+            continue
         if ats in HARD_BOARD_ATS:
             rc = _drive_hard_board(r, ats, resume, dry_run)
         else:

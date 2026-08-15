@@ -344,10 +344,18 @@ def screen_location(location):
     # "(?<!new )york" — "New York, NY" is NOT the UK city (found live in testing).
     cities = [c for c in UK_CITIES
               if re.search(r"(?<!new )\b" + c + r"\b" if c == "york" else r"\b" + c + r"\b", low)]
-    if re.search(r"\bremote\b|work from home", low):
+    # "remote" is not the only word employers use for it (2026-08-15): Canonical posts every
+    # distributed role as "Home based - EMEA" / "Home based - Worldwide", and because neither
+    # string matched, seven genuinely UK-eligible roles were classified
+    # `abroad (Home based - EMEA)` and skipped by the apply lane. Recognise the common
+    # synonyms; EMEA/Europe/Worldwide are UK-INCLUSIVE regions, not foreign locations.
+    if re.search(r"\bremote\b|work from home|home[\s-]?based|home[\s-]?working|"
+                 r"work from anywhere|distributed", low):
         note = "remote"
-        if not re.search(r"london|united kingdom|\buk\b|england|britain", low) and \
-           re.search(r"[a-z]", low.replace("remote", "")) and len(low) > 8:
+        uk_ok = re.search(r"london|united kingdom|\buk\b|england|britain|"
+                          r"\bemea\b|\beurope\b|europe/|worldwide|anywhere|global", low)
+        if not uk_ok and re.search(r"[a-z]", re.sub(r"remote|home[\s-]?based", "", low)) \
+                and len(low) > 8:
             note = "remote — verify region restriction (non-UK wording) in JD"
         return "keep", note
     # Word-boundary + new-lookbehind (mirrors the york guard above): a bare
