@@ -3509,5 +3509,51 @@ class TestAntiAiOathGuard(unittest.TestCase):
         self.assertNotIn(atsform.ANTI_AI, (0, 1, atsform.NOTFOUND))
 
 
+class TestComboboxRadioGuard(unittest.TestCase):
+    """⛔ A radio group must NEVER resolve as a combobox (2026-08-15 integrity bug).
+
+    `_COMBO_RESOLVE`'s bare `input` fallback matched `input[type=radio]`, so an Ashby EEO
+    radio group resolved as `kind:'combo'`; the ladder's trusted click then selected option
+    INDEX 0 and the free-text fallback printed a confident `OK=freetext:No`. The live result
+    on a real Accurx submission was **Transgender=Yes** and **Orientation=Bi** — demographic
+    claims about the applicant that are false and that he never made. It had already been
+    hand-patched once (tracker, Accurx 2026-07-26) without a root fix, so it recurred.
+
+    This test pins the two halves of the fix so it cannot silently regress:
+      1. the resolver excludes choice-type inputs from the combobox fallback, and
+      2. `fill_eeo` still routes to `set_radio` when the combobox path reports NOTFOUND."""
+
+    def _resolve_js(self):
+        import atsform
+        return atsform._COMBO_RESOLVE
+
+    def test_resolver_excludes_choice_inputs_from_bare_fallback(self):
+        js = self._resolve_js()
+        self.assertIn("radio-group", js,
+                      "_COMBO_RESOLVE must return kind:'none' reason:'radio-group' for a "
+                      "radio/checkbox control — otherwise the ladder clicks option index 0")
+        # The unguarded bare-`input` fallback is exactly what caused the bug.
+        self.assertNotIn("input[class*=\"select__input\"],input')", js,
+                         "bare `input` fallback is back — it matches input[type=radio]")
+        self.assertRegex(js, r"radio\|checkbox\|file\|hidden",
+                         "the bare fallback must filter out choice/opaque input types")
+
+    def test_fill_eeo_falls_through_to_set_radio(self):
+        """fill_eeo's combobox-first plan is only safe because NOTFOUND falls through."""
+        import inspect
+
+        import atsform
+        src = inspect.getsource(atsform.fill_eeo)
+        self.assertIn("combobox_pick", src)
+        self.assertIn("set_radio", src)
+        self.assertIn("NOTFOUND", src)
+        # set_radio must be reached FROM the NOTFOUND branch, not as a parallel attempt.
+        combo_at, notfound_at, radio_at = (src.index("combobox_pick("),
+                                           src.index("== NOTFOUND"),
+                                           src.index("set_radio("))
+        self.assertLess(combo_at, notfound_at)
+        self.assertLess(notfound_at, radio_at)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

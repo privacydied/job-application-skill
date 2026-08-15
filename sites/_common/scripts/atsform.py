@@ -215,6 +215,26 @@ def fill(label, value, quiet_notfound=False):
         print(f"FAIL fill: no text field for label ~{label!r}")
         return 1
     _read = f"(()=>{{const e=document.querySelector({_js(sel)});return e?e.value:null;}})()"
+    # ⛔ NUMBER-INPUT SANITISE (2026-08-15). Some employer forms render Phone as
+    # `input[type=number]` (Accurx's Ashby form does). A number input silently REFUSES any
+    # character it can't hold, and camofox's /type endpoint doesn't degrade — it returns
+    # **HTTP 500**, which `fill` reported as `FAIL fill: … HTTP 500` and the orchestrator
+    # escalated to `ABORT --submit`. So a `+44 …` phone number didn't just miss one optional
+    # field, it blocked the whole application. Strip to what the widget can actually accept
+    # (digits, with a leading `+` dropped since number inputs reject it) BEFORE typing; the
+    # existing alnum() round-trip check then still validates what landed.
+    try:
+        _itype = cfx.evaluate(
+            f"(()=>{{const e=document.querySelector({_js(sel)});return e?(e.type||''):'';}})()")
+    except cfx.CfxError:
+        _itype = ""
+    if isinstance(_itype, str) and _itype.lower() == "number" and re.search(r"[^0-9.]", value):
+        cleaned = re.sub(r"[^0-9]", "", value)
+        if cleaned:
+            print(f"NOTE fill {label!r}: input[type=number] cannot hold "
+                  f"{value.strip()[:4]!r}… — typing digits only ({len(cleaned)} chars)")
+            value = cleaned
+
     def alnum(s):
         return re.sub(r"[^a-z0-9]", "", (s or "").lower())
     # IDEMPOTENCY: if the field ALREADY holds this value, don't re-type it. Re-running
@@ -395,7 +415,25 @@ _COMBO_RESOLVE = r"""
     const cur = el.options[el.selectedIndex];
     return JSON.stringify({kind:'native', current:(cur && cur.value!=='')?[norm(cur.text)]:[]}); }
   let inp = el;
-  if (el.tagName !== 'INPUT') inp = el.querySelector('input[role=combobox],input[class*="select__input"],input') || el;
+  // ⛔ RADIO-GROUP GUARD (2026-08-15) — see the Python-side note on combobox_pick.
+  // The old bare `input` fallback matched input[type=radio]/[type=checkbox], so an Ashby
+  // RADIO GROUP resolved as kind:'combo'; the ladder's trusted click on [data-ats-target]
+  // then SELECTED THE FIRST OPTION and the free-text fallback reported OK. Result: false
+  // demographic answers (Transgender=Yes, Orientation=Bi) on a real submission.
+  // A radio/checkbox group is NOT a combobox — say so, and let the caller use set_radio.
+  if (el.tagName === 'INPUT' && /^(radio|checkbox)$/i.test(el.type||''))
+    return JSON.stringify({kind:'none', reason:'radio-group'});
+  if (el.tagName !== 'INPUT') {
+    const typed = el.querySelector('input[role=combobox],input[class*="select__input"]');
+    // Only a NON-choice input may stand in for a combobox on the bare fallback.
+    const bare = typed || [...el.querySelectorAll('input')].find(
+      i => !/^(radio|checkbox|file|hidden|submit|button|reset|image)$/i.test(i.type||''));
+    if (!typed && !bare && el.querySelector('input[type=radio],input[type=checkbox]'))
+      return JSON.stringify({kind:'none', reason:'radio-group'});
+    inp = bare || el;
+  }
+  if (inp.tagName === 'INPUT' && /^(radio|checkbox)$/i.test(inp.type||''))
+    return JSON.stringify({kind:'none', reason:'radio-group'});
   inp.setAttribute('data-ats-target','1');
   const ctrl = inp.closest('[class*="control"]');
   const single = ctrl ? [...ctrl.querySelectorAll('[class*="singleValue"]')].map(v=>norm(v.textContent)) : [];
@@ -609,7 +647,23 @@ def combobox_pick(target, option, multi=False, clear_first=False, quiet_notfound
     Refusing is the correct behaviour, so the refusal lives in the ONE shared primitive every
     board delegates to (AGENTS.md §6) rather than in each caller.
     `allow_attestation=True` is the deliberate override for a HUMAN who wrote the answers
-    themselves — never set it from an autonomous path."""
+    themselves — never set it from an autonomous path.
+
+    ⛔ RADIO GROUPS ARE NOT COMBOBOXES (2026-08-15, integrity bug — read before touching
+    `_COMBO_RESOLVE`). The resolver's bare `input` fallback used to match ANY input under the
+    label's container, including `input[type=radio]`. So an Ashby EEO radio group ("Do you
+    identify as Transgender?" → Yes/No/Unsure/Prefer not to say) resolved as `kind:'combo'`,
+    `data-ats-target` landed on the FIRST radio, and ladder rung 3 (`click_selector`) CLICKED
+    it — selecting option index 0. No listbox ever appeared, so the free-text fallback then
+    committed the typed value into nothing and printed `OK=freetext:No`. Net effect: a
+    confident success message while the form actually said **Transgender=Yes, Orientation=Bi**
+    — false demographic answers about the applicant, on a real submission, in his name.
+    This had been hand-corrected at least once before (tracker, Accurx 2026-07-26: "fixed
+    driver-default wrong EEO (trans=Yes, orient=Bi) to real answers before submit") without
+    ever being fixed at the root, so it kept recurring. `_COMBO_RESOLVE` now returns
+    `kind:'none', reason:'radio-group'` for a radio/checkbox control, which makes
+    `fill_eeo` fall through to `set_radio` — the primitive that actually matches option TEXT.
+    Guard test: `tests/test_core.py::TestComboboxRadioGuard`."""
     if not allow_attestation and _is_anti_ai_oath(target) and _is_affirmative(option):
         print(f"REFUSE combobox_pick {str(target)[:60]!r} -> {option!r}: anti-AI attestation. "
               "Not signing an 'own words / no AI' oath on the applicant's behalf.")
