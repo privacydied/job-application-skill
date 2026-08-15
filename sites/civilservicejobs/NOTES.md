@@ -200,3 +200,20 @@ page 1 never revisited it.
 5. Then declaration checkbox + "Full Application Form Submitted?"=Yes → Submit renders.
 6. Confirm via the Applications list: **"Application received"** is the only proof.
 
+### Recurring blocker: a required FREE-TEXT work-location field on Preferences (DSIT pattern)
+
+Confirmed twice on DSIT forms (Programme Support Officer, Portfolio Analyst): Preferences
+carries BOTH a location dropdown AND a separate required free-text input
+`datafield_74443_1_1` — "Your first choice of work location". Setting only the dropdown
+leaves the text field empty, the page still advances on Continue, and the Declaration then
+renders no Submit. The error banner reads "There is a problem — Blocker field. - This field
+is required — Your first choice of work location", and it is on the PREFERENCES page, not the
+Declaration where the symptom appears.
+
+Fill every empty `input[type=text]` on Preferences (London here) as well as every empty
+select. Both applications submitted immediately afterwards.
+
+This is the second distinct instance of the same general rule, so treat it as the rule:
+**when Submit does not render, enumerate `.../eform/<ID>/page/1..N` and read each page's
+"There is a problem" banner.** Do not theorise about the declaration gate — in every case so
+far the gate was already correct and an earlier page was quietly incomplete.
