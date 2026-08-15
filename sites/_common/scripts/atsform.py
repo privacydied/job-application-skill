@@ -1786,12 +1786,23 @@ def fill_eeo(config=None):
     # question) — matching that would put "Man" on the wrong field.
     plan = [
         (["how would you describe your gender", "which gender do you identify",
-          "best describes your gender"], a.get("gender_identity") or a.get("gender"), True),
+          "best describes your gender", "i identify my gender as", "gender identity"],
+         a.get("gender_identity") or a.get("gender"), True),
         (["sexual orientation", "lgbtq"], a.get("sexual_orientation"), True),
-        # Ethnicity is deliberately NOT auto-filled: several forms render a "race/ethnicity"
-        # combobox whose option list is actually a COUNTRY dialing-code list (broken employer
-        # form), and pushing an ethnicity into it is wrong. Disclose it by hand where the form
-        # exposes a real EEO race list.
+        # ETHNICITY (re-enabled 2026-08-15). It used to be skipped entirely because some
+        # employer forms render a "race/ethnicity" combobox whose option list is actually a
+        # COUNTRY DIALLING-CODE list, and pushing an ethnicity into that is wrong. But
+        # skipping is not free: Greenhouse marks these EEO selects REQUIRED (Graphcore's
+        # "What is your ethnicity?*"), so an empty one bounces the submit with a bare
+        # "This field is required." and the whole application fails over a question the
+        # profile answers. The original worry is already handled by the primitive: both
+        # combobox_pick and set_radio only ever select an option that MATCHES the value, so
+        # against a dialling-code list "Mixed or Multiple ethnic groups" simply finds nothing
+        # and the field stays empty — exactly the old behaviour, without failing the forms
+        # that ask the question properly. (Closed-set validation, same rule as
+        # fill_gaps_from_bank.) Religion remains untouched — it is a separate field.
+        (["what is your ethnicity", "your ethnicity", "ethnic group", "ethnicity"],
+         a.get("ethnicity"), True),
         (["transgender"], a.get("transgender"), False),
         (["disability", "chronic condition", "consider yourself disabled"], a.get("disability"), False),
         (["veteran"], a.get("veteran"), False),
@@ -1800,15 +1811,34 @@ def fill_eeo(config=None):
     for labels, val, multi in plan:
         if not val:
             continue
+        # The profile stores ONE canonical wording; employers use their own. Census-style
+        # options are the worst case: the profile says "Mixed or Multiple ethnic groups"
+        # while Greenhouse offers "Mixed (White and Black Caribbean, White and Black African,
+        # White and Asian, Any other mixed or multiple ethnic background)" — no substring of
+        # the profile's phrasing appears in it, so an exact-first match fails on a REQUIRED
+        # field. Falling back to the leading token ("Mixed") matches the employer's own
+        # category without broadening the claim: both name the same census group. Only ever a
+        # FALLBACK, so a form using the full phrasing still binds exactly.
+        candidates = [val]
+        head = str(val).split()[0].strip(",;/") if str(val).split() else ""
+        if head and len(head) >= 4 and head.lower() != str(val).strip().lower():
+            candidates.append(head)
         rc = "NO_FIELD"
         for lab in labels:
-            r = combobox_pick(lab, val, multi=multi, clear_first=multi, quiet_notfound=True)
-            if r == NOTFOUND:
-                r = set_radio(lab, val, quiet_notfound=True)   # Ashby-style radio rendering
+            hit = False
+            for cand in candidates:
+                r = combobox_pick(lab, cand, multi=multi, clear_first=multi, quiet_notfound=True)
                 if r == NOTFOUND:
-                    continue                                    # not on this form — next phrasing
-            rc = "OK" if r == 0 else "FAIL"
-            break
+                    r = set_radio(lab, cand, quiet_notfound=True)  # Ashby-style radio rendering
+                    if r == NOTFOUND:
+                        break                                 # not on this form — next phrasing
+                hit = True
+                if r == 0:
+                    rc = "OK"
+                    break
+                rc = "FAIL"
+            if hit:
+                break
         done.append((labels[0], val, rc))
     pronoun = (defaults.get("select") or {}).get("Pronouns")
     if pronoun:

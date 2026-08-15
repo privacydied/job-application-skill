@@ -190,20 +190,56 @@ def lookup(question):
 
 
 def record(pattern, answer, kind="text", source="learned"):
-    """Append a learned answer (idempotent on exact pattern). Ensures the file exists
-    (seeds first) so a driver can persist an answer the model just gave."""
+    """Persist a learned answer (idempotent on exact pattern), INSERTED AT ITS CORRECT
+    PRIORITY rather than blindly appended. Ensures the file exists (seeds first).
+
+    ⛔ WHY NOT A PLAIN APPEND (2026-08-15). Order in this file IS priority — `lookup` takes
+    the FIRST matching pattern, and the module docstring says "put the SPECIFIC before the
+    GENERIC". But `record` appended to the end, so a learned SPECIFIC rule could never
+    outrank a seeded GENERIC one that already matched. Concretely: teaching
+    `right to work status -> British` had no effect at all, because the seeded row
+    `right to work -> Yes` sits at line 11 and won every lookup. Greenhouse's
+    "Please select your right to work status" (options: British or Irish Citizen / EU
+    Settled Status / …) therefore kept coming back UNANSWERED_REQUIRED on every Canonical
+    and Graphcore posting — "Yes" is not on that list — while the CSV appeared to contain
+    the answer. A learn that silently cannot take effect is worse than no learn.
+
+    Fix: insert the new row immediately BEFORE the first existing row that is strictly more
+    GENERIC than it — i.e. whose plain (non-regex) pattern is a substring of the new one.
+    That is exactly the overlap that would otherwise shadow it. Everything else keeps its
+    order, so no existing precedence changes."""
     if not pattern or answer is None:
         return False
     if not os.path.exists(CSV):
         seed()
-    # A.4: dup-check + append under the lock so two drivers learning the same phrasing
+    # A.4: dup-check + insert under the lock so two drivers learning the same phrasing
     # concurrently can't both pass the check and double-write the row (TOCTOU).
     with file_lock(CSV):
-        for r in _read():
-            if r["pattern"].strip().lower() == pattern.strip().lower():
+        rows = _read()
+        new = pattern.strip().lower()
+        for r in rows:
+            if r["pattern"].strip().lower() == new:
                 return False  # already known — don't duplicate
-        with open(CSV, "a", newline="", encoding="utf-8") as f:
-            csv.writer(f).writerow([pattern, kind, answer, source])
+        at = len(rows)
+        for i, r in enumerate(rows):
+            p = r["pattern"].strip().lower()
+            # Only plain substring patterns can be compared for generality this way; a
+            # /regex/ row's breadth isn't inferable from its text, so leave those alone.
+            if p.startswith("/") or new.startswith("/"):
+                continue
+            if p and p in new and p != new:
+                at = i
+                break
+        rows.insert(at, {"pattern": pattern, "kind": kind, "answer": answer, "source": source})
+        tmp = CSV + ".tmp"
+        with open(tmp, "w", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            w.writerow(HEADER)
+            for r in rows:
+                w.writerow([r["pattern"], r["kind"], r["answer"], r["source"]])
+        os.replace(tmp, CSV)
+    _rows_cached.cache_clear()   # mtime-keyed, but clear anyway so a same-second
+                                 # learn+lookup in one process sees the new row
     return True
 
 

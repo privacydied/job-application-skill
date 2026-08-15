@@ -182,6 +182,28 @@ def build(slug, jid, eu=False, out=None):
             continue
 
         answer = next((a for pat, a in TRUTHS if re.search(pat, label, re.I)), None)
+        bank_answer = None
+        if True:
+            # SCREENER-BANK FALLBACK (2026-08-15). TRUTHS is this generator's own small
+            # pattern list; screener-answers.csv is the skill's SHARED, learnable one, and
+            # having two was why "Please select your right to work status" came back
+            # UNANSWERED_REQUIRED on every Canonical/Graphcore posting even though the bank
+            # had held the answer for weeks. Consult the bank second (TRUTHS still wins).
+            # SAFE BY CONSTRUCTION HERE: the API hands us `values`, so a select answer is
+            # validated against the REAL option list by pick_option below and simply stays
+            # unanswered when nothing matches — the same closed-set rule as
+            # atsform.fill_gaps_from_bank, which exists because the bank matches by substring
+            # and a loose row ("bachelor") can otherwise answer a question it never meant.
+            try:
+                sys.path.insert(0, os.path.join(ROOT, "sites", "_common", "scripts"))
+                import screener  # noqa: PLC0415
+                hit = screener.lookup(label)
+            except Exception:  # noqa: BLE001 — the bank is an optimisation, never a hard dep
+                hit = None
+            if hit:
+                bank_answer = hit["answer"]
+                if answer is None:
+                    answer = bank_answer
         if answer is None:
             if required:
                 unanswered.append(f"{label[:80]}  [{ftype}]")
@@ -189,6 +211,15 @@ def build(slug, jid, eu=False, out=None):
 
         if "select" in ftype:
             chosen = pick_option(values, answer)
+            if not chosen and bank_answer and bank_answer != answer:
+                # TRUTHS matched but its answer has the wrong SHAPE for this option list.
+                # Live: "Please select your right to work status" hit the generic
+                # `right to work -> Yes` rule, but the options are
+                # ['British or Irish Citizen', 'EU Settled Status', …] — so "Yes" mapped to
+                # nothing and every Canonical/Graphcore posting reported it
+                # UNANSWERED_REQUIRED. The bank holds the option-shaped answer ("British"),
+                # so try it before giving up. Still closed-set validated by pick_option.
+                chosen = pick_option(values, bank_answer)
             if chosen:
                 cfg["combo"][label[:60]] = chosen
             elif required:
