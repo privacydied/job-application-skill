@@ -1265,12 +1265,36 @@ function(question){
     const n=ownLabel(ctl).replace(/[^a-z]/g,'');
     if(n===w || n.indexOf(w)===0) return ctl;
   }
-  // pass 2: substring anywhere in the field-group (looser, last resort)
+  // pass 2: substring anywhere in the field-group (looser, last resort).
+  // ⛔ MEASURE THE QUESTION, NOT THE OPTION LIST (2026-08-15). `textContent` of a container
+  // holding a <select> includes EVERY option label — Palantir's "Which university…" select
+  // carries a few thousand universities, so `gt.length` was enormous and the
+  // `< w.length+90` tightness guard could never pass. A required, perfectly ordinary native
+  // <select> was therefore unresolvable by label and combobox_pick returned NOTFOUND.
+  // groupText() walks text nodes and skips anything inside a SELECT/DATALIST, so the guard
+  // sees the question text alone, which is what it was written to measure.
+  const groupText=g=>{
+    let out='';
+    const tw=document.createTreeWalker(g, NodeFilter.SHOW_TEXT, {acceptNode(n){
+      for(let p=n.parentElement;p&&p!==g;p=p.parentElement){
+        const tag=p.tagName;
+        if(tag==='SELECT'||tag==='OPTION'||tag==='DATALIST') return NodeFilter.FILTER_REJECT;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    }});
+    while(tw.nextNode()){ out+=' '+tw.currentNode.nodeValue; if(out.length>600) break; }
+    return norm(out);
+  };
   for (const ctl of [...document.querySelectorAll(CTRLS)]){
     let g=ctl.parentElement;
     for(let i=0;i<4 && g;i++,g=g.parentElement){
-      const gt=norm(g.textContent);
-      if(gt.includes(w) && gt.length < w.length+90) return ctl;
+      const gt=groupText(g);
+      // The tightness guard exists to stop a whole-form container matching. `w.length+90`
+      // alone is too strict for a question that carries instructions — Palantir's is
+      // "Which university are you currently attending or did you last attend? Please select
+      // \"Other\"…" at 142 chars, which a short query could never clear. An absolute floor
+      // admits one verbose question while still excluding a form-sized blob.
+      if(gt.includes(w) && gt.length < Math.max(w.length+90, 240)) return ctl;
     }
   }
   return null;

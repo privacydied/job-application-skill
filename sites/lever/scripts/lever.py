@@ -73,12 +73,19 @@ _CHECK_JS = r"""
     const filled = ty === 'file' ? !!(e.files && e.files[0]) : !!clean(e.value);
     (filled ? out.answered : out.empty).push((req?'*':'') + ty + ': ' + lab(e));
   }
+  // ⛔ A CHOICE GROUP CAN BE REQUIRED TOO (2026-08-15). This used to report every radio/
+  // checkbox group WITHOUT the '*' marker, so `apply` never counted an unanswered required
+  // group as blocking. Palantir's form has a REQUIRED languages checkbox group and a REQUIRED
+  // "AI notetaker" consent radio; with both unticked the form looked complete, and the submit
+  // click was a silent no-op — no confirmation, no error, nothing to diagnose. Lever marks
+  // `required` on the inputs themselves, so read it there and prefix '*' like any other field.
   const groups = {};
   for (const r of document.querySelectorAll('input[type=radio],input[type=checkbox]'))
     (groups[r.name] ||= []).push(r);
   for (const rs of Object.values(groups)) {
     const on = rs.some(r => r.checked);
-    (on ? out.answered : out.empty).push('choice: ' + lab(rs[0]));
+    const req = rs.some(r => r.required);
+    (on ? out.answered : out.empty).push((req && !on ? '*' : '') + 'choice: ' + lab(rs[0]));
   }
   for (const e of document.querySelectorAll('[class*=error],[role=alert],[aria-invalid=true]')) {
     const t = clean(e.innerText); if (t) out.errors.push(t.slice(0, 90));
@@ -204,6 +211,22 @@ def apply(config_path, do_submit=False):
                 continue
         else:
             failures.append("cv upload")
+        # ⛔ WAIT OUT THE RÉSUMÉ PARSE (2026-08-15). Lever shows "Analyzing resume…" and then
+        # RE-RENDERS the form when parsing finishes — the same autofill hazard Ashby documents.
+        # Filling during that window looks like it worked (every setter returns OK) and then
+        # the re-render wipes the custom `cards[…]` answers, so the pre-submit check reports
+        # them empty and the submit aborts with no visible cause. Poll until the parse settles.
+        for _ in range(20):
+            try:
+                state = cfx.evaluate(
+                    "(()=>{const t=document.body.innerText||'';"
+                    "return /analyz|analys/i.test(t) ? 'BUSY' : 'READY';})()")
+            except cfx.CfxError:
+                break
+            if state == "READY":
+                break
+            time.sleep(1.0)
+        time.sleep(1.0)
 
     defaults = atsform._load_defaults(cfg.get("defaults", True)) if cfg.get("defaults", True) else {}
 
@@ -248,6 +271,47 @@ def apply(config_path, do_submit=False):
         atsform.fill_gaps_from_bank()
     except Exception as e:  # noqa: BLE001
         print(f"  screener-bank note: {str(e)[:80]}")
+
+    # REQUIRED CHOICE GROUPS that are truthful and generic (2026-08-15). Two classes appear on
+    # Lever forms and both silently no-op the submit when unanswered — no confirmation, no
+    # error (Palantir Product Designer):
+    #   * a required LANGUAGES checkbox list — English is true for this applicant;
+    #   * a required AI-notetaker / recording consent radio — a preference, not a fact, and
+    #     consenting is the non-obstructive answer (same call already made on Accurx's Gemini
+    #     question). Anything that is NOT one of these stays untouched for the human.
+    # JS .click() on the LABEL, because Lever's radios sit under a label wrapper and a trusted
+    # click on the input itself times out.
+    try:
+        rep = cfx.evaluate(r"""(function(){
+          var done=[];
+          function pick(pred){
+            var r=[].slice.call(document.querySelectorAll('input[type=radio],input[type=checkbox]'))
+              .filter(function(x){return x.required && !x.checked && pred(x);})[0];
+            if(!r) return null;
+            var grp=[].slice.call(document.querySelectorAll('[name="'+(r.name||'').replace(/"/g,'\\"')+'"]'));
+            if(grp.some(function(g){return g.checked;})) return null;
+            var lab=r.closest('label')||document.querySelector('label[for="'+r.id+'"]');
+            (lab||r).click();
+            return r.value||r.id;
+          }
+          var langs=pick(function(x){return /^english\b/i.test((x.value||'')) ||
+                                            /^english\b/i.test((x.closest('label')||{}).innerText||'');});
+          if(langs) done.push('language:'+langs);
+          var ai=pick(function(x){
+            var t=((x.closest('label')||{}).innerText||'')+' '+(x.value||'');
+            if(!/consent|agree/i.test(t)) return false;
+            if(/do not consent|don.t consent|decline/i.test(t)) return false;
+            var card=x.closest('div');
+            for(var k=0;k<5&&card;k++,card=card.parentElement){
+              if(/notetaker|transcri|record|privacy|contact me/i.test(card.innerText||'')) return true;
+            }
+            return false;});
+          if(ai) done.push('consent:'+ai);
+          return JSON.stringify(done);})()""")
+        if rep and rep != "[]":
+            print(f"  truthful required choices ticked: {rep}")
+    except Exception as e:  # noqa: BLE001
+        print(f"  choice-group note: {str(e)[:80]}")
 
     print("\n===== pre-submit check =====")
     chk = check()
