@@ -59,11 +59,24 @@ _CHECK_JS = r"""
 (() => {
   const clean = s => (s||'').replace(/\s+/g,' ').trim();
   const out = {empty: [], answered: [], errors: []};
+  // Climb PAST the control's own text. A radio's nearest labelled ancestor is its own
+  // option ("Yes"), so the old walk reported every unanswered required group as
+  // `*choice: Yes` — unreadable, and it hid that these were US work-authorisation questions
+  // on US postings (which must be SKIPPED, not answered). Keep going until an ancestor says
+  // something the option itself doesn't.
   const lab = e => {
+    const own = clean((e.closest('label') || e).innerText || e.value || '');
     let t = clean(e.labels && e.labels[0] ? e.labels[0].innerText : '');
-    if (!t) { let b = e; for (let k=0;k<4&&b;k++){ b=b.parentElement;
-      if (b && clean(b.innerText)) { t = clean(b.innerText); break; } } }
-    return (t || e.name || e.id || '?').slice(0, 60);
+    if (t && t !== own) return t.slice(0, 90);
+    let b = e;
+    for (let k=0;k<7&&b;k++){
+      b = b.parentElement; if (!b) continue;
+      const x = clean(b.innerText);
+      if (!x || x.length > 250) continue;
+      if (own && (x === own || x.replace(own,'').trim().length < 3)) continue;
+      return x.slice(0, 90);
+    }
+    return (t || e.name || e.id || '?').slice(0, 90);
   };
   for (const e of document.querySelectorAll('input,textarea,select')) {
     const ty = (e.type||'').toLowerCase();

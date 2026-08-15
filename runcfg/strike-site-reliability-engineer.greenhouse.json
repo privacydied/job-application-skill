@@ -1,0 +1,10 @@
+{
+  "cv": "base-resume.pdf",
+  "company": "Strike",
+  "role": "Site Reliability Engineer",
+  "url": "https://job-boards.greenhouse.io/strike/jobs/4015660004",
+  "source": "Greenhouse",
+  "defaults": true,
+  "fill": {},
+  "cover": "strike-cover.pdf"
+}
