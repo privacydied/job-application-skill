@@ -30,6 +30,7 @@ import re
 import sys
 import time
 from datetime import datetime, timedelta
+from email.header import decode_header
 from email.utils import parsedate_to_datetime
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -79,6 +80,31 @@ def _extract(text, digits=None):
         if _plausible_code(c):
             return c
     return ""
+
+
+def _decode_hdr(raw):
+    """MIME-decode a header (2026-08-15). Greenhouse titles the code email
+    "Security code for your application to <Company>", but any non-ASCII in the company name
+    makes the header arrive RFC2047-encoded — e.g. DEPT® as
+    `=?UTF-8?q?Security_code_for_your_application_to_DEPT=C2=AE?=`. Matching the company
+    against that raw string fails on the encoding, not on the content, so the code email is
+    skipped and a correct application gets logged Blocked."""
+    if not raw:
+        return ""
+    try:
+        parts = decode_header(raw)
+    except Exception:  # noqa: BLE001
+        return str(raw)
+    out = []
+    for txt, enc in parts:
+        if isinstance(txt, bytes):
+            try:
+                out.append(txt.decode(enc or "utf-8", "replace"))
+            except (LookupError, UnicodeDecodeError):
+                out.append(txt.decode("utf-8", "replace"))
+        else:
+            out.append(txt)
+    return " ".join(out).replace("_", " ")
 
 
 def _plausible_code(tok):
@@ -192,7 +218,7 @@ def get_code(sender="greenhouse", minutes=20, digits=None, company=None,
                 if not _within_window(msg.get("Date"), minutes):
                     continue
                 frm = (msg.get("From") or "").lower()
-                subj = (msg.get("Subject") or "").lower()
+                subj = _decode_hdr(msg.get("Subject")).lower()
                 if snd != "any" and snd not in frm:
                     continue
                 text = _body_text(msg)
