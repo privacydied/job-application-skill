@@ -73,12 +73,31 @@ def _extract(text, digits=None):
     span = ("{%d}" % digits) if digits else "{6,8}"
     near = re.search(r"(?:verification code|security code|code is|your code|\bcode\b)"
                      r"[^A-Za-z0-9]{0,15}([A-Za-z0-9]" + span + r")", text, re.I)
-    if near and near.group(1).lower() not in _STOP:
+    if near and _plausible_code(near.group(1)):
         return near.group(1)
     for c in re.findall(r"\b([A-Za-z0-9]" + span + r")\b", text):
-        if c.lower() not in _STOP:
+        if _plausible_code(c):
             return c
     return ""
+
+
+def _plausible_code(tok):
+    """⛔ SHAPE TEST, NOT A WORDLIST (2026-08-15). The fallback scan used to accept any
+    length-matching token that wasn't in a hand-maintained `_STOP` list, which cannot cover
+    English: probing the live mailbox for an 8-char Greenhouse code returned the WORD
+    **"applying"**. That is worse than finding nothing — gh_apply would have typed it into the
+    security-code box as if it were the code.
+
+    Real codes are machine-generated (Greenhouse's look like `vC3N4JMk`), so test the SHAPE:
+    a token qualifies only if it contains a digit, or mixes upper and lower case. Every
+    ordinary English word in a marketing email fails both, with no wordlist to maintain."""
+    if not tok:
+        return False
+    if tok.lower() in _STOP:                       # keep the explicit denylist as a floor
+        return False
+    has_digit = any(c.isdigit() for c in tok)
+    mixed_case = any(c.islower() for c in tok) and any(c.isupper() for c in tok)
+    return has_digit or mixed_case
 
 
 def _within_window(date_hdr, minutes, now=None):
