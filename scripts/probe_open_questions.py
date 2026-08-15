@@ -67,6 +67,13 @@ def probe(ats, company, role, url):
         open_qs.append(m.group(1).strip())
     for m in re.finditer(r"UNANSWERED_REQUIRED: (.+?)\s*\[", out):
         open_qs.append(m.group(1).strip())
+    # ⛔ ASK THE DOM, NOT THE LOG (2026-08-15). Parsing driver stdout is per-driver and
+    # therefore wrong: "REQUIRED STILL EMPTY" is lever.py's wording, gh_apply never prints it,
+    # and with `no_submit` set nothing bounces so no validation text appears either. The first
+    # version of this probe consequently reported "NONE (ready to submit)" for eight postings
+    # that were in fact blocked — a false all-clear, which is the worst possible answer here.
+    # Read the live form instead: every unmet REQUIRED control, grouped, with its question.
+    open_qs += _dom_unmet()
     seen, uniq = set(), []
     for q in open_qs:
         q = re.sub(r"^\*?(?:text|textarea|select-one|email|choice|file):\s*", "", q).strip()
@@ -75,6 +82,67 @@ def probe(ats, company, role, url):
             uniq.append(q)
     return {"config": path, "open": uniq,
             "submitted_ok": "SUCCESS" in out or "APPLIED_OK" in out}
+
+
+_DOM_UNMET = r"""
+(() => {
+  const clean = s => (s||'').replace(/\s+/g,' ').trim();
+  // Climb PAST the control's own rendering. A react-select shows "Select...", a chosen radio
+  // shows its own option text — stopping at the first non-empty ancestor returns THAT, not the
+  // question, which made the first DOM probe report open items called "Select..." and "Yes".
+  // Keep going until the ancestor says something the control itself doesn't.
+  const q = e => {
+    const own = clean(e.innerText || e.value || '');
+    let t = clean(e.labels && e.labels[0] ? e.labels[0].innerText : '');
+    if (t && t !== own) return t;
+    let b = e;
+    for (let k=0;k<6&&b;k++){
+      b = b.parentElement; if (!b) break;
+      const x = clean(b.innerText);
+      if (!x || x.length >= 300) continue;
+      if (own && (x === own || x.replace(own,'').trim().length < 3)) continue;
+      return x;
+    }
+    return t || e.name || e.id || '?';
+  };
+  const groups = {};
+  for (const e of document.querySelectorAll('input,select,textarea')) {
+    const ty = (e.type||'').toLowerCase();
+    if (ty === 'submit' || ty === 'button' || ty === 'reset' || ty === 'image') continue;
+    if (!e.required) continue;
+    const key = e.name || e.id || Math.random();
+    const ok = (ty === 'checkbox' || ty === 'radio') ? e.checked
+             : (ty === 'file' ? !!(e.files && e.files[0]) : !!clean(e.value));
+    if (!(key in groups)) groups[key] = {ok: false, q: q(e)};
+    groups[key].ok = groups[key].ok || ok;
+  }
+  const out = [];
+  for (const g of Object.values(groups)) if (!g.ok) out.push(g.q.slice(0, 200));
+  // react-select renders no <select>, so a required combobox shows up only as an empty control
+  for (const c of document.querySelectorAll('[class*="select__control"]')) {
+    if (c.querySelector('[class*="singleValue"],[class*="multi-value"]')) continue;
+    const own = clean(c.innerText || '');
+    let b = c, t = '';
+    for (let k=0;k<6&&b;k++){ b=b.parentElement; if(!b) break;
+      const x = clean(b.innerText);
+      if (!x || x.length >= 300) continue;
+      if (own && (x === own || x.replace(own,'').trim().length < 3)) continue;
+      t = x; break; }
+    if (t && /\*|✱|required/i.test(t)) out.push(t.slice(0, 200));
+  }
+  return JSON.stringify([...new Set(out)]);
+})()
+"""
+
+
+def _dom_unmet():
+    """Every REQUIRED control on the live form that is still unanswered, by question text."""
+    sys.path.insert(0, os.path.join(ROOT, "sites", "_common", "scripts"))
+    try:
+        import cfx  # noqa: PLC0415
+        return json.loads(cfx.evaluate(_DOM_UNMET))
+    except Exception:  # noqa: BLE001 — a probe that can't read the DOM reports nothing extra
+        return []
 
 
 def main():
