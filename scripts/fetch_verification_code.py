@@ -110,6 +110,37 @@ def _within_window(date_hdr, minutes, now=None):
     return dt >= now - timedelta(minutes=minutes) or dt > now
 
 
+# Corporate-suffix noise that appears in tracker company names but rarely in the employer's
+# own transactional email, plus words too generic to identify anybody on their own.
+_COMPANY_NOISE = {
+    "agency", "group", "ltd", "limited", "llc", "inc", "plc", "co", "com", "corp",
+    "holdings", "labs", "technologies", "technology", "solutions", "services", "systems",
+    "digital", "global", "international", "the", "and", "uk", "us",
+}
+
+
+def _company_tokens(comp):
+    """The identifying tokens of a company name, longest first. 'OLIVER Agency' -> ['oliver'];
+    'Blockchain.com' -> ['blockchain']. Empty when the name is all noise, in which case the
+    caller falls back to the full-string test rather than matching everything."""
+    parts = [p for p in re.split(r"[^a-z0-9]+", comp.lower()) if p]
+    toks = [p for p in parts if len(p) >= 4 and p not in _COMPANY_NOISE]
+    return sorted(toks, key=len, reverse=True)
+
+
+def _company_matches(comp, subj, body_low):
+    """True if this email plausibly belongs to `comp`: the full name appears, or its most
+    distinctive token does. See the call site for why the full-string test alone was wrong."""
+    if comp in subj or comp in body_low:
+        return True
+    toks = _company_tokens(comp)
+    if not toks:
+        return False
+    lead = toks[0]
+    return bool(re.search(r"(^|[^a-z0-9])" + re.escape(lead) + r"([^a-z0-9]|$)",
+                          subj + " " + body_low))
+
+
 def get_code(sender="greenhouse", minutes=20, digits=None, company=None,
              wait_s=0, poll_s=6):
     """Freshest verification code from the applicant mailbox (newest first), or ''.
@@ -146,7 +177,16 @@ def get_code(sender="greenhouse", minutes=20, digits=None, company=None,
                 if snd != "any" and snd not in frm:
                     continue
                 text = _body_text(msg)
-                if comp and comp not in subj and comp not in text.lower():
+                # COMPANY MATCH IS TOKEN-BASED (2026-08-15). Requiring the WHOLE tracker
+                # company string to appear meant any suffix the employer doesn't use in its
+                # own email killed the match: "OLIVER Agency" vs an email saying "OLIVER",
+                # "Blockchain.com" vs "Blockchain". The code was sitting in the mailbox and
+                # gh_apply still printed CODE_MISSING, then logged a fully-correct
+                # application as Blocked — 7 of them in a single drain. Accept the full
+                # string OR its most distinctive token. Still safely scoped: sender must be
+                # Greenhouse and the mail must be inside the freshness window, and we take
+                # the newest first.
+                if comp and not _company_matches(comp, subj, text.lower()):
                     continue
                 code = _extract(text, digits)
                 if code:
