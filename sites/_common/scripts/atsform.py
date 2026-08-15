@@ -1924,7 +1924,7 @@ def _fill_with_aliases(label, value, quiet_notfound=True):
 _UNANSWERED = r"""
 (() => {
   const clean = s => (s||'').replace(/\s+/g,' ').trim();
-  const out = {texts: [], radios: []};
+  const out = {texts: [], radios: [], combos: []};
   for (const i of document.querySelectorAll(
       'input[type=text],input[type=email],input[type=tel],input[type=number],input[type=url],textarea')) {
     if (i.name === 'g-recaptcha-response' || i.value) continue;
@@ -1939,6 +1939,24 @@ _UNANSWERED = r"""
     // Marking each unanswered element gives the filler an exact address for THIS field.
     if (lbl) { i.setAttribute('data-ats-gap', String(out.texts.length));
                out.texts.push(lbl.slice(0, 220)); }
+  }
+  // UNANSWERED COMBOBOXES (2026-08-15). react-select renders its chosen value as a
+  // `singleValue`/`multi-value` node inside the control; an empty one shows only the
+  // placeholder. These were invisible to this pass, so a banked answer for e.g. Greenhouse's
+  // "Location (City)" or "Do you require visa sponsorship" was applied as a TEXT fill — which
+  // writes into the search box without ever committing a selection, so the field still
+  // reported "Please enter your location" and bounced the submit.
+  const seenCombo = new Set();
+  for (const ctrl of document.querySelectorAll('[class*="select__control"],[class*="-control"]')) {
+    if (ctrl.querySelector('[class*="singleValue"],[class*="multi-value"],[class*="multiValue"]')) continue;
+    let box = ctrl, q = '';
+    for (let k = 0; k < 5 && box; k++) { box = box.parentElement;
+      if (!box) break;
+      const t = clean(box.innerText);
+      if (t && t.length < 220) { q = t; break; } }
+    if (!q || seenCombo.has(q)) continue;
+    seenCombo.add(q);
+    out.combos.push(q.slice(0, 220));
   }
   const groups = {};
   for (const r of document.querySelectorAll('input[type=radio]')) (groups[r.name] ||= []).push(r);
@@ -1997,6 +2015,19 @@ def fill_gaps_from_bank():
             rc = fill(label, hit["answer"], quiet_notfound=True)   # legacy path, just in case
         if rc == 0:
             print(f"  bank: {label[:52]!r} <- {hit['answer'][:40]!r} ({hit['source']})")
+            filled += 1
+        else:
+            skipped += 1
+    for q in data.get("combos", []):
+        hit = screener.lookup(q)
+        if not hit:
+            skipped += 1
+            continue
+        # combobox_pick only ever selects an option that MATCHES, so a banked value that is
+        # wrong for this widget simply finds nothing and the field stays empty (closed-set
+        # rule) — never a guessed selection.
+        if combobox_pick(q, hit["answer"], quiet_notfound=True) == 0:
+            print(f"  bank combo: {q[:52]!r} <- {hit['answer'][:40]!r} ({hit['source']})")
             filled += 1
         else:
             skipped += 1
@@ -2219,6 +2250,15 @@ def apply(config_path, do_submit=False):
               + " — fix before submit.")
         return 1
 
+    # ⛔ HONOUR do_submit (2026-08-15). This block used to run whenever the fill was clean,
+    # ignoring the parameter entirely — so `apply(cfg, do_submit=False)` SUBMITTED. gh_apply
+    # calls exactly that to batch-fill before its own EEO/combo/screener passes, and a config
+    # carrying `"no_submit": true` (the read-only probe path) went the same way. A caller that
+    # explicitly asks not to submit must never submit: that is the difference between a dry
+    # inspection pass and an irreversible application sent with half the form filled.
+    if not do_submit or cfg.get("no_submit"):
+        print("--- filled; NOT submitting (do_submit=False / no_submit) ---")
+        return 0
     # Submit automatically when everything is clean (user authorised auto-submit).
     sub = cfg.get("submit")
     sub = sub or {}
