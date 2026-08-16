@@ -2032,7 +2032,17 @@ def fill_eeo(config=None):
 # label is unaffected.
 _LABEL_ALIASES = {
     "full name": ["name", "legal name", "full legal name"],
-    "linkedin": ["linkedin profile", "linkedin url"],
+    # ⛔ ALIASES FROM A REAL BLOCK LIST (2026-08-16). drain23 left 68 of 74 postings at
+    # needs_human, and a chunk of the blocking fields were ones the config ALREADY answers —
+    # they just carry a different wording. "Preferred Last Name/Surname" and "Zip Code/Postal
+    # Code" were among the most frequent blockers in that run, while apply-defaults holds
+    # "Last name" and "Postal". Nothing is invented here: the alias only changes which LABEL
+    # the existing, config-supplied value binds to (config-routing model, AGENTS.md §PII).
+    "first name": ["preferred first name", "given name", "forename", "legal first name"],
+    "last name": ["preferred last name", "surname", "family name", "legal last name",
+                  "preferred last name/surname"],
+    "postal": ["postcode", "postal code", "zip code", "zip code/postal code", "zip"],
+    "linkedin": ["linkedin profile", "linkedin url", "your linkedin url", "linkedin.com"],
     "portfolio": ["website/portfolio", "portfolio url", "website"],
     "website": ["website/portfolio", "personal website"],
     "phone": ["phone number", "mobile", "telephone"],

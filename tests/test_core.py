@@ -3810,6 +3810,32 @@ class TestAuditedWidgetInvariants(unittest.TestCase):
                       "refuse to sign an anti-AI oath")
 
 
+class TestBlockListLabelAliases(unittest.TestCase):
+    """Aliases taken from drain23's real block list: fields the config ALREADY answers that
+    were left empty only because the form words the label differently. Nothing here invents a
+    value — the alias only changes which label an existing config value binds to."""
+
+    def test_aliases_cover_the_observed_blockers(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(_HERE), "sites", "_common", "scripts"))
+        import atsform
+        for key, wording in (("last name", "preferred last name/surname"),
+                             ("first name", "preferred first name"),
+                             ("postal", "zip code/postal code"),
+                             ("linkedin", "your linkedin url")):
+            self.assertIn(wording, atsform._LABEL_ALIASES.get(key, []),
+                          f"{wording!r} blocked real postings in drain23 and the config "
+                          f"answers it under {key!r}")
+
+    def test_declarations_are_not_aliased_into_autofill(self):
+        # A criminal-record declaration or an attestation must never acquire an alias that
+        # lets the defaults pass answer it — those are the applicant's to make (SKILL.md).
+        sys.path.insert(0, os.path.join(os.path.dirname(_HERE), "sites", "_common", "scripts"))
+        import atsform
+        flat = " ".join(a for v in atsform._LABEL_ALIASES.values() for a in v).lower()
+        for banned in ("conviction", "caution", "attestation", "veracity"):
+            self.assertNotIn(banned, flat)
+
+
 class TestInjectedJavaScriptParses(unittest.TestCase):
     """Every JS blob atsform injects must PARSE. Nothing else in this suite can catch a syntax
     error in injected JavaScript: Python imports fine, the unit tests pass, and the breakage
