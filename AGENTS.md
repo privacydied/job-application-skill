@@ -1,8 +1,12 @@
 # AGENTS.md — repository source-of-truth & file-placement spec
 
 This is the **canonical structure contract** for the job-application skill. Any agent
-(Claude Code, Hermes, Codex, …) working in this repo MUST follow it. `CLAUDE.md` points
-here; do not duplicate this content elsewhere.
+(Claude Code, Hermes, Codex, …) working in this repo MUST follow it.
+
+`CLAUDE.md` is a **symlink to this file** (`ln -s AGENTS.md CLAUDE.md`), so Claude Code's
+auto-loaded memory and every other agent read the same bytes. Do not replace it with a real
+file or duplicate this content elsewhere — a Claude-only copy is exactly how the PII rule
+went invisible to Hermes (SKILL.md §12). Anything an agent must know goes **here**.
 
 Why this file exists: two apply drivers (`amazon_apply.py`, `reed_apply.py`) had drifted
 into **stale root copies + maintained `scripts/` copies**, and `SKILL.md` invoked the stale
@@ -26,12 +30,32 @@ When any doc references a script, it MUST use that script's **canonical path** (
 
 ---
 
+## Running the skill (start here)
+
+- **The operational playbook is `SKILL.md`** — how to source, screen, drive and close out.
+  Read it before driving anything. Per-board quirks: `sites/<board>/NOTES.md`. Deep
+  playbooks: `references/*.md`.
+- **Invoke scripts at their canonical path** — skill-level drivers from `scripts/`
+  (e.g. `python3 scripts/reed_apply.py <id> …`), board scripts from
+  `sites/<board>/scripts/`. Never a repo-root copy (there are none; keep it that way — see
+  §no-divergent-duplicate).
+- **Browser automation** runs through the camofox helper `sites/_common/scripts/cfx.py`
+  (REST on `$CFX_URL`, tab in `$CFX_TAB`); load `.jobenv` for env. Host-level
+  browser/Playwright notes live in the user-level `~/.claude/CLAUDE.md`, outside this repo.
+- **Integrity is the hard rule** (see SKILL.md): every field must be true to the applicant's
+  real profile (`references/applicant-profile.md`); personal declarations and final submits
+  are the user's. Never fabricate experience, grades, or answers to eligibility gates.
+- **Run `bash scripts/check-no-pii.sh` before EVERY push** — the push is not done until it
+  prints ✓. Details and the config-routing model: §PII below.
+
+---
+
 ## Canonical file placement (where a file lives — and where a NEW one goes)
 
 ```
 SKILL.md                         operational playbook (source of truth for HOW-TO)
 AGENTS.md                        this structure contract
-CLAUDE.md                        pointer to AGENTS.md + Claude-Code specifics
+CLAUDE.md                        symlink → AGENTS.md (Claude Code's auto-loaded memory)
 README.md, LICENSE, GOAL.md      public/meta docs
 
 scripts/                         CROSS-BOARD / skill-level scripts (apply drivers,
