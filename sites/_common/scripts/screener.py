@@ -271,7 +271,7 @@ def _write(rows):
     os.replace(tmp, CSV)
 
 
-def record(pattern, answer, kind="text", source="learned", update=False):
+def record(pattern, answer, kind="text", source="learned", update=False, sample=None):
     """Persist a learned answer (idempotent on exact pattern), INSERTED AT ITS CORRECT
     PRIORITY rather than blindly appended. Ensures the file exists (seeds first).
 
@@ -318,6 +318,29 @@ def record(pattern, answer, kind="text", source="learned", update=False):
                 _rows_cached.cache_clear()
                 return True
         at = len(rows)
+        # ⛔ A REGEX NEW ROW CANNOT BE PLACED BY TEXT (2026-08-16). The scan below asks "does
+        # an existing row match the NEW PATTERN's text?", which works when the new pattern is
+        # a plain substring but is meaningless when it is a /regex/ — you cannot match one
+        # regex against another. So a new regex row was always APPENDED, i.e. below every
+        # existing catch-all, i.e. inert. Live consequence: teaching
+        # /years.*(software engineering|…)/ -> 3 landed under /years.*(of )?experience/ -> 5,
+        # so "How many years of software engineering experience?" kept answering 5 — the row
+        # was not merely ignored, it left an OVERSTATED figure in place.
+        #
+        # Rather than guess at regex generality, let the caller hand over a real question the
+        # new row is meant to answer. Then "which existing row would beat me?" is answered by
+        # running the actual matcher against an actual question — no inference at all.
+        if sample:
+            q = norm(sample)
+            for i, r in enumerate(rows):
+                if _matches(r["pattern"], q):
+                    at = i
+                    break
+            rows.insert(at, {"pattern": pattern, "kind": kind,
+                             "answer": answer, "source": source})
+            _write(rows)
+            _rows_cached.cache_clear()
+            return True
         for i, r in enumerate(rows):
             p = r["pattern"].strip().lower()
             # ⛔ A /regex/ ROW SHADOWS TOO (2026-08-16). This used to `continue` past every

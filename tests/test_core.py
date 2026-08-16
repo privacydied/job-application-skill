@@ -3736,6 +3736,21 @@ class TestScreenerFalseAnswerRegressions(unittest.TestCase):
                                              update=True))
         self.assertEqual(self._answer("What is your notice period?"), "One month")
 
+
+    def test_regex_row_can_be_placed_by_sample_question(self):
+        # A /regex/ new row cannot be positioned by matching its TEXT against existing rows —
+        # you cannot match one regex against another — so it was always appended, i.e. below
+        # every catch-all, i.e. inert. Live consequence: /years.*software engineering/ -> 3
+        # landed under /years.*experience/ -> 5, leaving an OVERSTATED figure in place.
+        q = "How many years of software engineering experience do you have?"
+        self.assertEqual(self._answer(q), "5")          # generic catch-all wins
+        self.screener.record(r"/years.*(software engineering|coding)/", "3",
+                             kind="number", source="profile", sample=q)
+        self.assertEqual(self._answer(q), "3")          # placed above it
+        # and the neighbours are untouched
+        self.assertEqual(self._answer("How many years of product design experience?"), "6")
+        self.assertEqual(self._answer("How many years of experience?"), "5")
+
     def test_record_inserts_above_a_shadowing_regex_row(self):
         # The priority scan skipped every /regex/ row, so a learn overlapping one was inserted
         # BELOW it and could never win a lookup — inert on arrival, which is the exact
