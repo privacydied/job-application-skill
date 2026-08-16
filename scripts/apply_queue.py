@@ -303,7 +303,18 @@ def main():
         if _handled(r, by_id, by_pair):
             skipped += 1
             continue
-        if (r.get("ats_hint") or "") in headless_ats:
+        hint = (r.get("ats_hint") or "")
+        if hint not in headless_ats and headless_ats & HARD_BOARD_ATS:
+            # same URL-resolution as the dispatch loop, so a row whose ats_hint is 'unknown'
+            # but whose URL is plainly Greenhouse/Lever/Ashby is COUNTED as drivable too.
+            try:
+                import ats_router  # noqa: PLC0415
+                cl = ats_router.classify(r.get("url") or "")
+                if cl.get("drivable") and cl.get("ats") in headless_ats:
+                    hint = cl["ats"]
+            except Exception:  # noqa: BLE001
+                pass
+        if hint in headless_ats:
             drivable.append(r)
         else:
             needs_model.append(r)
@@ -345,6 +356,23 @@ def main():
             break
         attempted += 1
         ats = (r.get("ats_hint") or "").strip()
+        # ⛔ RESOLVE 'unknown' FROM THE URL (2026-08-16). The funnel sets ats_hint from the
+        # SOURCING board, so a row harvested off a company careers page keeps ats_hint
+        # 'unknown' even when its URL plainly carries `gh_jid=` (Greenhouse) or a lever.co /
+        # ashbyhq.com host. Dispatch keys on ats_hint, so 35 on-profile GREENHOUSE-drivable
+        # rows sat untouched in the queue for this entire run — invisible because they were
+        # never counted as drivable in the first place. ats_router classifies from the URL
+        # alone, no browser, so ask it before writing a row off.
+        if ats not in HARD_BOARD_ATS:
+            try:
+                import ats_router  # noqa: PLC0415
+                cl = ats_router.classify(r.get("url") or "")
+                if cl.get("drivable") and cl.get("ats") in HARD_BOARD_ATS:
+                    ats = cl["ats"]
+                    print(f"    ats_hint {r.get('ats_hint')!r} -> {ats} (resolved from URL)",
+                          file=sys.stderr)
+            except Exception:  # noqa: BLE001 — routing is an optimisation, never a hard dep
+                pass
         print(f"\n>>> apply [{ats}] {company} :: {role}", file=sys.stderr)
         blocked = _location_block(r) if ats in HARD_BOARD_ATS else None
         if blocked:
