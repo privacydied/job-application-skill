@@ -247,6 +247,102 @@ class TestNoDivergentFormWidgets(unittest.TestCase):
                          + "\n  ".join(offenders))
 
 
+class TestNoDivergentAntiAiOath(unittest.TestCase):
+    """The anti-AI oath detector has ONE home: atsform.is_anti_ai_oath.
+
+    WHY (2026-08-16, caught by driving three Twilio reqs): `scripts/gen_gh_config.py` — the GATE
+    that decides whether a posting is fully answerable — carried its own copy of the oath regex,
+    and that copy had drifted NARROWER than the filler's. So the gate could clear a posting whose
+    oath the filler would refuse. Twilio's wording ("…the Candidate AI Responsible Use Policy. I
+    affirm that all the information and materials I submit … will reflect my own work and
+    experience") matched NEITHER copy, and only checkbox default-deny stopped it being ticked —
+    the safety net held, but for the wrong reason, reporting the field as an unknown rather than
+    as an oath."""
+
+    def test_detector_has_one_home(self):
+        import infra_guard  # noqa: PLC0415
+        offenders = infra_guard.scan_anti_ai_oath()
+        self.assertEqual(offenders, [], "anti-AI oath regex re-spelled outside "
+                         "sites/_common/scripts/ — call atsform.is_anti_ai_oath:\n  "
+                         + "\n  ".join(offenders))
+
+    def test_catches_ai_use_policy_family(self):
+        """The exact Twilio label, plus the phrasings that family uses. Each of these returned
+        False before the 2026-08-16 widening."""
+        import atsform  # noqa: PLC0415
+        for label in [
+            "By checking this box, I confirm I have read, reviewed and understood the guidelines "
+            "outlined in the Candidate AI Responsible Use Policy. I affirm that all the "
+            "information and materials I submit throughout my application and candidacy will "
+            "reflect my own work and experience.",
+            "I have read the Responsible Use of AI policy",
+            "Please review our AI Use Policy before applying",
+            "I affirm my responses reflect my own work.\nI understand AI assistance is monitored.",
+        ]:
+            self.assertTrue(atsform.is_anti_ai_oath(label),
+                            f"anti-AI oath not detected: {label[:70]!r}")
+
+    def test_does_not_flag_ordinary_attestations_or_ai_as_subject_matter(self):
+        """The widening must not swallow every consent box, or every role that mentions AI —
+        that would block honest applications instead of protecting one oath."""
+        import atsform  # noqa: PLC0415
+        for label in [
+            "By typing my name below, I confirm that the facts set forth in this application "
+            "are true",
+            "I consent to the processing of my personal data",
+            "Are you interested in our AI Platform team?",
+            "Do you have experience with artificial intelligence research?",
+            "This role sits in our Applied AI group",
+            "I confirm the work history above is my own account of my experience",
+        ]:
+            self.assertFalse(atsform.is_anti_ai_oath(label),
+                             f"false positive on an ordinary label: {label[:70]!r}")
+
+
+class TestDriveBlockIsShared(unittest.TestCase):
+    """Eligibility refusal must live on EVERY path into a submit, not just the queue.
+
+    WHY (2026-08-16): `_location_block` lived only in `apply_queue.py`, but five modules submit
+    applications. A retry pool that handed configs straight to `gh_apply.py` walked past it and
+    drove Twilio "Technical Support Engineer 1" — advertised **Remote - India** — plus two
+    siblings, burning the single serial tab on forms with no truthful right-to-work answer.
+    Same defect shape as the CLAUDE.md/AGENTS.md split and SKILL.md §12: a rule enforced on one
+    path is not enforced."""
+
+    def test_region_restricted_remote_is_refused(self):
+        from precheck import drive_block  # noqa: PLC0415
+        for loc in ["Remote - India", "Remote - USA", "Remote, US", "Pacific Time Zone (Remote)"]:
+            self.assertIsNotNone(drive_block(location=loc), f"should refuse to drive {loc!r}")
+
+    def test_uk_and_ambiguous_still_drive(self):
+        from precheck import drive_block  # noqa: PLC0415
+        for loc in ["London, UK", "Remote - UK", "Remote", "Cardiff, London or Remote (UK)",
+                    "Home based - EMEA", ""]:
+            self.assertIsNone(drive_block(location=loc), f"should still drive {loc!r}")
+
+    def test_excluded_source_is_refused(self):
+        from precheck import drive_block  # noqa: PLC0415
+        self.assertIsNotNone(drive_block(url="https://uk.indeed.com/viewjob?jk=abc"))
+        self.assertIsNotNone(drive_block(url="https://www.reed.co.uk/jobs/x/123"))
+        self.assertIsNone(drive_block(url="https://job-boards.greenhouse.io/x/jobs/1"))
+
+    def test_every_submitting_driver_calls_it(self):
+        """The point of the fix: no submitting driver may be missing the gate again."""
+        import os  # noqa: PLC0415
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        drivers = ["scripts/apply_queue.py",
+                   "sites/greenhouse/scripts/gh_apply.py",
+                   "sites/ashbyhq/scripts/ashby.py",
+                   "sites/lever/scripts/lever.py"]
+        missing = []
+        for rel in drivers:
+            with open(os.path.join(root, rel), encoding="utf-8") as fh:
+                if "drive_block" not in fh.read():
+                    missing.append(rel)
+        self.assertEqual(missing, [], "submitting driver(s) with no eligibility gate — add a "
+                                      "precheck.drive_block call: " + ", ".join(missing))
+
+
 class TestCsjApplyDedup(unittest.TestCase):
     """CSJ was the LAST apply path with no dedup gate: its eform URL
     (cshr.tal.net/.../eform/<ID>) carries no jcode, but the tracker keys CSJ on
@@ -4014,7 +4110,14 @@ class TestDuplicateIsNotAnApplication(unittest.TestCase):
         src = self._src("scripts/apply_queue.py")
         self.assertIn("skipped_duplicate", src)
         # and it must not be mistaken for a rate-limit signal
-        self.assertIn("(0, 5, 10)", src,
+        # Assert MEMBERSHIP, not the literal tuple text: this used to pin the exact string
+        # "(0, 5, 10)", so adding a legitimate fourth non-failure code (rc=11, the off-location
+        # refusal, 2026-08-16) turned the suite red for no behavioural reason. Pin the rule
+        # ("10 is a non-failure"), not one spelling of it.
+        m = re.search(r"rc not in \(([\d,\s]+)\)", src)
+        self.assertIsNotNone(m, "apply_queue must keep a non-failure rc set")
+        nonfail = {int(x) for x in m.group(1).replace(" ", "").split(",") if x}
+        self.assertTrue({0, 5, 10} <= nonfail,
                       "rc=10 must join the non-failure set, or re-seeing known postings "
                       "would trip the LinkedIn cooldown")
 

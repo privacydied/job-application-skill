@@ -316,11 +316,39 @@ def main():
     appdir = os.path.join(APPS, slug)
     os.makedirs(appdir, exist_ok=True)
 
+    # ⛔ CONFIG-LEVEL ELIGIBILITY GATE. Cheap, pre-navigation: refuses an excluded source or a
+    # known off-location row before spending a single page load.
+    block = precheck.drive_block(location=cfg.get("location"), url=url,
+                                 company=company, title=role)
+    if block:
+        print(f"OFF_LOCATION {company} | {role} — {block}")
+        return 11
+
     r = cfx.goto(url)
     if not r.get("ok"):
         print(f"NAV_FAIL {url} {r}")
         return 2
     time.sleep(1.0)
+
+    # ⛔ PAGE-LEVEL ELIGIBILITY GATE (2026-08-16). The config check above is only as good as the
+    # metadata in the config — and a hand-built cfg, or one from a retry pool, carries no
+    # `location` at all. The PAGE is the authority: Greenhouse renders the req's location in the
+    # header, and Twilio "Technical Support Engineer 1" says **Remote - India**. Three Twilio
+    # reqs were driven this way; each burned the serial tab on a form with no truthful
+    # right-to-work answer for a UK-based applicant. Read the header and refuse here, where
+    # every caller — queue, retry pool, Hermes, a human with a cfg — must pass through.
+    try:
+        loc = cfx.evaluate(
+            "(()=>{const m=document.querySelector('main');if(!m)return '';"
+            "const ls=m.innerText.split('\\n').map(s=>s.trim()).filter(Boolean);"
+            "return ls.slice(0,4).join(' | ');})()") or ""
+    except Exception:  # noqa: BLE001
+        loc = ""
+    if loc:
+        page_block = precheck.drive_block(location=loc)
+        if page_block:
+            print(f"OFF_LOCATION {company} | {role} — page header {loc[:80]!r}: {page_block}")
+            return 11
 
     try:
         _upload_and_verify("#resume", "/uploads/base-resume.pdf")

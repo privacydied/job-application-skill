@@ -488,6 +488,42 @@ def salary_band_top(s):
     return max(nums) if nums else None
 
 
+def drive_block(location=None, url=None, company=None, title=None):
+    """-> reason string if this posting MUST NOT be driven, else None. Call at the top of
+    every apply driver, before the first navigation.
+
+    ⛔ WHY THIS LIVES HERE AND NOT IN THE QUEUE (2026-08-16, caught by driving them).
+    This screen used to be `apply_queue._location_block` — one caller. But FIVE modules submit
+    applications (`apply_queue.py`, `sites/greenhouse/scripts/gh_apply.py`,
+    `sites/ashbyhq/scripts/ashby.py`, `sites/lever/scripts/lever.py`,
+    `sites/recruitmentplatform/scripts/talentlink.py`), and the other four had no screen at
+    all. So the gate only existed on ONE of the paths into a submit: anything that handed a
+    driver a config directly — a retry pool, a hand-built cfg, a Hermes drive — walked straight
+    past it. That is exactly what happened: a retry pool drove Twilio "Technical Support
+    Engineer 1", advertised **Remote - India**, plus two sibling reqs, and burned the single
+    serial tab on forms with no truthful right-to-work answer.
+
+    This is the SAME defect shape as the CLAUDE.md/AGENTS.md split fixed the same day, and as
+    SKILL.md §12 (the PII rule that lived only in CLAUDE.md and so was invisible to Hermes):
+    **a rule enforced on one path is not enforced.** Put the refusal where every path must go
+    through it, and make bypassing it the unusual, explicit act.
+
+    `screen_location` deliberately returns `keep` for a region-restricted remote row so that
+    SOURCING keeps it (a human reading the JD may find a UK req attached). The DRIVE lane has
+    no model and pays a whole serial-tab drive per attempt, so here it refuses."""
+    for field in (url, company, title):
+        if field and excluded_source(field):
+            return f"excluded source ({field})"
+    verdict, reason = screen_location(location or "")
+    if verdict == "drop":
+        return reason
+    if reason.startswith("remote — region-restricted"):
+        return reason
+    if verdict == "review" and reason.startswith("abroad"):
+        return reason
+    return None
+
+
 def precheck(cands):
     by_id, by_pair = load_tracker()
     cache = load_salary_cache()

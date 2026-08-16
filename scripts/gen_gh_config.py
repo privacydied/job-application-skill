@@ -103,7 +103,17 @@ NEEDS_HUMAN = re.compile(
     re.I)
 
 # Anti-AI oath — never sign one (see atsform.combobox_pick's ANTI-AI OATH GUARD).
-ANTI_AI = re.compile(r"only my own words|\bno ai\b|ai[- ]?generated|use of ai", re.I)
+# ⛔ DO NOT re-spell this pattern here. This module used to carry its own copy, which had
+# drifted NARROWER than the filler's (no `without the use of ai`, no artificial-intelligence/
+# prohibited clause). The result was the worst possible split: the GATE cleared a posting as
+# fully answerable while the FILLER would have refused the very same field. Twilio's "Candidate
+# AI Responsible Use Policy … reflect my own work and experience" slipped through both, and
+# three postings were driven that the applicant must sign himself. One detector, one home.
+def ANTI_AI_search(label):
+    """Delegates to the shared detector in atsform (single source of truth)."""
+    sys.path.insert(0, os.path.join(ROOT, "sites", "_common", "scripts"))
+    from atsform import is_anti_ai_oath  # noqa: PLC0415
+    return is_anti_ai_oath(label)
 
 # Consent/acknowledgement questions rendered as a SELECT whose only option is the whole policy
 # text. Deliberately narrow: it must read like an acknowledgement, not merely mention data.
@@ -241,7 +251,7 @@ def build(slug, jid, eu=False, out=None):
         values = fields[0].get("values") or []
         required = bool(q.get("required"))
 
-        if ANTI_AI.search(label):
+        if ANTI_AI_search(label):
             oath = True
             continue
         if NEEDS_HUMAN.search(label):

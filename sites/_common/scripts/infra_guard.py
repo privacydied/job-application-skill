@@ -68,10 +68,47 @@ def scan_form_widgets(root=None):
     return offenders
 
 
+# Regex-SPELLINGS of the anti-AI oath. Deliberately the regex forms (`ai[- ]?generated`,
+# `\bno ai\b`), not the prose, so a comment that merely discusses the oath is not an offender —
+# only a file that re-spells the PATTERN is.
+_OATH_RESPELL = re.compile(r"ai\[-\s?\]\?generated|\\bno ai\\b|only my own words")
+
+
+def scan_anti_ai_oath(root=None):
+    """Files OUTSIDE sites/_common/scripts/ that re-spell the anti-AI oath pattern instead of
+    calling atsform.is_anti_ai_oath.
+
+    WHY (2026-08-16): `scripts/gen_gh_config.py` kept its own copy, and it had drifted NARROWER
+    than the filler's — no `without the use of ai`, no artificial-intelligence/prohibited clause.
+    That produced the worst possible split: the GATE cleared a posting as fully answerable while
+    the FILLER would have refused the very same field. Twilio's "Candidate AI Responsible Use
+    Policy … reflect my own work and experience" slipped past BOTH copies, and three reqs were
+    driven that the applicant must sign himself. atsform's own docstring claimed the two "can
+    never drift apart"; that only ever held inside atsform. A prose rule did not stop the fork —
+    the same lesson as the react-select scan above — so this makes the fork turn the build red."""
+    root = root or _root()
+    home = os.path.abspath(os.path.join(root, _WIDGET_HOME_REL))
+    offenders = []
+    for p in _iter_py(root):
+        if os.path.abspath(p).startswith(home):
+            continue  # atsform.py is the one legitimate home
+        try:
+            with open(p, encoding="utf-8", errors="replace") as fh:
+                txt = fh.read()
+        except OSError:
+            continue
+        if _OATH_RESPELL.search(txt):
+            offenders.append(f"{os.path.relpath(p, root)}: anti-AI oath regex re-spelled "
+                             "outside sites/_common/scripts/ — call atsform.is_anti_ai_oath "
+                             "instead of keeping a second (inevitably narrower) copy")
+    return offenders
+
+
 def scan_all(root=None):
     """Every divergent-infra scanner, keyed by concern. Extend as new shared engines get a home
     (e.g. tracker dedup → precheck.canon_ids, title screen → check_title)."""
-    return {"form_widgets": scan_form_widgets(root)}
+    return {"form_widgets": scan_form_widgets(root),
+            "anti_ai_oath": scan_anti_ai_oath(root)}
 
 
 def all_offenders(root=None):

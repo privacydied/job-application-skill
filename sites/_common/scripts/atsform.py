@@ -1987,8 +1987,26 @@ _TICK_CB_BY_INDEX = r"""
 # (category, regex). ORDER MATTERS: anti-AI and marketing are matched FIRST so a box that also
 # reads like a generic "consent" can't be mis-ticked. A label matching NO rule is UNKNOWN.
 _CB_RULES = [
+    # ⛔ WIDENED 2026-08-16 — Twilio's oath matched NOTHING here. Its wording is
+    #   "…the guidelines outlined in the Candidate AI Responsible Use Policy. I affirm that all
+    #    the information and materials I submit … will reflect my own work and experience."
+    # No "own words", no "no AI", no "AI-generated", and "AI Responsible Use Policy" is not
+    # "use of ai" — so this rule missed it and `gen_gh_config` cleared the posting as fully
+    # answerable. Only checkbox DEFAULT-DENY (an unmatched label => left_unknown) stopped the
+    # box being ticked, i.e. the safety net held for the wrong reason and reported the field as
+    # a mystery rather than as an oath. "AI use policy" acknowledgements are now common and
+    # rarely use the old phrasings, so match the FAMILY two ways:
+    #   (a) explicit spellings, incl. "responsible use of AI" / "AI … use policy"; and
+    #   (b) the PAIR — the label mentions AI *and* asks the applicant to affirm the work is
+    #       their own. The pair branch is zero-width (two lookaheads scanning the whole label),
+    #       so re.S is set on the compile: labels arrive with newlines in them, and the flag
+    #       must be a COMPILE flag, not an inline `(?s)` mid-pattern — Python 3.8 only warns
+    #       about a non-leading inline flag, but 3.11+ raises re.error and would break import.
     ("anti_ai", re.compile(r"only my own words|\bno ai\b|without (the use of )?ai|ai[- ]?generated|"
-                           r"use of ai|artificial intelligence.{0,40}(disqualif|prohibit|not permitted|not allowed)", re.I)),
+                           r"use of ai|responsible use of ai|\bai\b[^.]{0,40}use polic|"
+                           r"artificial intelligence.{0,40}(disqualif|prohibit|not permitted|not allowed)|"
+                           r"(?=.*(?:\bai\b|\ba\.i\.\b|artificial intelligence))"
+                           r"(?=.*\bmy own (?:work|words|effort|writing))", re.I | re.S)),
     ("marketing", re.compile(r"marketing|newsletter|promotional|keep me (updated|informed|posted)|"
                              r"future (roles|jobs|opportunities|vacancies)|talent (community|network|pool)|"
                              r"subscribe|contact me about (other|future)", re.I)),
@@ -2032,6 +2050,15 @@ def _is_anti_ai_oath(label):
     vs radio). Pure + browser-free so it is unit-testable."""
     rx = next((r for c, r in _CB_RULES if c == "anti_ai"), None)
     return bool(rx and rx.search(str(label or "")))
+
+
+# PUBLIC alias. `scripts/gen_gh_config.py` kept its OWN narrower copy of the anti-AI regex
+# (2026-08-16) — missing `without the use of ai` and the artificial-intelligence/prohibited
+# clause — so the GATE cleared oaths the FILLER would have refused. The docstring above claimed
+# the two "can never drift apart"; that only ever held INSIDE this module. Every other module
+# must import this function, never re-spell the pattern. Guard: tests/test_core.py
+# ::TestNoDivergentAntiAiOath turns red if a second anti-AI regex literal appears anywhere else.
+is_anti_ai_oath = _is_anti_ai_oath
 
 
 # Affirmative answers to an oath-shaped question. "Acknowledge/Confirm" is Canonical's literal

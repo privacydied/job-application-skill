@@ -47,7 +47,7 @@ sys.path.insert(0, os.path.join(ROOT, "sites", "linkedin", "scripts"))
 import cfx            # noqa: E402
 import pipeline       # noqa: E402  (F.2 importable funnel)
 import ratelimit      # noqa: E402  (LinkedIn daily-limit: detect/save/switch boards)
-from precheck import (load_tracker, canon_ids, _norm, screen_location,  # noqa: E402
+from precheck import (load_tracker, canon_ids, _norm, screen_location, drive_block,  # noqa: E402
                       excluded_source)                    # (dedup + location + banned boards)
 
 QUEUE = os.path.join(ROOT, "queue.jsonl")
@@ -226,23 +226,14 @@ def _location_block(row):
     Each one burned the single serial apply tab on a form that could never be honestly
     submitted. The queue row ALREADY carries `location`, and precheck.screen_location is the
     shipped screen for it — the lane just never asked. Only a hard `drop` blocks; `review`
-    (ambiguous/generic-UK) still drives, since the JD is authoritative there."""
-    verdict, reason = screen_location(row.get("location") or "")
-    if verdict == "drop":
-        return reason
-    # A remote role restricted to another country is unreachable for the same reason an
-    # onsite one abroad is — there is no truthful right-to-work answer. screen_location keeps
-    # it (sourcing may still want a human to read the JD); the apply lane, which has no model
-    # and pays a whole serial-tab drive per attempt, refuses. See precheck's note: these were
-    # the rows that produced drain23's most frequent blocker, "What U.S. State do you reside in?"
-    if reason.startswith("remote — region-restricted"):
-        return reason
-    # screen_location returns `review` for abroad-onsite too ("JD decides"). Inside the
-    # apply lane there is no model to decide, and driving is the expensive branch, so treat
-    # an explicit abroad reading as a block rather than a maybe.
-    if verdict == "review" and reason.startswith("abroad"):
-        return reason
-    return None
+    (ambiguous/generic-UK) still drives, since the JD is authoritative there.
+
+    ⛔ The screen itself now lives in `precheck.drive_block` so that the OTHER four submitting
+    drivers get it too — this lane was the only one that had it, and a retry pool that handed
+    configs straight to gh_apply.py walked past it and drove a Remote-India req (2026-08-16).
+    Keep this a thin delegation; do not re-implement the rules here."""
+    return drive_block(location=row.get("location"), url=row.get("url"),
+                       company=row.get("company"), title=row.get("title"))
 
 
 def _drive_hard_board(row, ats, resume, dry_run):
@@ -509,7 +500,7 @@ def main():
         # rc=10 (already applied) joins 0/5 as a NON-failure: it must not be read as evidence
         # of a rate limit, or a run that merely re-encountered known postings would trip the
         # LinkedIn cooldown and defer the rest of the queue for nothing.
-        if ats not in HARD_BOARD_ATS and (rc == 8 or (rc not in (0, 5, 10) and ratelimit.detect(cfx))):
+        if ats not in HARD_BOARD_ATS and (rc == 8 or (rc not in (0, 5, 10, 11) and ratelimit.detect(cfx))):
             until = ratelimit.trip()
             ratelimit.defer(r)
             rate_limited = True
@@ -526,6 +517,10 @@ def main():
             # row. The headline number is the thing this whole run is judged on, so a tally
             # that counts non-events is worse than no tally.
             tally["skipped_duplicate"] = tally.get("skipped_duplicate", 0) + 1
+        elif rc == 11:
+            # Driver refused on eligibility (off-location / excluded source). Not a failure and
+            # not a rate-limit signal — the posting was never reachable for this applicant.
+            tally["off_location"] = tally.get("off_location", 0) + 1
         elif rc == 5:
             tally["dry_ok"] += 1
         elif rc == 7:

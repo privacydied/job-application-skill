@@ -212,6 +212,15 @@ def apply(config_path, do_submit=False):
     company, role = cfg.get("company") or "Unknown", cfg.get("role") or ""
     url = cfg.get("url") or ""
 
+    # ⛔ SHARED ELIGIBILITY GATE (2026-08-16) — see precheck.drive_block. This driver had NO
+    # location screen: it lived only in apply_queue, so any config driven directly walked past
+    # it. Cheap and pre-navigation; refuses an off-location req or an excluded source.
+    _blk = precheck.drive_block(location=cfg.get("location"), url=url,
+                                company=company, title=role)
+    if _blk:
+        print(f"OFF_LOCATION {company} | {role} — {_blk}")
+        return 11
+
     # Apply-time dedup guard, same contract as ashby.apply: this runs on a page reached
     # outside the sourcing precheck, so re-check the live tracker before spending a submit.
     if not cfg.get("force"):

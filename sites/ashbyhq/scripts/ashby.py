@@ -492,6 +492,14 @@ def apply(config_path: str, do_submit: bool = False) -> int:
             cur_url = cfx.current_url()
         except Exception:  # noqa: BLE001
             cur_url = cfg.get("url", "")
+        # ⛔ SHARED ELIGIBILITY GATE (2026-08-16) — see precheck.drive_block. This driver had NO
+        # location screen: it lived only in apply_queue, so any config driven directly walked past
+        # it. Cheap and pre-navigation; refuses an off-location req or an excluded source.
+        _blk = precheck.drive_block(location=cfg.get("location"), url=cfg.get("url"),
+                                    company=cfg.get("company"), title=cfg.get("role"))
+        if _blk:
+            print(f"OFF_LOCATION {cfg.get('company')} | {cfg.get('role')} — {_blk}")
+            return 11
         hit = precheck.already_applied(url=cur_url or cfg.get("url"),
                                        company=cfg.get("company"), role=cfg.get("role"))
         if hit and precheck.is_applied(hit[0]):
