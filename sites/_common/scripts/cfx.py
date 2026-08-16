@@ -1297,8 +1297,89 @@ def _get_bytes(path: str, timeout: int = 30) -> bytes:
         raise CfxError(f"{path} -> {getattr(e, 'reason', e)}") from None
 
 
+def _region_box(selector: str, tab: str = None):
+    """Absolute (document-space) top/height of `selector`, or None. Used to bound a stitch to
+    the APPLICATION FORM instead of the whole document: a Greenhouse job page is ~35,000px of
+    job-board listing wrapped around a ~4,000px form, so stitching the document captures
+    mostly other people's job adverts and truncates before the answers."""
+    try:
+        r = evaluate("(() => { const e=document.querySelector(%s); if(!e) return null;"
+                     " const b=e.getBoundingClientRect();"
+                     " return [b.top + window.scrollY, b.height]; })()" % json.dumps(selector),
+                     tab=tab)
+        if isinstance(r, (list, tuple)) and len(r) == 2 and r[1]:
+            return float(r[0]), float(r[1])
+    except CfxError:
+        pass
+    return None
+
+
+def _stitch_page(outfile: str, tab: str = None, max_frames: int = 12, region: tuple = None):
+    """Capture a long page as ONE image by scrolling a viewport at a time and stitching.
+
+    WHY (2026-08-16). `?fullPage=true` 500s on exactly the documents that need it — real
+    application forms — so proof artifacts were silently truncated at the fold: the Nebius
+    review.png stopped three fields above "Are you currently authorized to work … without
+    sponsorship?", the answer most worth evidencing. Scrolling is read-only, so doing it to
+    record evidence is safe even mid-application. Returns the path, or None to let the caller
+    fall back to a plain viewport shot (never raises: losing the proof is worse than a short
+    one, but a crash at proof time is worse still).
+
+    Capped at `max_frames` viewports; the scroll position is restored afterwards.
+    """
+    try:
+        from PIL import Image  # noqa: PLC0415
+    except ImportError:
+        return None
+    try:
+        import io  # noqa: PLC0415
+        m = evaluate("(() => [document.documentElement.scrollHeight, window.innerHeight,"
+                     " window.scrollY, window.devicePixelRatio||1])()", tab=tab)
+        if not (isinstance(m, (list, tuple)) and len(m) == 4):
+            return None
+        total, vh, orig_y, dpr = float(m[0]), float(m[1]), float(m[2]), float(m[3]) or 1.0
+        start = 0.0
+        if region:
+            start, rheight = region
+            start = max(0.0, start - 8)
+            total = min(total, start + rheight + 16)
+        if vh <= 0 or total - start <= vh + 4:
+            return None                      # fits in one viewport — nothing to stitch
+        frames, y = [], start
+        while y < total and len(frames) < max_frames:
+            evaluate(f"(() => {{window.scrollTo(0, {y}); return 1}})()", tab=tab)
+            time.sleep(0.25)                 # let sticky headers/lazy content settle
+            real_y = evaluate("(() => window.scrollY)()", tab=tab)
+            img = Image.open(io.BytesIO(
+                _get_bytes(f"/tabs/{_tab(tab)}/screenshot?userId={_uid()}")))
+            frames.append((float(real_y), img))
+            if float(real_y) + vh >= total - 1:
+                break                        # hit the bottom (page may clamp the scroll)
+            y += vh
+        evaluate(f"(() => {{window.scrollTo(0, {orig_y}); return 1}})()", tab=tab)
+        if not frames:
+            return None
+        # Compose by true scroll offset so a clamped final frame overlaps instead of
+        # duplicating. Offsets are relative to `start` so a region stitch has no dead band.
+        base = frames[0][0]
+        width = max(im.width for _, im in frames)
+        height = int((min(total, frames[-1][0] + vh) - base) * dpr)
+        canvas = Image.new("RGB", (width, max(height, frames[0][1].height)), "white")
+        for sy, im in frames:
+            canvas.paste(im, (0, int((sy - base) * dpr)))
+        canvas.save(outfile)
+        return outfile
+    except Exception:  # noqa: BLE001 — evidence capture must never abort the run
+        try:
+            evaluate("(() => {window.scrollTo(0, 0); return 1})()", tab=tab)
+        except Exception:  # noqa: BLE001
+            pass
+        return None
+
+
 def shot(outfile: str = "/tmp/cfx-shot.png", selector: str = None,
-         clip: tuple = None, pad: int = 14, tab: str = None) -> str:
+         clip: tuple = None, pad: int = 14, tab: str = None,
+         full_page: bool = False, full_page_region: str = "form") -> str:
     """Screenshot the tab to `outfile`. With `selector` OR `clip=(x,y,w,h)` (CSS px),
     crop to that region CLIENT-SIDE (Pillow) — the pre-submit vision gate only needs
     the email/radio/CAPTCHA area, and a region crop is ~80% fewer vision tokens than a
@@ -1306,8 +1387,40 @@ def shot(outfile: str = "/tmp/cfx-shot.png", selector: str = None,
     is resolved to a box via getBoundingClientRect × devicePixelRatio. No server
     change: we fetch the full PNG and crop locally; if Pillow is missing or the region
     can't be resolved, the full screenshot is written and a note returned. Returns the
-    path written (with a ' (full: <reason>)' suffix if the crop was skipped)."""
-    png = _get_bytes(f"/tabs/{_tab(tab)}/screenshot?userId={_uid()}")
+    path written (with a ' (full: <reason>)' suffix if the crop was skipped).
+
+    `full_page=True` captures the WHOLE scrollable page instead of the 1280x720 viewport.
+    ⛔ USE IT FOR PROOF ARTIFACTS (2026-08-16). review.png is the pre-submit evidence of what
+    was actually filled, but it was a viewport capture — so on any form longer than one screen
+    it silently proved only the top of the form. Checked on the Nebius submission: the shot
+    ends three fields above "Are you currently authorized to work … without sponsorship?",
+    i.e. the artifact omitted precisely the answer most worth evidencing (and the one a bank
+    ordering bug had been getting WRONG until this morning). A proof that stops at the fold is
+    not a proof. Ignored when `selector`/`clip` is given: getBoundingClientRect is
+    viewport-relative, so those coordinates would crop the wrong region of a full-page image.
+
+    ⛔ AND IT MUST FALL BACK (2026-08-16). The server's fullPage support is NOT reliable on
+    the pages that need it: `example.com` renders fine (1680x989) but a real Greenhouse
+    application form returns **HTTP 500**. A proof capture that raises is far worse than a
+    short one — it would abort the run at the moment of recording evidence, right after the
+    submit. So full_page is best-effort: try it, fall back to the viewport shot."""
+    want_full = full_page and not selector and not clip
+    png = None
+    if want_full:
+        try:
+            png = _get_bytes(f"/tabs/{_tab(tab)}/screenshot?userId={_uid()}&fullPage=true")
+        except CfxError:
+            # Server can't full-page this document (long application forms 500 reliably).
+            # Stitch it ourselves rather than give up on the evidence — see _stitch_page.
+            # Bound the stitch to the FORM when there is one: a Greenhouse job page is ~35k px
+            # of job-board listing around a ~4k px form, so an unbounded stitch spends its
+            # frame budget on other adverts and still stops short of the answers.
+            box = _region_box(full_page_region, tab) if full_page_region else None
+            out = _stitch_page(outfile, tab, region=box)
+            if out:
+                return out
+    if png is None:
+        png = _get_bytes(f"/tabs/{_tab(tab)}/screenshot?userId={_uid()}")
     box = clip
     if box is None and selector:
         try:

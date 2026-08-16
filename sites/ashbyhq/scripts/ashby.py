@@ -709,7 +709,7 @@ def _capture_and_log(cfg):
     os.makedirs(appdir, exist_ok=True)
     proof = os.path.join(appdir, "confirmation.png")
     try:
-        cfx.shot(proof)
+        cfx.shot(proof, full_page=True)
     except Exception as e:  # noqa: BLE001
         print(f"  proof screenshot failed ({str(e)[:60]}) — logging Applied? instead")
     ok = os.path.isfile(proof) and os.path.getsize(proof) > 0

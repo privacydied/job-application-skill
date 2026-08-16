@@ -129,7 +129,7 @@ def _capture_reed_proof(row):
     os.makedirs(appdir, exist_ok=True)
     png = os.path.join(appdir, "confirmation.png")
     try:
-        cfx.shot(png)
+        cfx.shot(png, full_page=True)
         if os.path.isfile(png) and os.path.getsize(png) > 1024:
             return png
     except Exception as e:  # noqa: BLE001

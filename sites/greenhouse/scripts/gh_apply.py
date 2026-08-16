@@ -520,7 +520,7 @@ def main():
         return 0
 
     try:
-        cfx.shot(os.path.join(appdir, "review.png"))
+        cfx.shot(os.path.join(appdir, "review.png"), full_page=True)
     except Exception as e:  # noqa: BLE001
         print(f"SHOT_WARN {e}")
 
@@ -608,7 +608,7 @@ def main():
         proof_png = os.path.join(appdir, "confirmation.png")
         proof_txt = os.path.join(appdir, "confirmation.txt")
         try:
-            cfx.shot(proof_png)
+            cfx.shot(proof_png, full_page=True)
         except Exception:  # noqa: BLE001
             pass
         with open(proof_txt, "w") as f:

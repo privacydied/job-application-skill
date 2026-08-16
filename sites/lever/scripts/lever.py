@@ -369,7 +369,7 @@ def apply(config_path, do_submit=False):
     os.makedirs(appdir, exist_ok=True)
     proof = os.path.join(appdir, "confirmation.png")
     try:
-        cfx.shot(proof)
+        cfx.shot(proof, full_page=True)
     except Exception:  # noqa: BLE001
         proof = None
     _log(company, role, "Lever", url, "Applied", proof=proof)
