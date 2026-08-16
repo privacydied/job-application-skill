@@ -5,6 +5,5 @@
   "url": "https://job-boards.greenhouse.io/gofundme/jobs/8089835",
   "source": "Greenhouse",
   "defaults": true,
-  "fill": {},
-  "no_submit": true
+  "fill": {}
 }
