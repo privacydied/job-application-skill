@@ -3810,6 +3810,52 @@ class TestAuditedWidgetInvariants(unittest.TestCase):
                       "refuse to sign an anti-AI oath")
 
 
+class TestScreenerPolarityGuard(unittest.TestCase):
+    """The bank is substring-matched and was completely polarity-blind, so an INVERTED
+    phrasing of a known question received the known answer — the opposite of the truth.
+
+    Caught in a SUBMITTED application: Mozilla asked "would you be able to fill the position
+    … WITHOUT relocation assistance", which matched `relocation assistance -> No` and stated
+    he could not do a Europe role from London unaided. Probing found the same trap on the most
+    consequential question in the bank: "are you able to work WITHOUT sponsorship?" -> No.
+
+    The discriminator is where the negation sits relative to the match, so both directions are
+    pinned here — over-refusing would block forms the bank answers correctly today."""
+
+    def setUp(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(_HERE), "sites", "_common", "scripts"))
+        import screener
+        self.screener = screener
+
+    def _a(self, q):
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            return (self.screener.lookup(q) or {}).get("answer")
+
+    def test_negated_phrasing_is_refused(self):
+        # cue sits directly before the matched token -> the banked answer would invert
+        for q in ("Are you able to work without sponsorship?",
+                  "Can you work in the UK without requiring sponsorship?",
+                  "Would you be able to fill the position without relocation assistance?"):
+            self.assertIsNone(self._a(q), f"{q!r} must not receive the un-negated answer")
+
+    def test_negation_qualifying_a_later_word_still_answers(self):
+        # match begins at "authorised to work"/"right to work", so the later "without" is not
+        # in the searched window at all — these are the questions the bank gets RIGHT.
+        for q, exp in (("Are you legally authorised to work in the UK without requiring "
+                        "sponsorship?", "Yes"),
+                       ("Do you have the right to work in the UK without sponsorship?", "Yes"),
+                       ("Do you require visa sponsorship now or in the future?", "No"),
+                       ("Are you currently employed by Monzo?", "No"),
+                       ("Do you require relocation assistance?", "No")):
+            self.assertEqual(self._a(q), exp, q)
+
+    def test_guard_only_applies_to_yes_no_answers(self):
+        # A free-text/numeric answer is not made false by a nearby negation, and refusing
+        # those would block forms for nothing.
+        self.assertIsNotNone(self._a("Where are you based, not counting remote work?"))
+
+
 class TestDuplicateIsNotAnApplication(unittest.TestCase):
     """Every driver's apply-time dedup guard returned rc=0 — the SUCCESS code — for a posting
     it deliberately did NOT submit, so apply_queue tallied it under `applied`. drain23

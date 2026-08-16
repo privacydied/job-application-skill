@@ -185,6 +185,48 @@ def _bounded(pl):
     return re.compile(r"(?<![a-z0-9])" + re.escape(pl))
 
 
+# ⛔ POLARITY GUARD (2026-08-16 — caught in a SUBMITTED application). The bank is substring
+# matched and completely polarity-blind, so an INVERTED phrasing of a known question got the
+# known answer, which is then the opposite of the truth. Live example, submitted to Mozilla
+# before this existed: "would you be able to fill the position … WITHOUT relocation assistance"
+# matched the `relocation assistance -> No` row, stating he could NOT do a Europe role from
+# London without relocation support. Probing the rest of the bank found the same trap on the
+# most consequential question there is — "are you able to work WITHOUT sponsorship?" -> No.
+#
+# The discriminator is WHERE the negation sits relative to the match:
+#   "…able to work [without] sponsorship"          -> cue directly before the matched token,
+#                                                     the answer inverts  -> REFUSE
+#   "…[authorised to work] without sponsorship"    -> match is the earlier phrase; the cue
+#                                                     qualifies a later word -> answer stands
+# So: refuse only when a negation cue immediately precedes the match. Refusing leaves the
+# field unanswered, which blocks the submit and asks for a human — the same trade the
+# closed-set radio guard already makes, and the right one for a yes/no eligibility claim.
+# Up to three short intervening words, so "without REQUIRING sponsorship" and "without ANY NEED
+# for sponsorship" are caught as readily as "without sponsorship". This stays safe for the
+# other side of the discriminator because the test is applied to the text before the MATCH
+# START: in "authorised to work without sponsorship" the match begins at "authorised", so the
+# later "without" is never in the searched window at all.
+_NEGATION_CUE = re.compile(r"(?:\bwithout\b|\bnot\b|\bno longer\b|\bunable to\b|"
+                           r"\bunwilling to\b|\bother than\b|\bexcept\b|\bexcluding\b)"
+                           r"(?:\s+[a-z]{1,12}){0,3}[\s,]*$")
+
+
+def _polarity_inverted(pattern, q):
+    """True when a negation cue sits immediately before where `pattern` matched in `q`."""
+    p = pattern.strip()
+    try:
+        if len(p) >= 2 and p.startswith("/") and p.endswith("/"):
+            rx = _compiled(p[1:-1])
+            m = rx.search(q) if rx else None
+        else:
+            m = _bounded(p.lower()).search(q)
+    except Exception:  # noqa: BLE001 — a guard must never break a lookup
+        return False
+    if not m:
+        return False
+    return bool(_NEGATION_CUE.search(q[:m.start()]))
+
+
 def _matches(pattern, q):
     p = pattern.strip()
     if len(p) >= 2 and p.startswith("/") and p.endswith("/"):
@@ -204,6 +246,15 @@ def lookup(question):
         return None
     for r in _rows():
         if _matches(r["pattern"], q):
+            # Only YES/NO claims invert dangerously; a free-text or numeric answer ("London",
+            # "6", "Immediately") is not made false by a nearby negation, and refusing those
+            # would block forms for no gain.
+            if (r["answer"] or "").strip().lower() in ("yes", "no") \
+                    and _polarity_inverted(r["pattern"], q):
+                print(f"screener: REFUSING {r['pattern']!r} -> {r['answer']!r} for a NEGATED "
+                      f"phrasing ({q[:60]!r}) — answering would state the opposite of the "
+                      f"truth; leaving it for a human.", file=sys.stderr)
+                return None
             return {"answer": r["answer"], "kind": r["kind"],
                     "source": r["source"], "pattern": r["pattern"]}
     return None
