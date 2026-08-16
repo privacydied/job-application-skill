@@ -69,6 +69,15 @@ const GAP_HTML = `
   <div><label for="a">Why do you want to work here?</label><input type="text" id="a"></div>
   <div><label for="b">Describe a project you are proud of</label><input type="text" id="b"></div>`;
 
+
+const COMBO_INPUT_HTML = `
+  <div><label for="essay">Why do you want to work here?</label>
+       <textarea id="essay"></textarea></div>
+  <div class="select__control">
+    <label for="rtw">Are you legally authorized to work in the country?</label>
+    <input type="text" id="rtw" role="combobox" aria-autocomplete="list">
+  </div>`;
+
 (async () => {
   const browser = await chromium.connect('ws://localhost:3006/', { timeout: 15000 });
   const page = await browser.newPage();
@@ -117,6 +126,19 @@ const GAP_HTML = `
       .map(e => e.id + '=' + e.getAttribute('data-ats-gap')));
   t('_UNANSWERED clears stale gap tags (no duplicate index 0)',
     tags.length === 1 && tags[0] === 'b=0', `tags=${JSON.stringify(tags)}`);
+
+
+  // 5. A react-select input is <input type=text role=combobox>, so it used to appear in
+  //    `texts` as well as `combos`. Once the text branch started honouring the bank row's
+  //    `kind`, that made it REFUSE every dropdown ("kind='radio', not free text") and leave
+  //    required fields empty — a regression introduced by the kind guard itself.
+  await page.setContent(COMBO_INPUT_HTML);
+  const un = JSON.parse(await page.evaluate(js.UNANSWERED));
+  const textsHaveCombo = un.texts.some(t => /authorized to work/i.test(t));
+  const textsHaveEssay = un.texts.some(t => /want to work here/i.test(t));
+  t('_UNANSWERED keeps combobox inputs out of texts (essay still listed)',
+    textsHaveCombo === false && textsHaveEssay === true,
+    `texts=${JSON.stringify(un.texts)}`);
 
   await browser.close();
 

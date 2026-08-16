@@ -2079,6 +2079,18 @@ _UNANSWERED = r"""
   for (const i of document.querySelectorAll(
       'input[type=text],input[type=email],input[type=tel],input[type=number],input[type=url],textarea')) {
     if (i.name === 'g-recaptcha-response' || i.value) continue;
+    // ⛔ A COMBOBOX'S INPUT IS NOT A TEXT FIELD (2026-08-16). react-select renders its
+    // control as <input type="text" role="combobox">, so every dropdown on the form also
+    // showed up in `texts`. That was harmless while the text branch just tried a fill, but
+    // once the branch started honouring the bank row's `kind` it began REFUSING them —
+    // "banked answer is kind='radio', not free text" — on Right to Work, Source of Right to
+    // Work and Self-Identification of Gender, leaving required fields empty and blocking the
+    // submit (seen live on Twilio). The `combos` list below already owns these controls and
+    // routes them through combobox_pick, which is the primitive that can actually commit a
+    // selection. Claim them there, not here.
+    if (i.getAttribute('role') === 'combobox' ||
+        i.getAttribute('aria-autocomplete') === 'list' ||
+        i.closest('[class*="select__control"],[class*="-control"]')) continue;
     let lbl = clean(i.labels && i.labels[0] ? i.labels[0].innerText : '');
     // ⛔ CAP THE ANCESTOR BLOB (2026-08-16). Uncapped, the first ancestor with ANY text is
     // often a section wrapper holding SEVERAL questions, so `lbl` became a blob containing a
