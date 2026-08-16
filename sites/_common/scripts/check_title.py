@@ -188,7 +188,13 @@ def _parse_target_roles_cached(path, mtime):
         # title)", "(any of the above AT music companies)") that isn't the tier marker.
         phrase_part = re.sub(r"\([^)]*\)", "", phrase_part)
         for phrase in phrase_part.split("/"):
-            phrase = phrase.strip(" -–:").lower()
+            # ⛔ COLLAPSE WHITESPACE AFTER THE STRIP (2026-08-16). Removing a MID-phrase
+            # parenthetical leaves a double space behind: "End User Computing (EUC) Technician"
+            # became "end user computing  technician", which can never match the real title
+            # "End User Computing Technician". That silently deleted a declared Tier-A role
+            # (target-roles.md §13, direct Comfix experience) from the eligibility wordlist —
+            # a filter narrowing nobody would see, because the phrase LOOKS present in the file.
+            phrase = re.sub(r"\s+", " ", phrase).strip(" -–:").lower()
             if phrase and len(phrase.split()) >= 2 and phrase not in _DENYLIST:
                 entries.append((phrase, tier))
     return tuple(entries)

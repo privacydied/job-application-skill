@@ -3602,5 +3602,32 @@ class TestRemoteSynonymsAndApplyLaneLocationGate(unittest.TestCase):
         self.assertIn("_location_block", inspect.getsource(apply_queue.main))
 
 
+class TestTargetRoleParenthetical(unittest.TestCase):
+    """⛔ A MID-phrase parenthetical must not leave a double space (2026-08-16).
+
+    target-roles.md §13 declares "Desktop Support / Deskside Support / End User Computing
+    (EUC) Technician (A)" — a Tier-A role backed by direct Comfix experience. The parser
+    stripped "(EUC)" but did not collapse the whitespace, producing the phrase
+    "end user computing  technician" (two spaces), which can NEVER match the real title
+    "End User Computing Technician". The role was silently absent from the eligibility
+    wordlist while looking perfectly present in the file — a funnel narrowing with no
+    symptom. The same damage hit "CX (Customer Experience) Analyst" and
+    "CRO (Conversion Rate Optimisation) Specialist"."""
+
+    def test_no_parsed_phrase_has_doubled_whitespace(self):
+        import check_title
+        for phrase, _tier in check_title.parse_target_roles():
+            self.assertNotIn("  ", phrase,
+                             f"{phrase!r} carries collapsed-parenthetical damage")
+            self.assertEqual(phrase, phrase.strip())
+
+    def test_declared_tier_a_roles_are_eligible(self):
+        import check_title
+        for title in ("End User Computing Technician", "CX Analyst", "CRO Specialist"):
+            v = check_title.check_title(title)
+            self.assertTrue(v.get("eligible"),
+                            f"{title!r} is declared in target-roles.md but was rejected")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
