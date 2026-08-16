@@ -682,6 +682,43 @@ def _combo_clear_marker():
         pass
 
 
+
+def _combo_click_option(option):
+    """Open the marked (input-less) control and click the matching [role=option].
+
+    Returns the clicked option's text, or None. Exact match first, then whole-word — never a
+    bare substring, because "male" is inside "Female" (the defect that put a false gender on a
+    live diversity form earlier today)."""
+    try:
+        cfx.click_selector('[data-ats-target]', timeout=8)
+    except Exception:  # noqa: BLE001
+        cfx.evaluate("(()=>{const t=document.querySelector('[data-ats-target]');"
+                     "if(t)t.click();return 1})()")
+    time.sleep(1.6)
+    hit = cfx.evaluate("""(()=>{const want=%s.toLowerCase();
+      const norm=x=>(x.innerText||'').replace(/\\s+/g,' ').trim().toLowerCase();
+      const os=[...document.querySelectorAll('[role=option]')];
+      if(!os.length) return '';
+      let o=os.find(x=>norm(x)===want);
+      if(!o){const esc=want.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&');
+             const re=new RegExp('(^|[^a-z0-9])'+esc+'([^a-z0-9]|$)');
+             o=os.find(x=>re.test(norm(x)));}
+      if(!o) return '';
+      o.setAttribute('data-ats-opt','1'); o.scrollIntoView({block:'center'});
+      return (o.innerText||'').trim().slice(0,40);})()""" % _js(str(option)))
+    if not hit:
+        return None
+    try:
+        cfx.click_selector('[data-ats-opt]', timeout=8)
+    except Exception:  # noqa: BLE001
+        cfx.evaluate("(()=>{const o=document.querySelector('[data-ats-opt]');"
+                     "if(o)o.click();return 1})()")
+    time.sleep(0.7)
+    cfx.evaluate("(()=>{document.querySelectorAll('[data-ats-opt]')"
+                 ".forEach(e=>e.removeAttribute('data-ats-opt'));return 1})()")
+    return hit
+
+
 def _combo_open_and_pick(option, multi=False, strict=False):
     """Open the react-select marked [data-ats-target] via the interaction LADDER, read its
     options from several fallbacks, and commit the match. THE engine every combobox caller
@@ -809,6 +846,18 @@ def _combo_open_and_pick(option, multi=False, strict=False):
             _combo_clear_marker()
             print(f"OK=freetext:{str(option)[:40]} (async suggestion list empty — committed typed value)")
             return 0
+        if ft == "NO_INPUT":
+            # ⛔ ALSO REACH THE OPTION-CLICK PATH FROM HERE (2026-08-16). The rung above only
+            # fires when the option list came back EMPTY. An input-less dropdown whose options
+            # ARE readable takes a different route: _COMBO_CLICK finds no match, the free-text
+            # commit then reports NO_INPUT because the marked control owns no <input>, and the
+            # pick fails — even though clicking the option would have worked. Same widget
+            # shape, different entry point. Retry it here rather than duplicating the rung.
+            again = _combo_click_option(option)
+            if again:
+                _combo_clear_marker()
+                print(f"OK=option-click:{again}")
+                return 0
         if ft == "NO_TARGET":
             # The resolver's marker is gone — we do NOT know which field this is. Say so;
             # never fall back to "the first combobox on the page" (see _COMBO_FREETEXT_COMMIT).
