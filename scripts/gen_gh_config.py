@@ -209,6 +209,31 @@ def build(slug, jid, eu=False, out=None):
             oath = True
             continue
         if NEEDS_HUMAN.search(label):
+            # ⛔ A YEARS QUESTION IS NOT AUTOMATICALLY UNANSWERABLE (2026-08-16). This blanket
+            # ban contradicts the applicant profile, which ships a "Years-of-experience quick
+            # reference (for 'how many years of X?' screeners)" and says plainly: "Give these
+            # when a form demands a number; they're defensible from the career history." What
+            # the profile forbids is the opposite case — "Fabricate years-of-experience
+            # numbers BEYOND the quick-reference table". The bank's specific years rows are
+            # derived from that table; its `/years.*(of )?experience/ -> 5` catch-all is not,
+            # and answering an arbitrary technology from it WOULD be fabrication.
+            # So: answer from a SPECIFIC banked row, refuse when only the generic default
+            # applies. Without this the bank's years rows could never be reached at all —
+            # "How many years of software engineering experience do you have?" stayed a
+            # blocker through three drains after the correct answer was banked.
+            _years_ok = None
+            if required and re.search(r"how many years|years of experience", label, re.I):
+                try:
+                    sys.path.insert(0, os.path.join(ROOT, "sites", "_common", "scripts"))
+                    import screener  # noqa: PLC0415
+                    _hit = screener.lookup(label)
+                    if _hit and "generic default" not in (_hit.get("source") or ""):
+                        _years_ok = _hit["answer"]
+                except Exception:  # noqa: BLE001
+                    _years_ok = None
+            if _years_ok is not None:
+                cfg["fill"][label[:60]] = _years_ok
+                continue
             if required:
                 human.append(label[:90])
             continue
@@ -254,6 +279,25 @@ def build(slug, jid, eu=False, out=None):
                 # produced. Only fires when the question IS consent-shaped and the intended
                 # answer is affirmative, so it can never turn a "No" into agreement.
                 chosen = pick_option(values, "__CONSENT__")
+            if not chosen and bank_answer:
+                # ⛔ THE GATE MUST KNOW WHAT THE FILLER KNOWS (2026-08-16). atsform holds
+                # _OPTION_SYNONYMS — exact synonyms of the SAME claim in different vocabularies
+                # ("Native or bilingual" == "C2: Proficient", "Man" == "Male") — and
+                # combobox_pick retries through it. pick_option did not, so this PRE-FLIGHT
+                # gate declared a question unanswerable that the filler could in fact answer,
+                # and _gh_config_from_api then refused to drive the posting at all. The bank
+                # improvement never got a chance to help: the gate is strictly more
+                # conservative than the thing it gates. Live on Parloa's English-proficiency
+                # question, still listed as a blocker after the synonym retry shipped.
+                try:
+                    sys.path.insert(0, os.path.join(ROOT, "sites", "_common", "scripts"))
+                    from atsform import _OPTION_SYNONYMS  # noqa: PLC0415
+                    for alt in _OPTION_SYNONYMS.get(str(bank_answer).strip().lower(), []):
+                        chosen = pick_option(values, alt)
+                        if chosen:
+                            break
+                except Exception:  # noqa: BLE001 — synonyms are an optimisation
+                    pass
             if not chosen and bank_answer and bank_answer != answer:
                 # TRUTHS matched but its answer has the wrong SHAPE for this option list.
                 # Live: "Please select your right to work status" hit the generic

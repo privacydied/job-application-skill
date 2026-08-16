@@ -4174,5 +4174,43 @@ class TestApplyQueueLaneIntegrity(unittest.TestCase):
                       "application class SKILL.md forbids")
 
 
+class TestYearsGateFollowsTheProfile(unittest.TestCase):
+    """The profile ships a "Years-of-experience quick reference (for 'how many years of X?'
+    screeners)" and says "Give these when a form demands a number". What it forbids is
+    numbers BEYOND that table. gen_gh_config's NEEDS_HUMAN banned every years question
+    outright, so the bank's profile-derived rows could never be reached — "How many years of
+    software engineering experience?" stayed a blocker through three drains after the correct
+    answer was banked. The split must be specific-row vs generic-catch-all, not all-or-nothing."""
+
+    def setUp(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(_HERE), "sites", "_common", "scripts"))
+
+    def _hit(self, q):
+        import screener
+        return screener.lookup(q) or {}
+
+    def test_profile_backed_years_are_answerable(self):
+        for q in ("How many years of Figma experience?",
+                  "How many years of accessibility experience?",
+                  "How many years of software engineering experience do you have?"):
+            h = self._hit(q)
+            self.assertTrue(h, q)
+            self.assertNotIn("generic default", h.get("source", ""),
+                             f"{q} should resolve to a SPECIFIC profile-backed row")
+
+    def test_unknown_technology_still_refuses(self):
+        # Only the generic catch-all matches, and answering an arbitrary technology from it
+        # would be exactly the fabrication the profile forbids.
+        h = self._hit("How many years of Kubernetes experience do you have?")
+        self.assertIn("generic default", h.get("source", ""))
+
+    def test_gate_consults_the_bank(self):
+        with open(os.path.join(os.path.dirname(_HERE), "scripts", "gen_gh_config.py"),
+                  encoding="utf-8") as f:
+            src = f.read()
+        self.assertIn("generic default", src,
+                      "the years gate must distinguish a profile-backed row from the catch-all")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
