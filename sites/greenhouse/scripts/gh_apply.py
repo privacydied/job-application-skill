@@ -216,16 +216,26 @@ def _upload_and_verify(target, filename):
         "})()")
     if not sel:
         raise RuntimeError(f"no file input for {target!r}")
-    cfx.post(f"/tabs/{cfx._tab()}/upload",
-             {"userId": cfx._uid(), "selector": sel, "path": filename})
     want = os.path.basename(filename)
     regex = want.replace(".", r"\.")
-    chip = cfx.poll(
-        "(()=>{const t=document.body.innerText||'';return /" + regex + "/.test(t);})()",
-        predicate=lambda r: r is True, timeout=3.0, interval=0.25)
-    if not chip:
-        raise RuntimeError(f"CV chip '{want}' not visible after upload")
-    print(f"OK upload {target!r}: chip={want}")
+    probe = ("(()=>{const t=document.body.innerText||'';return /" + regex + "/.test(t);})()")
+    # ⛔ 3 SECONDS WAS TOO TIGHT, AND ONE ATTEMPT TOO FEW (2026-08-16). Greenhouse moves the
+    # file into a chip asynchronously; on a heavy form that render can take longer than the
+    # old 3s poll, and _upload_and_verify raising aborts the WHOLE application with rc=4
+    # (RESUME_UPLOAD_FAIL) before a single question is answered. Lost the Dotmatics UX
+    # Designer drive that way — a Tier-A, Remote-UK posting that was otherwise one truthful
+    # answer from complete, failed on a timer rather than on anything about the form.
+    # Give the render room, and retry the upload once before giving up: an upload that did
+    # not register is far likelier than a form that cannot accept one.
+    for attempt in (1, 2):
+        cfx.post(f"/tabs/{cfx._tab()}/upload",
+                 {"userId": cfx._uid(), "selector": sel, "path": filename})
+        if cfx.poll(probe, predicate=lambda r: r is True, timeout=12.0, interval=0.4):
+            print(f"OK upload {target!r}: chip={want}"
+                  + (" (2nd attempt)" if attempt == 2 else ""))
+            return
+        print(f"  upload {target!r}: no chip after 12s — retrying" if attempt == 1 else "")
+    raise RuntimeError(f"CV chip '{want}' not visible after upload (2 attempts)")
 
 
 def _fill_eeo():
