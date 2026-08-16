@@ -37,8 +37,23 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.abspath(os.path.join(_HERE, "..", "..", ".."))
 sys.path.insert(0, os.path.join(_ROOT, "sites", "_common", "scripts"))
 import cfx  # noqa: E402
-sys.path.insert(0, _HERE)
-import feed  # noqa: E402 — solve_altcha(): the sanctioned CSJ gate solver
+
+
+def _csj_feed():
+    """Load THIS board's feed.py by explicit path, for solve_altcha().
+
+    ⛔ NEVER `import feed` (2026-08-16). Forty-three boards ship a module named `feed.py`
+    (sites/*/scripts/feed.py), so a bare import binds whichever directory happens to be first
+    on sys.path — and inserting _HERE to win that race poisons the path for every script
+    imported afterwards. It did exactly that: the codebase-wide import test started failing in
+    sites/lgjobs.com/scripts/feed.py, which is not a file this change went near. Address the
+    file, not the name."""
+    import importlib.util  # noqa: PLC0415
+    path = os.path.join(_HERE, "feed.py")
+    spec = importlib.util.spec_from_file_location("csj_feed", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 # "Apply at advertiser's site" is the hand-off marker. Keep this narrow: the phrase appears in
 # the apply block, and a looser match ("advertiser") would also hit unrelated boilerplate.
@@ -73,10 +88,10 @@ def classify_one(url):
     # ALL TEN vacancies came back `unknown` with empty grade and salary. That reads as "cannot
     # classify" when the truth is "never saw the advert", and it silently zeroes out the one
     # lane that is UK-only by definition. feed.solve_altcha() is the sanctioned solver and its
-    # own docstring says it is "worth reusing"; do so.
+    # own docstring says it is "worth reusing"; do so (loaded by PATH — see _csj_feed).
     try:
         if "quick check" in (cfx.evaluate("(()=>document.title)()") or "").lower():
-            feed.solve_altcha()
+            _csj_feed().solve_altcha()
     except Exception as e:  # noqa: BLE001 — a gate we cannot solve stays `unknown`, as before
         out["note"] = f"altcha: {str(e)[:50]}"
     # ⛔ SETTLE BEFORE READING (2026-08-16). goto() returns as soon as the page has content,
