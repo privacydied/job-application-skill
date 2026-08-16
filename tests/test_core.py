@@ -3810,6 +3810,46 @@ class TestAuditedWidgetInvariants(unittest.TestCase):
                       "refuse to sign an anti-AI oath")
 
 
+class TestRegionRestrictedRemote(unittest.TestCase):
+    """A remote role restricted to another country is as unreachable as an onsite one abroad:
+    the right-to-work answer is the same "no". The gate used to pass these, so the apply lane
+    spent a whole serial-tab drive on each and then blocked on "What U.S. State do you
+    currently reside in?" — the most frequent single blocker in drain23. Measured on the live
+    queue: 53 of 112 hard-board rows.
+
+    The pairing matters — over-blocking would silently delete real UK-eligible work, so the
+    UK-inclusive wordings are pinned in the same test."""
+
+    def setUp(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(_HERE), "sites", "_common", "scripts"))
+        sys.path.insert(0, os.path.join(os.path.dirname(_HERE), "scripts"))
+
+    def _block(self, loc):
+        import apply_queue
+        return apply_queue._location_block({"location": loc})
+
+    def test_foreign_restricted_remote_is_blocked(self):
+        for loc in ("Remote, US", "Remote (United States)", "Remote - US",
+                    "United States (Remote)", "Remote (Canada)", "Remote - India"):
+            self.assertIsNotNone(self._block(loc), f"{loc!r} must not be driven")
+
+    def test_uk_eligible_remote_still_drives(self):
+        # EMEA/Europe/Worldwide are UK-INCLUSIVE (Canonical posts every distributed role that
+        # way); "US or UK" names a UK option; plain "Remote" is unrestricted.
+        for loc in ("Remote (UK)", "United Kingdom (Remote)", "Global Remote",
+                    "Home based - EMEA", "Home based - Worldwide", "Remote - US or UK",
+                    "London", "Remote"):
+            self.assertIsNone(self._block(loc), f"{loc!r} is UK-eligible and must still drive")
+
+    def test_sourcing_still_keeps_the_row(self):
+        # Only the APPLY lane refuses; screen_location keeps it so a human reading the JD can
+        # still find a UK req attached to a US-worded posting.
+        from precheck import screen_location
+        verdict, reason = screen_location("Remote, US")
+        self.assertEqual(verdict, "keep")
+        self.assertIn("region-restricted", reason)
+
+
 class TestBlockListLabelAliases(unittest.TestCase):
     """Aliases taken from drain23's real block list: fields the config ALREADY answers that
     were left empty only because the form words the label differently. Nothing here invents a

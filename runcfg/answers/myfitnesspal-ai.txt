@@ -1,0 +1,16 @@
+wl-dictate, a dictation tool I built for Linux under Wayland. It turns speech into text
+system-wide, using OpenAI Whisper locally for the transcription and an embedded llama.cpp
+model to clean up and contextualise the raw transcript — then injects the result into
+whatever window has focus.
+
+I'm proud of it for two reasons. The first is that it runs entirely on-device. Dictation is
+about as intimate as input gets, and the honest way to handle that is to make sure the
+audio never leaves the machine, rather than to promise it won't be misused. The second is
+that it solved a problem I actually had, on a platform where nothing existed — Wayland
+input injection is genuinely awkward, and getting two models into one pipeline that stays
+responsive enough to use every day took more iteration than the model work itself.
+
+It's open source (github.com/privacydied). The related build I'd point to is a self-hosted
+multimodal Discord assistant with text and image input and TTS responses, built around tool
+use and an agentic command loop — the same interest, aimed at conversation rather than
+dictation.

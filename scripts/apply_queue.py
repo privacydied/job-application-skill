@@ -229,6 +229,13 @@ def _location_block(row):
     verdict, reason = screen_location(row.get("location") or "")
     if verdict == "drop":
         return reason
+    # A remote role restricted to another country is unreachable for the same reason an
+    # onsite one abroad is — there is no truthful right-to-work answer. screen_location keeps
+    # it (sourcing may still want a human to read the JD); the apply lane, which has no model
+    # and pays a whole serial-tab drive per attempt, refuses. See precheck's note: these were
+    # the rows that produced drain23's most frequent blocker, "What U.S. State do you reside in?"
+    if reason.startswith("remote — region-restricted"):
+        return reason
     # screen_location returns `review` for abroad-onsite too ("JD decides"). Inside the
     # apply lane there is no model to decide, and driving is the expensive branch, so treat
     # an explicit abroad reading as a block rather than a maybe.

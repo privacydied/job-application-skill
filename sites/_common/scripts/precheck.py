@@ -362,7 +362,22 @@ def screen_location(location):
                  r"work from anywhere|distributed", low):
         note = "remote"
         uk_ok = re.search(r"london|united kingdom|\buk\b|england|britain|"
-                          r"\bemea\b|\beurope\b|europe/|worldwide|anywhere|global", low)
+                          r"\bemea\b|\beurope\b|\beu\b|europe/|worldwide|anywhere|global", low)
+        # ⛔ "REMOTE, US" IS NOT REACHABLE EITHER (2026-08-16). A remote role restricted to
+        # another country is exactly as unavailable to a UK-based applicant as an onsite one
+        # abroad — the right-to-work answer is the same "no". This branch already SUSPECTED
+        # as much ("verify region restriction in JD") but still returned a bare `keep`, so the
+        # apply lane drove them: Keeper Security ("Remote, US"), Tailscale ("Remote (United
+        # States)"), MyFitnessPal ("Remote - US") and Cresta ("United States (Remote)") all
+        # passed the gate, burned the single serial tab, and then blocked on "What U.S. State
+        # do you currently reside in?" — which was the single most frequent blocker in
+        # drain23. Name the restriction so the apply lane can refuse it up front, while
+        # sourcing still keeps the row (a human reading the JD may find a UK req attached).
+        foreign = re.search(r"\bu\.?s\.?a?\b|united states|\bcanada\b|\bcanadian\b|\bindia\b|"
+                            r"\baustralia\b|\bsingapore\b|\bbrazil\b|\blatam\b|\bapac\b|"
+                            r"\banz\b|\bjapan\b|\bmexico\b|\bphilippines\b", low)
+        if not uk_ok and foreign:
+            return "keep", f"remote — region-restricted to {foreign.group(0).strip()} (non-UK)"
         if not uk_ok and re.search(r"[a-z]", re.sub(r"remote|home[\s-]?based", "", low)) \
                 and len(low) > 8:
             note = "remote — verify region restriction (non-UK wording) in JD"

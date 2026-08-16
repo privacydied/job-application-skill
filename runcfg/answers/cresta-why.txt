@@ -1,0 +1,16 @@
+Cresta is applying AI to a setting where the person using it is under real pressure and the
+quality of the assistance is measured in whether it actually helped — not in whether the
+demo was impressive. That's the part I want to work on.
+
+My background is a designer's, six years of it, with five years of hands-on user research.
+The lesson I keep returning to is that people describe their problems in their own terms,
+not the system's, and that most of the value in an assistive tool is in the gap between
+those two. Contact-centre work is that problem in its sharpest form: the agent has seconds,
+a customer mid-sentence, and no appetite for a tool that needs interpreting.
+
+I'm also hands-on with the technology rather than adjacent to it. I built and self-host a
+multimodal Discord assistant built around tool use and an agentic command loop, and
+wl-dictate, which runs Whisper and a local llama.cpp model together on-device. I use
+agentic tooling daily as part of how I work. So I have a reasonably concrete sense of where
+these systems are genuinely good, and where they confidently produce something wrong — which
+matters more when a human is expected to act on the output immediately.

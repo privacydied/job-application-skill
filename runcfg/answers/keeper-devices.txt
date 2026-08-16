@@ -1,0 +1,18 @@
+My hands-on device experience comes from Comfix Ltd, a computer repair shop in London where
+I worked as a Computer Repair Technician from 2013 to 2015. That was end-user support in
+the most literal sense: diagnosing and repairing PC and laptop hardware, installing and
+configuring operating systems and software, setting up networking including routers and
+LAN/Wi-Fi, removing malware, and handling data backup and migration when a machine had to be
+rebuilt or replaced. A large part of the job was explaining to someone, without jargon, what
+had gone wrong and what I was going to do about it.
+
+I should be straightforward about the shape of that experience: it was a repair shop serving
+customers, so it was break-fix and rebuild work rather than managing a fleet of corporate
+endpoints through an MDM platform. I haven't run enrolment, imaging or policy at scale
+through something like Intune or Jamf.
+
+What I'd bring alongside it is current systems experience. I run a self-hosted Linux homelab
+— Docker services, monitoring, automated backups, hardening — and have three years on Linux,
+so I'm comfortable at the command line and with the OS-level side of provisioning and
+recovery. I also hold a cybersecurity Level 1. I'd expect to pick up a specific MDM stack
+quickly, but I'd rather say plainly what I have and haven't run than imply otherwise.

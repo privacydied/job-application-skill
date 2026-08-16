@@ -1,0 +1,18 @@
+My most direct experience is CryptoKnowledge, where I was the frontend and DevOps side of a
+two-person build (Dec 2024 – Jul 2025). I built the WordPress and LearnDash platform and
+then ran it: hosting, deployment pipeline, security hardening, backups and monitoring. The
+security work was mostly unglamorous and mostly about defaults — keeping secrets out of the
+repository and in the environment, least-privilege credentials for the deploy user,
+automated dependency and platform updates rather than ad-hoc ones, TLS everywhere, and
+restricting the admin surface. Backups were only counted as working once I had restored
+from them.
+
+I keep the same discipline in my homelab, which is Docker-based with monitoring and
+automated backups, and where I treat rebuild-from-scratch as the test of whether the
+pipeline is real. On rchan.xyz I put a self-hosted LynxChan and MongoDB stack behind
+Cloudflare and used it as a deliberate performance and operations exercise, which is where
+a lot of my instinct for caching, edge behaviour and measuring before and after came from.
+
+I'd describe myself as strong on the operational fundamentals and on building pipelines
+that a small team can actually trust, rather than as someone who has run supply-chain
+security tooling at enterprise scale — that's a level I'd want to grow into.

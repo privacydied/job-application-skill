@@ -1,0 +1,21 @@
+I run a self-hosted Linux homelab as a matter of course — Docker services, monitoring,
+backups, hardening — and most of my side projects are self-hosted end to end rather than
+handed to a platform. So I've spent a lot of evenings on exactly the problem Tailscale
+solves: getting machines that live in different places to talk to each other safely,
+without standing up a fragile perimeter and hoping.
+
+What draws me to Tailscale specifically is that it's an infrastructure product that takes
+the human side seriously. That's the seam I work at. My background is design — six years
+of it, including two and a half years as an interaction designer on the NHS COVID-19 App
+inside the GOV.UK Design System, where plain language and accessibility were hard
+requirements, not polish. But I also ship: Node.js and Postgres on gearo, a TypeScript
+monorepo with a self-hosted vector basemap on fifteen.example.com, CI/CD and hosting at
+CryptoKnowledge. Networking tools are usually built by people who already understand
+networking, for people who already understand networking. Tailscale is one of the few that
+reads as though someone cared whether it made sense to a person on their first day.
+
+I also care about the privacy-by-design instinct behind it. On fifteen.example.com I built the
+API to accept an H3 spatial cell rather than a coordinate, so it is structurally incapable
+of receiving a user's exact location — the guarantee lives in the shape of the system, not
+in a policy document. That's the same reasoning I see in a product that makes the secure
+path the easy one.

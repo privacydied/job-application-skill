@@ -1,0 +1,19 @@
+Two threads in my work lead here.
+
+The first is health at scale. I spent two and a half years as an interaction designer on
+the NHS COVID-19 App at UKHSA, working inside the GOV.UK Design System under real
+accessibility constraints and cross-government scrutiny. That taught me what it means when
+a health product has to work for everybody — not the median user, everybody — and what it
+costs when it doesn't.
+
+The second is behaviour change. At Gramrphone I mapped onboarding against real feedback
+from musicians and cut onboarding time roughly fourfold, with downloads-to-installs
+throughput up around sixfold. None of that came from a redesign; it came from watching
+where people actually gave up. A tracking app lives or dies on the same question — the
+product only works if logging today is easy enough that someone still does it in week six.
+
+MyFitnessPal sits exactly where those two threads meet: a consumer health product at large
+scale where the design problem is sustained habit, and where accessibility is a
+correctness requirement rather than a nice-to-have. I'm also a builder — Node.js, Postgres,
+Docker, CI/CD — so I'd rather work close to the implementation than hand off a file and
+hope.
