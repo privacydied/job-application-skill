@@ -634,7 +634,30 @@ def main():
         return 0
     print(f"SUBMIT_NO_CONFIRM {company} {role} — logging Blocked")
     try:
-        dbg = cfx.evaluate("document.body?document.body.innerText:''") or ""
+        # ⛔ DUMP THE ERRORS, NOT THE FIRST 3000 CHARS OF THE PAGE (2026-08-16). This used to
+        # take document.body.innerText[:3000], which on a Greenhouse posting is the JOB
+        # DESCRIPTION — the form and its validation messages are far below that cut. Read it
+        # twice while diagnosing a blocked submit and learned nothing about the form either
+        # time. Collect the error nodes and the label of the field each one belongs to, then
+        # fall back to the body text only if the page exposes no error nodes at all.
+        errs = cfx.evaluate("""(()=>{
+          const clean=s=>(s||'').replace(/\\s+/g,' ').trim();
+          const out=[];
+          document.querySelectorAll('[class*="error"],[aria-invalid="true"],[role=alert]')
+            .forEach(e=>{
+              const msg=clean(e.innerText); if(!msg||msg.length>200) return;
+              let b=e,lab='';
+              for(let k=0;k<5&&b;k++){b=b.parentElement; if(!b)break;
+                const t=clean(b.innerText);
+                if(t&&t.length<260&&t!==msg){lab=t.split(msg).join(' ').trim(); break;}}
+              out.push((lab?lab.slice(0,120)+'  ==> ':'')+msg);});
+          return JSON.stringify([...new Set(out)].slice(0,25),null,1);})()""") or ""
+        try:
+            parsed = json.loads(errs) if errs else []
+        except ValueError:
+            parsed = []
+        dbg = ("VALIDATION ERRORS (field ==> message)\n" + "\n".join(parsed)) if parsed else (
+            cfx.evaluate("document.body?document.body.innerText:''") or "")
         # ⛔ ONE FIXED PATH MEANS EVERY FAILURE OVERWRITES THE LAST (2026-08-16). A drain
         # produces many SUBMIT_NO_CONFIRMs, all writing /tmp/gh_debug.txt, so by the time
         # anyone reads it the contents belong to a DIFFERENT posting. It cost a misdiagnosis
