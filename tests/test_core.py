@@ -3810,6 +3810,64 @@ class TestAuditedWidgetInvariants(unittest.TestCase):
                       "refuse to sign an anti-AI oath")
 
 
+class TestInjectedJavaScriptParses(unittest.TestCase):
+    """Every JS blob atsform injects must PARSE. Nothing else in this suite can catch a syntax
+    error in injected JavaScript: Python imports fine, the unit tests pass, and the breakage
+    only appears as `cfx.evaluate` failing on a live form — i.e. mid-application, on every
+    posting at once. The widget engine is edited often and by hand, so this is cheap insurance.
+
+    Covers both module-level constants and the f-string JS that set_radio / set_checkbox build
+    at call time (the latter is where the quoting is hairiest: nested braces inside an
+    f-string inside a JS regex). Skipped when node is unavailable."""
+
+    PLACEHOLDERS = {"__OPT__": '"x"', "__VAL__": '"x"', "__STRICT__": "false",
+                    "__FIND__": "(function(t){return null})", "%s": '"x"'}
+
+    def setUp(self):
+        import shutil
+        if not shutil.which("node"):
+            self.skipTest("node not available to parse-check injected JS")
+        sys.path.insert(0, os.path.join(os.path.dirname(_HERE), "sites", "_common", "scripts"))
+
+    def _check(self, name, js):
+        import subprocess
+        for k, v in self.PLACEHOLDERS.items():
+            js = js.replace(k, v)
+        with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as fh:
+            fh.write("(function(){ return " + js.strip() + " })")
+            path = fh.name
+        try:
+            r = subprocess.run(["node", "--check", path], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, f"{name} is not valid JavaScript:\n{r.stderr}")
+        finally:
+            os.unlink(path)
+
+    def test_module_level_js_constants_parse(self):
+        import atsform
+        n = 0
+        for name in dir(atsform):
+            v = getattr(atsform, name)
+            if isinstance(v, str) and name.isupper() and ("=>" in v or "document." in v):
+                self._check(name, v)
+                n += 1
+        self.assertGreater(n, 5, "expected to find the injected JS constants")
+
+    def test_call_time_js_parses(self):
+        import atsform
+        captured, orig = [], atsform.cfx.evaluate
+        atsform.cfx.evaluate = lambda js, *a, **k: (captured.append(js), "NOT_FOUND")[1]
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                atsform.set_radio("Do you identify as transgender?", "No", quiet_notfound=True)
+                atsform.set_radio("Gender", "Man", quiet_notfound=True, strict=True)
+                atsform.set_checkbox("I confirm I have read the policy", quiet_notfound=True)
+        finally:
+            atsform.cfx.evaluate = orig
+        self.assertTrue(captured, "expected set_radio/set_checkbox to inject JS")
+        for i, js in enumerate(captured):
+            self._check(f"call-time js[{i}]", js)
+
+
 class TestApplyQueueLaneIntegrity(unittest.TestCase):
     """apply_queue must not drive a lane the caller did not select, and must not have a
     questions-API path that is unreachable for the URLs it exists to serve."""
