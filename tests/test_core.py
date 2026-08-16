@@ -3629,5 +3629,36 @@ class TestTargetRoleParenthetical(unittest.TestCase):
                             f"{title!r} is declared in target-roles.md but was rejected")
 
 
+class TestGreenhouseUrlShapesDedup(unittest.TestCase):
+    """⛔ ONE Greenhouse job, four URL shapes — all must produce the SAME dedup key.
+
+    A Greenhouse job advertised on the employer's own careers page carries `?gh_jid=<id>`;
+    the canonical form is `boards.greenhouse.io/embed/job_app?token=<id>`; the hosted form is
+    `job-boards.greenhouse.io/<slug>/jobs/<id>`. apply_queue REWRITES the careers-page URL to
+    the embed form before driving (a careers page has no application form on it).
+
+    Before this, the careers-page and embed shapes had no id pattern, so canon_ids fell back to
+    the WHOLE URL and produced two different keys — meaning a posting already applied to via one
+    shape would not dedup against the other, and would be applied to a SECOND time. Same class
+    as the Reed 57050584 double-application recorded in precheck.py."""
+
+    def _ids(self, url):
+        from precheck import canon_ids
+        return canon_ids(url)
+
+    def test_all_shapes_share_a_key(self):
+        careers = self._ids("https://join.jfrog.com/job/?job=8096818&gh_jid=8096818")
+        embed = self._ids("https://boards.greenhouse.io/embed/job_app?token=8096818")
+        hosted = self._ids("https://job-boards.greenhouse.io/jfrog/jobs/8096818")
+        self.assertTrue(careers & embed, "careers-page URL must dedup against the embed form")
+        self.assertTrue(careers & hosted, "careers-page URL must dedup against the hosted form")
+        self.assertTrue(embed & hosted, "embed form must dedup against the hosted form")
+
+    def test_different_jobs_do_not_collide(self):
+        a = self._ids("https://www.coinbase.com/careers/positions/8126896?gh_jid=8126896")
+        b = self._ids("https://join.jfrog.com/job/?job=8096818&gh_jid=8096818")
+        self.assertFalse(a & b, "two different Greenhouse jobs must not share a dedup key")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

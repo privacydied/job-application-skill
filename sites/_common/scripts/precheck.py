@@ -94,6 +94,15 @@ _CANON_PATTERNS = (
     # and the pre-submit guard couldn't match them, so it counted as two applications.
     r"reed\.co\.uk/[^\s]*?[?&]jobid=(\d{5,8})",
     r"greenhouse\.io/[^/]+/jobs/(\d+)",
+    # ⛔ THE SAME Greenhouse job has FOUR URL shapes and they must all dedup (2026-08-16).
+    # A job advertised on the employer's own careers page carries ?gh_jid=<id>; the canonical
+    # form is boards.greenhouse.io/embed/job_app?token=<id>; apply_queue REWRITES the former to
+    # the latter before driving. Without these patterns the careers-page URL and the embed URL
+    # produced two DIFFERENT fallback keys (the whole URL), so a posting applied to via one
+    # shape would not dedup against the other -> a second real application to the same job.
+    # That is the same class as the Reed 57050584 double-application noted above.
+    r"[?&]gh_jid=(\d+)",
+    r'greenhouse\.io/embed/job_app\?[^\s"\']*?token=(\d+)',
     r"jobs\.lever\.co/[^/]+/([0-9a-f-]{8,})",
     r"ashbyhq\.com/[^/]+/([0-9a-f-]{8,})",
     r"myworkdayjobs\.com/.*/job/[^/]+/([^/?]+)",
