@@ -98,10 +98,51 @@ def _gh_config_from_api(row):
         # employer careers page carrying ?gh_jid=<id> — rewrite to the canonical embed form
         j = _GH_JID.search(url)
         if j:
-            row = dict(row, url=_GH_EMBED % j.group(1))
-            print(f"    gh_jid={j.group(1)} -> canonical embed form", file=sys.stderr)
+            token = j.group(1)
+            embed = _GH_EMBED % token
+            row = dict(row, url=embed)
+            # RECOVER THE BOARD SLUG (2026-08-16). Without it there is no questions API, so the
+            # config is minimal and every per-posting required screener blocks the submit — the
+            # embed form renders fine but bounces on "This field is required." The slug IS in
+            # the rendered embed page (verified: token 8017146 -> "samsara"), though only after
+            # JS runs: a plain HTTP GET of that URL returns an empty body. One extra nav buys
+            # the full API-built config.
+            slug = ""
+            try:
+                if cfx.goto(embed).get("ok"):
+                    slug = cfx.evaluate(
+                        "(()=>{const h=document.documentElement.innerHTML;"
+                        "const m=h.match(/for=([a-z0-9_.-]{2,40})/i)"
+                        "||h.match(/boards\\.greenhouse\\.io\\/([a-z0-9_.-]{2,40})/i);"
+                        "return m?m[1]:'';})()") or ""
+            except Exception:  # noqa: BLE001
+                slug = ""
+            if slug and slug not in ("embed", "job_app"):
+                print(f"    gh_jid={token} -> slug {slug!r}, using the questions API",
+                      file=sys.stderr)
+                return _gh_from_slug(slug, token, row)
+            print(f"    gh_jid={token} -> embed form (no slug; minimal config)", file=sys.stderr)
             return _minimal_gh(row)
         return None
+
+
+def _gh_from_slug(slug, jid, row):
+    """Full questions-API config for a posting we reached by token. False = do not drive."""
+    try:
+        sys.path.insert(0, HERE)
+        import gen_gh_config  # noqa: PLC0415
+        path, _cfg, unanswered, human, oath = gen_gh_config.build(slug, jid)
+    except Exception as e:  # noqa: BLE001
+        print(f"    questions API failed ({str(e)[:50]}) — minimal config", file=sys.stderr)
+        return _minimal_gh(row)
+    if oath:
+        print("    anti-AI oath — needs the applicant's own words", file=sys.stderr)
+        return False
+    if unanswered or human:
+        for u in (unanswered + human)[:3]:
+            print(f"    UNANSWERED_REQUIRED: {u[:88]}", file=sys.stderr)
+        return False
+    return path
     slug, jid = (m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))
     try:
         sys.path.insert(0, HERE)
