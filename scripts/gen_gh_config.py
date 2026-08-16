@@ -116,6 +116,38 @@ def _is_affirmative_answer(ans):
         "yes", "y", "true", "agree", "i agree", "accept", "acknowledge", "__consent__"}
 
 
+
+def _identity_field(label):
+    """True when gh_apply's `defaults` pass will fill this from apply-defaults.json.
+
+    ⛔ DERIVED FROM THE FILLER, NOT A PARALLEL LIST (2026-08-16). SKIP above is anchored
+    (^…$), so it only recognises a label that IS exactly "first name". Greenhouse forms ask
+    "What is your legal first name? (Please also ensure that you input your legal first
+    name…)" — which SKIP misses, so this gate reported it as an unanswered REQUIRED question
+    and refused to drive the posting… while gh_apply's defaults pass would have filled it
+    immediately via atsform._LABEL_ALIASES, which lists "legal first name" explicitly.
+
+    That is the THIRD time this gate has turned out to be stricter than the filler it gates
+    (see the synonym and needs-human notes below). The pattern is always a second, parallel
+    list that drifts from the first. So take the vocabulary FROM atsform rather than
+    restating it: whatever the filler learns to fill, the gate stops treating as a blocker.
+    """
+    lab = (label or "").rstrip("*").strip().lower()
+    if not lab:
+        return False
+    try:
+        sys.path.insert(0, os.path.join(ROOT, "sites", "_common", "scripts"))
+        from atsform import _LABEL_ALIASES  # noqa: PLC0415
+    except Exception:  # noqa: BLE001
+        return False
+    for key, alts in _LABEL_ALIASES.items():
+        for phrase in (key, *alts):
+            # substring, because the real question wraps the field name in prose
+            if phrase in lab:
+                return True
+    return False
+
+
 def fetch(slug, jid, eu=False):
     url = API.format(slug=slug, jid=jid)
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
@@ -198,7 +230,7 @@ def build(slug, jid, eu=False, out=None):
 
     for q in data.get("questions", []):
         label = (q.get("label") or "").strip()
-        if not label or SKIP.match(label.rstrip("*").strip()):
+        if not label or SKIP.match(label.rstrip("*").strip()) or _identity_field(label):
             continue
         fields = q.get("fields") or [{}]
         ftype = fields[0].get("type", "")

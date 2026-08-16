@@ -4223,6 +4223,24 @@ class TestYearsGateFollowsTheProfile(unittest.TestCase):
             self.assertTrue(h, q)
             self.assertNotIn("generic default", h.get("source", ""), q)
 
+
+    def test_identity_questions_are_not_reported_as_blockers(self):
+        # The gate's SKIP is anchored, so it only matches a label that IS exactly "first
+        # name". Greenhouse asks "What is your legal first name? (Please also ensure…)",
+        # which SKIP misses — so the gate refused the posting while the FILLER would have
+        # filled it from apply-defaults via atsform._LABEL_ALIASES. Third instance of the
+        # gate being stricter than the thing it gates, so the vocabulary is now taken FROM
+        # atsform rather than restated here.
+        sys.path.insert(0, os.path.join(os.path.dirname(_HERE), "scripts"))
+        from gen_gh_config import _identity_field
+        for lab in ("What is your legal first name? (Please also ensure…)",
+                    "Preferred Last Name/Surname", "Your LinkedIn URL", "Zip Code/Postal Code"):
+            self.assertTrue(_identity_field(lab), lab)
+        for lab in ("What about the mission of Dotmatics inspires you most?",
+                    "Please list all active Salesforce certifications",
+                    "Are you legally authorized to work?"):
+            self.assertFalse(_identity_field(lab), lab)
+
     def test_gate_consults_the_bank(self):
         with open(os.path.join(os.path.dirname(_HERE), "scripts", "gen_gh_config.py"),
                   encoding="utf-8") as f:
