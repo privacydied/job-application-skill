@@ -12,6 +12,36 @@ Everything targets fields by a **substring of their visible LABEL**, because lab
 text is stable across postings while `name`/`id` are random per posting. Built on
 `cfx.py`, so it inherits the pacing + referer anti-detection.
 
+═══ TWO RULES THIS FILE KEEPS RE-LEARNING (read before touching a matcher) ═══
+
+**1. A label walk must climb PAST the control's own rendering.**
+Every "find this field's question" walk takes the nearest ancestor with text. That
+ancestor is usually the control itself, because controls render their own text:
+an empty react-select shows "Select...", a radio group shows its option labels, a
+chosen option shows itself. Taking it yields a question that matches nothing.
+
+This has now been fixed THREE times, in three branches, one at a time — because each
+fix was applied only where the symptom was seen:
+    set_radio qtext      returned the OPTIONS container ("Yes No Prefer not to say")
+    _UNANSWERED texts    returned a multi-question ancestor blob
+    _UNANSWERED combos   returned the placeholder "Select..." — which meant the answer
+                         bank could never answer a Greenhouse dropdown at all
+                         (measured live: "0 answered, 7 unknown" on a form where all
+                         seven answers were banked)
+If you fix this again, fix it in EVERY walk in the file, not just the one in front of you.
+
+**2. A matcher must never commit an option that carries a claim the applicant did not make.**
+Scorers optimise for "closest string", which is not the same as "same claim". Every
+false answer this repo has shipped is one of these:
+    "Mixed or Multiple ethnic groups" -> "Mixed – White and Asian"   (narrower ancestry)
+    "Man"                             -> "Woman"                     (substring)
+    "relocation assistance -> No"     -> a question asking the INVERSE (negation)
+    "Job board"                       -> "University job board"      (affiliation)
+    "sponsorship -> No"               -> "able to work WITHOUT sponsorship?" (negation)
+When the best match is not equivalent, REFUSE. An unanswered required field blocks the
+submit and asks for a human, which is recoverable; a confidently wrong answer is submitted
+under the applicant's name and is not.
+
 Importable (adapters do `from atsform import fill, select, ...`) or CLI:
     CFX_KEY=... CFX_TAB=... python3 atsform.py <apply|fill|select|pick|combo|combo-type|radio|checkbox|upload|review|submit|click> ...
     # pick "<label|css/#id>" "<option>" [--multi] [--clear]   ⭐ the universal dropdown driver:
