@@ -187,6 +187,18 @@ def _parse_target_roles_cached(path, mtime):
         # Strip any OTHER parenthetical commentary on the line (e.g. "(his exact NHS
         # title)", "(any of the above AT music companies)") that isn't the tier marker.
         phrase_part = re.sub(r"\([^)]*\)", "", phrase_part)
+        # ⛔ A DASH INTRODUCES A DESCRIPTION, NOT MORE ROLE NAME (2026-08-16). Lines in
+        # target-roles.md read "Role (junior) — why it fits". Stripping the parenthetical is
+        # not enough: the trailing prose survives, and because the phrase is then split on
+        # "/", "Frontend Developer (junior) — HTML/CSS/Node.js (B)" parsed to the phrase
+        # 'frontend developer — html', which cannot appear in any real job title. Two DECLARED
+        # roles were silently unmatchable this way — 'Frontend Developer' (Tier B, and his
+        # actual job title at CryptoKnowledge) and 'Service Desk Analyst' (Tier A, direct
+        # Comfix experience) — so postings for them were dropped at the title screen while the
+        # file plainly lists them. Same invisible-narrowing class as the mid-phrase
+        # parenthetical below. Only SPACED dashes cut; hyphens inside words ("No-code
+        # Developer", "1st-line") are untouched.
+        phrase_part = re.split(r"\s+[—–]\s*|\s+-\s+", phrase_part)[0]
         for phrase in phrase_part.split("/"):
             # ⛔ COLLAPSE WHITESPACE AFTER THE STRIP (2026-08-16). Removing a MID-phrase
             # parenthetical leaves a double space behind: "End User Computing (EUC) Technician"

@@ -3810,6 +3810,46 @@ class TestAuditedWidgetInvariants(unittest.TestCase):
                       "refuse to sign an anti-AI oath")
 
 
+class TestEveryDeclaredTargetRoleIsMatchable(unittest.TestCase):
+    """A phrase parsed out of target-roles.md that cannot appear in a real job title is a
+    SILENT narrowing of the eligibility filter: the role is plainly listed in the file, so
+    nobody looking at it would see the loss, but every posting for it is dropped at the title
+    screen.
+
+    Two were live when this was written — 'frontend developer — html' (Tier B, and his actual
+    job title at CryptoKnowledge) and 'service desk analyst — 1st' (Tier A, direct Comfix
+    experience) — because stripping the "(junior)" parenthetical left the trailing em-dash
+    description behind, which then got split on "/". Same class as the mid-phrase parenthetical
+    that deleted 'End User Computing Technician' earlier."""
+
+    def setUp(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(_HERE), "sites", "_common", "scripts"))
+
+    def test_no_phrase_carries_description_punctuation(self):
+        from check_title import parse_target_roles
+        bad = [p for p, _ in parse_target_roles()
+               if "—" in p or "–" in p or " - " in p]
+        self.assertEqual(bad, [], "these phrases can never match a real job title")
+
+    def test_the_two_regressed_roles_match(self):
+        from check_title import check_title
+        for title, tier in (("Frontend Developer", "B"), ("Service Desk Analyst", "A")):
+            r = check_title(title)
+            self.assertTrue(r["eligible"], f"{title} is declared in target-roles.md")
+            self.assertEqual(r["tier"], tier, title)
+
+    def test_hyphens_inside_words_survive(self):
+        # Only SPACED dashes introduce a description; "No-code Developer" must still parse.
+        from check_title import check_title
+        self.assertTrue(check_title("No-code Developer")["eligible"])
+
+    def test_off_profile_still_rejected(self):
+        from check_title import check_title
+        for t in ("Hotel Conferences in London", "Commercial Procurement Manager",
+                  "Assistant Clubhouse Manager"):
+            self.assertFalse(check_title(t)["eligible"], t)
+
+
 class TestExcludedSourcesAreEnforcedInTheApplyLane(unittest.TestCase):
     """talent.com + indeed.com are permanently excluded by user decree (2026-07-20); reed.co.uk
     by the same decree and by this run's standing instruction.
