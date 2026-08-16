@@ -250,11 +250,24 @@ above. So the drivable-and-on-band CSJ set is far smaller than the raw card coun
 
 Confirmed on TWO separate HMRC vacancies (Senior Business Analyst 2009576, Senior Test
 Engineer 2008608), so it is HMRC-form-wide, not posting-specific. The textarea reports
-`disabled=false`, `readOnly=false`, and sits inside the normal form next to `continue_button`,
-but **no input method lands a value**:
-  * `atsform.fill` → the camofox `/type` endpoint returns HTTP 500;
-  * React native value-setter + `input`/`change`/`blur` → `value.length` reads back 0;
-  * REAL per-character keystrokes via `cfx.press` → also 0.
+`disabled=false`, `readOnly=false`, and sits inside the normal form next to `continue_button`.
+
+**⚠️ DIAGNOSIS CORRECTED 2026-08-16 — it is a PERSISTENCE failure, not an input failure.**
+Re-tested on a fresh eform (57875389, the same 2009576 vacancy) after an engine restart:
+
+  * React native value-setter + `input`/`change`/`blur` → **`value.length` reads back 4**.
+    The value LANDS. The original note said it read back 0; that was almost certainly a
+    symptom of the wedged engine that session, not of the field.
+  * Click `continue_button`, then re-open `/page/1` → **`value.length` is 0 again.**
+
+So the value is accepted client-side and then dropped: either the POST omits this field or the
+server discards it. That changes what is worth trying. The old note points at INPUT METHOD, so
+the natural next step was a fourth way of typing — which cannot work, because typing already
+works. Anyone picking this up should look at the POST body (is `datafield_50629_1_1` in it?)
+and at whether the field belongs to a different form/section than `continue_button` submits.
+
+Net effect is unchanged and the operational advice stands: Submit never renders, so **HMRC
+CSJ vacancies remain undrivable and belong to the user in noVNC.**
 Continue still POSTs, so the walk advances, but the Declaration page keeps listing that page
 under "problems that need to be fixed" and **Submit never renders**. Everything else on those
 forms persisted normally. CPS (2009637) and FCDO (2007055) submitted cleanly through the same

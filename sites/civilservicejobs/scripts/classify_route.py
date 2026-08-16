@@ -68,8 +68,22 @@ _CLOSED = re.compile(r"no longer (available|accepting)|vacancy has closed|"
                     r"has closed or been withdrawn", re.I)
 _APPLY_NOW = re.compile(r"\bapply now\b", re.I)
 
+# ⛔ EMPLOYERS WHOSE TAL EFORM CANNOT BE COMPLETED (2026-08-16). `tal` means "in-platform
+# eform", which is a statement about the ROUTE — it says nothing about whether the form can
+# actually be filled. HMRC's Section 2 carries `datafield_50629_1_1` ("Do you have the
+# relevant experience and skills…"), which accepts a value client-side and then drops it on
+# the Continue POST, so Submit never renders (NOTES.md §HMRC). Confirmed on two HMRC
+# vacancies, and re-confirmed on 2009576 today — after I had already routed it as drivable and
+# started mapping the form for a 30-minute Section 2 write. Classifying it `tal` a second time
+# is how that cycle repeats: the whole point of this module is to spend the writing time only
+# where it can land. Surface it as its own route so the cost is paid once.
+_BLOCKED_EMPLOYERS = (
+    ("hm revenue", "HMRC Section 2 field datafield_50629_1_1 does not persist — Submit never "
+                   "renders; hand to the user in noVNC (NOTES.md §HMRC)"),
+)
 
-def classify_one(url):
+
+def classify_one(url, company=""):
     """-> dict(route, grade, salary, title_seen). Never raises; a nav failure is `unknown`."""
     out = {"route": "unknown", "grade": "", "salary": "", "note": ""}
     try:
@@ -132,6 +146,11 @@ def classify_one(url):
         out["note"] = "hands off to the department's own ATS — needs an account"
     elif has_apply or _APPLY_NOW.search(text):
         out["route"] = "tal"
+        for needle, why in _BLOCKED_EMPLOYERS:
+            if needle in (company or "").lower():
+                out["route"] = "blocked"
+                out["note"] = why
+                break
     return out
 
 
@@ -165,7 +184,7 @@ def main():
 
     work = []
     for i, r in enumerate(rows, 1):
-        res = classify_one(r["url"])
+        res = classify_one(r["url"], r.get("company", ""))
         res.update(url=r["url"], title=r.get("title", ""), company=r.get("company", ""))
         work.append(res)
         print(f"  [{i}/{len(rows)}] {res['route']:8s} {(res.get('grade') or '-')[:28]:30s} "
@@ -174,6 +193,9 @@ def main():
         time.sleep(0.8)
 
     tal = [w for w in work if w["route"] == "tal"]
+    blocked = [w for w in work if w["route"] == "blocked"]
+    for b in blocked:
+        print(f"  BLOCKED {b.get('company','')[:28]}: {b['note'][:70]}", file=sys.stderr)
     print(f"\nDRIVABLE (in-platform TAL eform): {len(tal)} of {len(work)}", file=sys.stderr)
     if out_path:
         with open(out_path, "w", encoding="utf-8") as f:
