@@ -1,5 +1,13 @@
 {
-  "cv": "base-resume.pdf", "company": "SumUp", "role": "Brand Marketing Designer",
+  "cv": "base-resume.pdf",
+  "company": "SumUp",
+  "role": "Brand Marketing Designer",
   "url": "https://boards.greenhouse.io/embed/job_app?token=8592596002",
-  "source": "Greenhouse", "defaults": true, "eeo": true, "fill": {}
+  "source": "Greenhouse",
+  "defaults": true,
+  "eeo": true,
+  "fill": {},
+  "checkboxes": {
+    "Confirm": "on"
+  }
 }
