@@ -4204,6 +4204,25 @@ class TestYearsGateFollowsTheProfile(unittest.TestCase):
         h = self._hit("How many years of Kubernetes experience do you have?")
         self.assertIn("generic default", h.get("source", ""))
 
+
+    def test_life_constraints_still_need_a_human(self):
+        # Shift work, on-call rota and vehicle ownership have NO bank row, so they stay
+        # human WITHOUT needing to be named — those are constraints the applicant states,
+        # not facts the profile records. This is what makes the rule self-enforcing.
+        for q in ("Are you willing to work night shifts and weekends?",
+                  "Are you able to join an on-call rota?",
+                  "Do you own a vehicle?"):
+            self.assertFalse(self._hit(q), q)
+
+    def test_factual_gates_the_profile_answers_are_allowed(self):
+        # SKILL.md: "clearance is NOT a blocker (vetting is post-offer - apply, answer
+        # honestly)". Both of these have specific profile-backed rows.
+        for q in ("Do you hold a current UK security clearance?",
+                  "Do you have a full UK driving licence?"):
+            h = self._hit(q)
+            self.assertTrue(h, q)
+            self.assertNotIn("generic default", h.get("source", ""), q)
+
     def test_gate_consults_the_bank(self):
         with open(os.path.join(os.path.dirname(_HERE), "scripts", "gen_gh_config.py"),
                   encoding="utf-8") as f:

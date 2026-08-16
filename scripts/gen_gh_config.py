@@ -221,8 +221,19 @@ def build(slug, jid, eu=False, out=None):
             # applies. Without this the bank's years rows could never be reached at all —
             # "How many years of software engineering experience do you have?" stayed a
             # blocker through three drains after the correct answer was banked.
+            #
+            # GENERALISED (2026-08-16): the same test is right for EVERY category this gate
+            # bans, and it is self-enforcing. Security clearance and driving licence both have
+            # specific, profile-backed rows ("No — enhanced DBS, no SC/DV, willing to be
+            # vetted"; "No — provisional only"), and SKILL.md says outright that "clearance is
+            # NOT a blocker (vetting is post-offer — apply, answer honestly)". Shift work,
+            # on-call rota and vehicle ownership have NO bank row at all, so they continue to
+            # need a human without needing to be named — which is the correct outcome, because
+            # those are life constraints the applicant states, not facts the profile records.
+            # The criterion is "does the bank hold a profile-backed answer", not "which
+            # category is this".
             _years_ok = None
-            if required and re.search(r"how many years|years of experience", label, re.I):
+            if required:
                 try:
                     sys.path.insert(0, os.path.join(ROOT, "sites", "_common", "scripts"))
                     import screener  # noqa: PLC0415
