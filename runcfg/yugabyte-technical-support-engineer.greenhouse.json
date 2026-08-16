@@ -2,8 +2,11 @@
   "cv": "base-resume.pdf",
   "company": "Yugabyte",
   "role": "Technical Support Engineer",
-  "url": "https://job-boards.greenhouse.io/yugabyte/jobs/4683728006",
+  "url": "https://boards.greenhouse.io/embed/job_app?token=4683728006",
   "source": "Greenhouse",
   "defaults": true,
-  "fill": {}
+  "eeo": true,
+  "fill": {
+    "What makes you most interested in this opportunity": "@runcfg/answers/yugabyte-interest.txt"
+  }
 }

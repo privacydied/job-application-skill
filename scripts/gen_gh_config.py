@@ -84,7 +84,11 @@ TRUTHS = [
     # They are listed in SKIP below for the same reason.
     (r"country.{0,20}(reside|based|located|work)|where are you based|current country", "United Kingdom"),
     (r"^location|location \(city\)|city", "London"),
-    (r"privacy (notice|policy|statement)|data protection|acknowledge", "__CONSENT__"),
+    # "read our GDPR statement" is the same routine acknowledgement as the privacy notice
+    # already handled here — it confirms the applicant has READ a document, which is true
+    # of an application being submitted. It is NOT an attestation about the applicant's
+    # own work (those are caught by ANTI_AI and never auto-signed).
+    (r"privacy (notice|policy|statement)|data protection|acknowledge|\bgdpr\b", "__CONSENT__"),
     (r"gender", "Male"),
 ]
 
