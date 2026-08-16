@@ -1,0 +1,38 @@
+{
+  "company": "Greater London Authority",
+  "role": "User Researcher",
+  "slug": "gla-user-researcher",
+  "location": "London",
+  "url": "https://london-gov.jobs2web.com/glaopdc/job/Union-Street-User-Researcher/1363189155/",
+  "cv": "/uploads/base-resume.pdf",
+  "eeo": true,
+  "credential_site": "career55.sapsf.eu",
+  "fill_from_defaults": {
+    "First Name": "First name",
+    "Last Name": "Last name",
+    "Email Address": "Email",
+    "Mobile Number": "Phone",
+    "House/Flat Name/Number": "Address line 1",
+    "Address Line 2": "City",
+    "City": "City",
+    "Post code": "Postal"
+  },
+  "fill": {
+    "What are your salary expectations for the role?": "£52,305 — the advertised salary for this Grade 8 role"
+  },
+  "picklists": {
+    "Employment Status": "External (Not applicable)",
+    "first hear about our employment opportunities": "GLA External Vacancies page",
+    "previously worked for Greater London Authority": "No",
+    "previously dismissed or resigned": "No",
+    "convicted of any criminal offences": "No",
+    "immigration sponsorship to work in the UK": "No",
+    "Disability Confident": "No",
+    "Adjustments": "No"
+  },
+  "picklists_from_applicant": {
+    "Faith / Religion": "religion",
+    "caring responsibilities": "caring_responsibilities"
+  },
+  "already_on_form": true
+}

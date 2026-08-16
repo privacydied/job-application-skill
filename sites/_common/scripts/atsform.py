@@ -341,6 +341,26 @@ def fill(label, value, quiet_notfound=False):
         cfx.post(f"/tabs/{cfx._tab()}/type",
                  {"userId": cfx._uid(), "selector": sel, "text": value, "mode": "fill"})
     except cfx.CfxError as e:
+        # ⛔ A 500 FROM /type IS NOT THE END OF THE ROAD (2026-08-16). This used to return 1
+        # immediately — even though the native-value-setter fallback below (_REACT_SET) was
+        # sitting right there, reachable only when /type SUCCEEDED but the value failed to
+        # stick. So the engine gave up in exactly the case where it still had a working move.
+        # SAP SuccessFactors exposed it: its field ids contain COLONS ("385:_txtFld"), and the
+        # /type endpoint 500s on them, so six of nine fields failed and the whole GLA
+        # application aborted at the CV step with everything blank. The setter path does not
+        # care about the endpoint and filled them all. Try it before failing.
+        print(f"  fill {label!r}: /type failed ({str(e)[:60]}) — trying the native setter")
+        try:
+            cfx.evaluate(_REACT_SET.replace("__SEL__", _js(sel)).replace("__VAL__", _js(value)))
+            got0 = cfx.poll(_read, predicate=lambda r: isinstance(r, str) and (
+                r.strip() == value.strip() or (bool(alnum(value)) and alnum(r) == alnum(value))),
+                timeout=1.2, interval=0.1)
+            if isinstance(got0, str) and (got0.strip() == value.strip()
+                                          or (bool(alnum(value)) and alnum(got0) == alnum(value))):
+                print(f"OK fill {label!r} via native setter ({len(value)} chars)")
+                return 0
+        except cfx.CfxError:
+            pass
         print(f"FAIL fill: {e}")
         return 1
     # B.3: poll until the value lands instead of a blind sleep(0.3) then one read —
@@ -1109,6 +1129,14 @@ def select(label, option, quiet_notfound=False, strict=False):
 # as a retry when the profile's canonical wording finds no option (see set_radio). Keep these
 # strictly equivalent: anything that would BROADEN or change the answer does not belong here.
 _OPTION_SYNONYMS = {
+    # GLA/SuccessFactors spells the mixed-ethnicity bucket "Mixed/Multiple ethnic groups -
+    # Any other Mixed/Multiple ethnic background"; the census wording in apply-defaults is
+    # "Mixed or Multiple ethnic groups". Without this pair fill_eeo fell back to committing
+    # free text, which is not a selectable option and never persists (2026-08-16).
+    "mixed or multiple ethnic groups": [
+        "Mixed/Multiple ethnic groups - Any other Mixed/Multiple ethnic background",
+        "Mixed/Multiple ethnic groups", "Any other Mixed/Multiple ethnic background"],
+
     "heterosexual": ["Straight", "Heterosexual/Straight"],
     "straight": ["Heterosexual", "Heterosexual/Straight"],
     "male": ["Man"],
