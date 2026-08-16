@@ -491,7 +491,7 @@ def _run_funnel(target=None, no_screen=False, screen_limit=40, force=False,
     # screening (jd.screen_one) runs IN-PROCESS and navigates via cfx, which reads CFX_TAB
     # from os.environ. A first cut that only passed `env=` to the feeds still walked the apply
     # tab away — from the SCREEN phase instead of the source phase (caught live: the tab landed
-    # on a SumUp/Greenhouse JD mid-application). So rebind os.environ['CFX_TAB'] for the whole
+    # on a SumUp/Greenhouse JD mid-application). So rebind the CFX tab env var for the whole
     # run and restore it in `finally`, which covers both phases with one mechanism.
     # The tab swap itself is owned by run() (the wrapper below), so it spans BOTH the
     # sourcing loop here and the in-process JD screening in step 4.
@@ -649,44 +649,38 @@ def _run_funnel(target=None, no_screen=False, screen_limit=40, force=False,
     return result, 0
 
 
-def run(*args, own_tab=False, **kwargs):
-    """Public funnel entrypoint — owns the `--own-tab` lifecycle, then delegates to
-    `_run_funnel` (which holds the actual sourcing→screening logic, unchanged).
+def run(target=None, no_screen=False, screen_limit=40, force=False,
+        only_boards=None, out_path=None, now=None, min_queue=0, http_concurrent=False,
+        http_workers=6, own_tab=False):
+    """Public funnel entrypoint — the same signature callers and SKILL.md have always relied
+    on (apply_queue.py / warm_queue.py call this by keyword, and TestNoHandRolledFunnel pins
+    the parameter names). It owns the `--own-tab` lifecycle and then delegates to
+    `_run_funnel`, which holds the sourcing→screening logic unchanged.
 
-    WHY A WRAPPER RATHER THAN A FLAG INSIDE THE FUNNEL. The tab swap has to span BOTH phases
-    that touch the browser: the sourcing subprocesses (which inherit `os.environ`) and step
-    4's JD screening (`jd.screen_one`, which runs IN-PROCESS and reads `CFX_TAB` from
-    `os.environ`). A first cut passed `env=` only to the feeds and still walked the apply tab
-    away — from the SCREEN phase instead of the source phase. Owning it here gives one open,
-    one restore, and one close on EVERY exit path, including an exception mid-screen: leaking
-    a tab would also leave `CFX_TAB` pointing at it, and camofox strands a run past ~8 open
-    tabs, so a leak here eventually wedges the whole loop."""
+    The tab swap has to span BOTH phases that touch the browser: the sourcing subprocesses
+    (which inherit the environment) and step 4's JD screening (jd.screen_one, in-process). A
+    first cut passed `env=` only to the feeds and still walked the apply tab away — from the
+    SCREEN phase instead of the source phase. `cfx.own_tab()` performs the swap, restore and
+    close in one place; it lives in cfx.py because tab resolution is that module's job.
+    """
+    kw = dict(target=target, no_screen=no_screen, screen_limit=screen_limit, force=force,
+              only_boards=only_boards, out_path=out_path, now=now, min_queue=min_queue,
+              http_concurrent=http_concurrent, http_workers=http_workers)
     if not own_tab:
-        return _run_funnel(*args, **kwargs)
-    prev_tab = os.environ.get("CFX_TAB")
-    tab_id = None
+        return _run_funnel(**kw)
     try:
-        tab_id = cfx.open_tab()
+        with cfx.own_tab() as tab_id:
+            print(f"  sourcing+screening on its OWN tab {tab_id[:8]}… (apply tab untouched)",
+                  file=sys.stderr)
+            os.environ["_PIPELINE_OWN_TAB"] = tab_id
+            try:
+                return _run_funnel(**kw)
+            finally:
+                os.environ.pop("_PIPELINE_OWN_TAB", None)
     except Exception as e:  # noqa: BLE001 — degrade to the shared tab, the old behaviour
         print(f"  --own-tab: could not open a sourcing tab ({str(e)[:60]}); "
               f"falling back to the shared tab", file=sys.stderr)
-        return _run_funnel(*args, **kwargs)
-    os.environ["CFX_TAB"] = tab_id
-    os.environ["_PIPELINE_OWN_TAB"] = tab_id
-    print(f"  sourcing+screening on its OWN tab {tab_id[:8]}… "
-          f"(apply tab {(prev_tab or '?')[:8]}… untouched)", file=sys.stderr)
-    try:
-        return _run_funnel(*args, **kwargs)
-    finally:
-        os.environ.pop("_PIPELINE_OWN_TAB", None)
-        if prev_tab is not None:
-            os.environ["CFX_TAB"] = prev_tab
-        else:
-            os.environ.pop("CFX_TAB", None)
-        try:
-            cfx.close_tab(tab_id)
-        except Exception:  # noqa: BLE001
-            pass
+        return _run_funnel(**kw)
 
 
 def main():

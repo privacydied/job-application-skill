@@ -26,6 +26,7 @@ Env: `CFX_KEY` (required), `CFX_TAB` (required for tab actions), `CFX_USER`
 applications): `CFX_NO_PACING`, `CFX_NO_REFERER`.
 """
 import json
+import contextlib
 import os
 import random
 import socket
@@ -730,6 +731,42 @@ def get(path: str, params: dict = None, timeout: int = 15, tries: int = 2) -> di
 def delete(path: str, params: dict = None, timeout: int = 15, tries: int = 2) -> dict:
     """DELETE from the camofox REST API (idempotent → bounded retry, B.5)."""
     return _read_method("DELETE", path, params, timeout, tries)
+
+
+@contextlib.contextmanager
+def own_tab(session_key: str = None):
+    """Run a block on a FRESH tab of its own, then restore the caller's CFX_TAB and close it.
+
+    WHY THIS LIVES HERE. Tab resolution is cfx's job — `tests/test_core.py::TestCodebaseInvariants
+    ::test_no_raw_cfx_tab_env_read` forbids every other module from touching
+    os.environ['CFX_TAB'], because a raw read KeyErrors straight past `except cfx.CfxError`.
+    pipeline.py needs exactly this swap for `--own-tab` (so a background sourcing run cannot
+    navigate the APPLY tab away mid-application), so the swap belongs in the accessor module
+    rather than open-coded at the call site.
+
+    Rebinding os.environ is deliberate and is what makes it work for BOTH halves of a sourcing
+    run: the feed subprocesses inherit the environment, and the in-process JD screening
+    (jd.screen_one) reads CFX_TAB through this module. Always restores and closes, including on
+    an exception — camofox strands a run past ~8 open tabs, so a leaked tab eventually wedges
+    everything.
+
+        with cfx.own_tab():
+            ...          # every navigation in here happens on the temporary tab
+    """
+    prev = os.environ.get("CFX_TAB")
+    tab_id = open_tab(session_key=session_key)
+    os.environ["CFX_TAB"] = tab_id
+    try:
+        yield tab_id
+    finally:
+        if prev is not None:
+            os.environ["CFX_TAB"] = prev
+        else:
+            os.environ.pop("CFX_TAB", None)
+        try:
+            close_tab(tab_id)
+        except Exception:  # noqa: BLE001 — a tab we cannot close must not mask the real error
+            pass
 
 
 def close_tab(tab_id: str) -> dict:
