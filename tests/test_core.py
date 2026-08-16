@@ -3810,6 +3810,37 @@ class TestAuditedWidgetInvariants(unittest.TestCase):
                       "refuse to sign an anti-AI oath")
 
 
+class TestHearAboutOptionMakesNoClaim(unittest.TestCase):
+    """A "how did you hear about us" option is not neutral when it names an affiliation.
+    Jane Street's list is University job board / Employee referral / LinkedIn / Other; the
+    fallback pattern `job ?board` matched the UNIVERSITY one, so a submitted application says
+    he heard about the role via a university board. He is not a student — the same form
+    recorded "Are you currently a student? No" three lines later in the log."""
+
+    def _pick(self, labels):
+        sys.path.insert(0, os.path.join(os.path.dirname(_HERE), "scripts"))
+        from gen_gh_config import pick_option
+        return pick_option([{"label": l} for l in labels], "Job Board")
+
+    def test_affiliated_options_are_never_selected(self):
+        for labels in (["University job board", "Employee referral", "LinkedIn", "Other"],
+                       ["Alumni network", "Student job board", "Other"],
+                       ["Veteran job board", "Diversity job board", "Other"]):
+            got = self._pick(labels)
+            self.assertNotRegex(str(got), r"(?i)universit|alumni|student|veteran|diversity|"
+                                          r"referral")
+
+    def test_falls_through_rather_than_claim(self):
+        # Only affiliated options plus LinkedIn (which this run cannot honestly claim) -> None,
+        # which leaves the field unanswered and asks for a human.
+        self.assertIsNone(self._pick(["University job board", "LinkedIn"]))
+
+    def test_truthful_options_still_win_in_order(self):
+        self.assertEqual(self._pick(["Company website", "Job board", "LinkedIn"]),
+                         "Company website")
+        self.assertEqual(self._pick(["University job board", "Job board"]), "Job board")
+
+
 class TestScreenerPolarityGuard(unittest.TestCase):
     """The bank is substring-matched and was completely polarity-blind, so an INVERTED
     phrasing of a known question received the known answer — the opposite of the truth.

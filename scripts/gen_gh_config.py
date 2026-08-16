@@ -144,10 +144,28 @@ def pick_option(values, want):
         # postings were sourced from the employer's own ATS board), then a generic job board,
         # then LinkedIn, then Other. Never leave it to a blind substring match, which would
         # happily pick "Facebook".
+        # ⛔ AN OPTION CAN CARRY A CLAIM (2026-08-16 — submitted before this existed). The
+        # `job ?board` pattern matched Jane Street's "University job board", so the
+        # application states he heard about the role through a university board. He is not a
+        # student — the SAME form recorded "Are you currently a student? No" three lines
+        # later. A "how did you hear" option is not neutral when it names an affiliation:
+        # university/alumni/veteran/diversity boards all assert something about the applicant.
+        # Drop any option carrying such a qualifier before matching, and if only qualified
+        # ones remain, fall through rather than pick one.
+        affiliated = re.compile(r"universit|college|school|campus|alumni|student|"
+                                r"veteran|military|bootcamp|diversity|women|hbcu|"
+                                r"employee referral|referral", re.I)
+        neutral = [l for l in labels if not affiliated.search(l)]
+        # Order is by what is actually TRUE of how this run finds work: the employer's own
+        # ATS board (job-boards.greenhouse.io IS the company's careers site), then a generic
+        # job board, then "Other". `linkedin` used to sit in this chain and was dropped
+        # (2026-08-16): the run cannot know the posting came from LinkedIn — most did not —
+        # so selecting it states a specific sourcing channel that is simply not the case.
+        # Small as that is, it is the same kind of untruth as the university-board pick.
         for pat in (r"career site|careers? page|company (web)?site|our website|jobs page",
                     r"job ?board|job ?site|other job",
-                    r"linkedin", r"^other$"):
-            for l in labels:
+                    r"^other$"):
+            for l in neutral:
                 if re.search(pat, l, re.I):
                     return l
         return None
