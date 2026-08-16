@@ -492,6 +492,22 @@ def prune_tabs(budget: int = None, keep: str = None) -> list:
     """Close the OLDEST stale managed tabs so a subsequent open won't cross `budget` and
     wedge the backend. Never closes `keep` (defaults to the current CFX_TAB — the tab the
     run is using) and never touches a tab it can't identify. Returns the closed ids.
+    ⚠️ CONCURRENCY HAZARD, MEASURED 2026-08-16 — READ BEFORE RELYING ON THIS.
+    `keep` defaults to the CALLER's CFX_TAB, so it protects only the tab of the process that
+    happens to call it. Any OTHER process's tab is fair game and, being older, is reaped
+    first. Running `cfx.py ensure-tab` from a shell while a background drive holds its own tab
+    will therefore kill that drive's tab mid-application ("HTTP 404 Tab not found").
+
+    That happened four times in one session, as a self-reinforcing loop: a drive lost its tab,
+    I ran ensure-tab to recover, which reaped the NEXT drive's tab, and so on. Each loss
+    abandoned a part-filled application.
+
+    Not fixed here on purpose: changing tab lifecycle while runs are live is exactly the kind
+    of late change that causes worse problems than it solves. The right fix is an active-tab
+    registry (drivers record their tab id + a heartbeat; prune skips anything fresh) rather
+    than a single `keep`. Until then: do not run ensure-tab while a drive is in flight — use
+    `ps -p <pid>` to check first.
+
     Best-effort: any list/close hiccup is swallowed (a prune must never break the caller).
     The backend lists tabs in creation order, so reaping from the front drops the stalest
     (an abandoned warm/scratch tab) and keeps the freshest. Called by ensure_tab before it
