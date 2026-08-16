@@ -661,6 +661,10 @@ def main():
         print(f"APPLIED_OK {company} {role} proof={proof_png}")
         return 0
     print(f"SUBMIT_NO_CONFIRM {company} {role} — logging Blocked")
+    # Bound BEFORE the try: the note-builder below reads both, and if cfx.evaluate throws (dead
+    # tab mid-drain is routine) they would otherwise be undefined — turning a logged Blocked row
+    # into a NameError crash, i.e. losing the row entirely at the exact moment it matters most.
+    parsed, dbg_path = [], ""
     try:
         # ⛔ DUMP THE ERRORS, NOT THE FIRST 3000 CHARS OF THE PAGE (2026-08-16). This used to
         # take document.body.innerText[:3000], which on a Greenhouse posting is the JOB
@@ -703,8 +707,25 @@ def main():
         print(f"  DEBUG_TEXT_SAVED {dbg_path} ({len(dbg)} chars)")
     except Exception as e:  # noqa: BLE001
         print(f"  DEBUG_ERR {e}")
-    _log(company, role, "Greenhouse", url, "Blocked",
-         note="submit returned no confirmation (verification code gap or required field)", proof=None)
+    # ⛔ PUT THE ACTUAL BLOCKER IN THE TRACKER NOTE (2026-08-16). This used to log the fixed
+    # string "submit returned no confirmation (verification code gap or required field)" —
+    # which names both possibilities and therefore neither — while `parsed` (immediately above)
+    # already held the exact failing field labels scraped off the page. The cost is not
+    # cosmetic: 76 of 140 Blocked rows carry no usable reason, so nothing downstream can tell a
+    # retryable row from a terminal one. A retry pool built on those rows re-drove three Twilio
+    # reqs that need an oath the applicant must sign himself, and a GoFundMe req already
+    # diagnosed after three attempts as needing his own browser — every one a wasted turn on the
+    # single serial tab. A Blocked row has to explain itself, or it will be re-driven forever.
+    fields = []
+    for line in (parsed or []):
+        lab = line.split("  ==> ")[0].strip()
+        if lab and lab not in fields:
+            fields.append(lab[:60])
+    note = ("submit blocked by required/invalid field(s): " + "; ".join(fields[:6])) if fields \
+        else "submit returned no confirmation (no error nodes on the page — see submit-blocked.txt)"
+    if dbg_path:
+        note += f" | evidence: {os.path.relpath(dbg_path, _ROOT)}"
+    _log(company, role, "Greenhouse", url, "Blocked", note=note[:500], proof=None)
     return 5
 
 
