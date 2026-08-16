@@ -8,11 +8,5 @@
   "eeo": true,
   "fill": {
     "What about the mission of Dotmatics inspires you most": "@runcfg/answers/dotmatics-mission.txt"
-  },
-  "combo": {
-    "Country": "United Kingdom"
-  },
-  "radios": {
-    "currently an employee of Dotmatics": "No"
   }
 }

@@ -78,6 +78,19 @@ const COMBO_INPUT_HTML = `
     <input type="text" id="rtw" role="combobox" aria-autocomplete="list">
   </div>`;
 
+
+const PLACEHOLDER_HTML = `
+  <div><label>Are you currently an employee of Dotmatics?*</label>
+    <div class="select__control"><div class="select__placeholder">Select...</div>
+      <input role="combobox"></div></div>`;
+
+const DUP_LABEL_HTML = `
+  <div><span>Country*</span>
+    <div class="select__control"><div class="select__singleValue">+44</div>
+      <input role="combobox"></div></div>
+  <div><span>Country*</span>
+    <div class="select__control"><input role="combobox"></div></div>`;
+
 (async () => {
   const browser = await chromium.connect('ws://localhost:3006/', { timeout: 15000 });
   const page = await browser.newPage();
@@ -139,6 +152,39 @@ const COMBO_INPUT_HTML = `
   t('_UNANSWERED keeps combobox inputs out of texts (essay still listed)',
     textsHaveCombo === false && textsHaveEssay === true,
     `texts=${JSON.stringify(un.texts)}`);
+
+
+  // 6. Two controls sharing a label: Dotmatics' Greenhouse form has TWO "Country*" — the
+  //    phone dialling code (filled) and the application's own Country (empty, required).
+  //    Deduping by label dropped the second entirely, and label-resolution returns the first,
+  //    so the required field could never be filled. Each unanswered combo now carries its own
+  //    selector.
+  await page.setContent(DUP_LABEL_HTML);
+  const un2 = JSON.parse(await page.evaluate(js.UNANSWERED));
+  const combos = un2.combos || [];
+  const hasSel = combos.length === 1 && typeof combos[0] === 'object' && !!combos[0].sel;
+  let resolvesToEmpty = false;
+  if (hasSel) {
+    resolvesToEmpty = await page.evaluate(sel => {
+      const c = document.querySelector(sel);
+      return !!c && !c.querySelector('[class*="singleValue"]');
+    }, combos[0].sel);
+  }
+  t('unanswered combo carries its own selector, pointing at the EMPTY duplicate',
+    hasSel && resolvesToEmpty,
+    `combos=${JSON.stringify(combos)} resolvesToEmpty=${resolvesToEmpty}`);
+
+
+  // 7. An EMPTY react-select renders "Select...", so the first ancestor with text is the
+  //    control itself — the walk returned q="Select..." for every unanswered dropdown and the
+  //    bank matched nothing. Measured live on Dotmatics: "0 answered, 7 unknown" on a form
+  //    where all 7 answers were banked.
+  await page.setContent(PLACEHOLDER_HTML);
+  const un3 = JSON.parse(await page.evaluate(js.UNANSWERED));
+  const q3 = (un3.combos && un3.combos[0]) ? (un3.combos[0].q || un3.combos[0]) : '';
+  t('unanswered combo reports the QUESTION, not the "Select..." placeholder',
+    /employee of Dotmatics/i.test(q3) && !/^select\.\.\.$/i.test(q3),
+    `q=${JSON.stringify(q3)}`);
 
   await browser.close();
 

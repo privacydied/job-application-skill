@@ -2095,6 +2095,7 @@ _UNANSWERED = r"""
   // answer belonging to a different question. gh_apply and lever both run this pass more
   // than once per form (before the review screenshot, and again after a re-render).
   document.querySelectorAll('[data-ats-gap]').forEach(e => e.removeAttribute('data-ats-gap'));
+  document.querySelectorAll('[data-ats-combo]').forEach(e => e.removeAttribute('data-ats-combo'));
   for (const i of document.querySelectorAll(
       'input[type=text],input[type=email],input[type=tel],input[type=number],input[type=url],textarea')) {
     if (i.name === 'g-recaptcha-response' || i.value) continue;
@@ -2137,14 +2138,36 @@ _UNANSWERED = r"""
   const seenCombo = new Set();
   for (const ctrl of document.querySelectorAll('[class*="select__control"],[class*="-control"]')) {
     if (ctrl.querySelector('[class*="singleValue"],[class*="multi-value"],[class*="multiValue"]')) continue;
+    // ⛔ CLIMB PAST THE CONTROL'S OWN TEXT (2026-08-16). An EMPTY react-select renders the
+    // placeholder "Select...", so the first ancestor with text is the control itself and this
+    // walk returned q = "Select..." for every unanswered dropdown. screener.lookup("select...")
+    // matches nothing, so the bank reported "0 answered, N unknown" on a form where it held
+    // every answer — measured live on Dotmatics: 7 unknown, all 7 banked. The bank has
+    // therefore never been able to answer a Greenhouse dropdown whose label sits above the
+    // control, which is most of them. Same defect set_radio (qtext) and the text branch were
+    // each fixed for; the combo branch was missed both times. Subtract the control's own text
+    // before judging an ancestor, exactly as those do.
+    const own = clean(ctrl.innerText);
     let box = ctrl, q = '';
-    for (let k = 0; k < 5 && box; k++) { box = box.parentElement;
+    for (let k = 0; k < 6 && box; k++) { box = box.parentElement;
       if (!box) break;
-      const t = clean(box.innerText);
-      if (t && t.length < 220) { q = t; break; } }
-    if (!q || seenCombo.has(q)) continue;
-    seenCombo.add(q);
-    out.combos.push(q.slice(0, 220));
+      let t = clean(box.innerText);
+      if (!t || t.length >= 220) continue;
+      if (own) { const stripped = t.split(own).join(' ').replace(/\s+/g, ' ').trim();
+                 if (stripped.length < 3) continue; t = stripped; }
+      q = t; break; }
+    if (!q) continue;
+    // ⛔ TAG THE CONTROL, AND DO NOT DEDUPE BY LABEL (2026-08-16). Two fields can share a
+    // label: Dotmatics' Greenhouse form has TWO marked "Country*" — the phone dialling-code
+    // selector (already "+44") and the application's own Country question (empty, required).
+    // Reporting only the question TEXT meant the filler called combobox_pick("Country"),
+    // which resolves to the FIRST match — the phone one — so the required field stayed empty
+    // and the submit bounced on "This field is required." with no indication which field.
+    // `seenCombo` made it worse by dropping the second one from the list entirely.
+    // Text fields were given per-element addressing (data-ats-gap) for exactly this reason;
+    // comboboxes never were. Same fix: mark the control and let the filler address IT.
+    ctrl.setAttribute('data-ats-combo', String(out.combos.length));
+    out.combos.push({q: q.slice(0, 220), sel: '[data-ats-combo="' + out.combos.length + '"]'});
   }
   const groups = {};
   for (const r of document.querySelectorAll('input[type=radio]')) (groups[r.name] ||= []).push(r);
@@ -2224,7 +2247,11 @@ def fill_gaps_from_bank():
             filled += 1
         else:
             skipped += 1
-    for q in data.get("combos", []):
+    for entry in data.get("combos", []):
+        # entry is {q, sel} since 2026-08-16 (per-element addressing); tolerate the old
+        # bare-string shape so a stale cached payload cannot crash a live run.
+        q = entry.get("q") if isinstance(entry, dict) else entry
+        sel = entry.get("sel") if isinstance(entry, dict) else None
         hit = screener.lookup(q)
         if not hit:
             skipped += 1
@@ -2232,7 +2259,13 @@ def fill_gaps_from_bank():
         # combobox_pick only ever selects an option that MATCHES, so a banked value that is
         # wrong for this widget simply finds nothing and the field stays empty (closed-set
         # rule) — never a guessed selection.
-        if combobox_pick(q, hit["answer"], quiet_notfound=True) == 0:
+        # Address the marked CONTROL, not the label — two fields can share a label and
+        # label-resolution returns the first, which may be a different (already-answered)
+        # field. Fall back to the label only if the marker is somehow gone.
+        rc_combo = combobox_pick(sel, hit["answer"], quiet_notfound=True) if sel else NOTFOUND
+        if rc_combo != 0:
+            rc_combo = combobox_pick(q, hit["answer"], quiet_notfound=True)
+        if rc_combo == 0:
             print(f"  bank combo: {q[:52]!r} <- {hit['answer'][:40]!r} ({hit['source']})")
             filled += 1
         else:
