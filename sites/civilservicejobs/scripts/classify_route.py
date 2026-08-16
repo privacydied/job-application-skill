@@ -40,7 +40,14 @@ import cfx  # noqa: E402
 # "Apply at advertiser's site" is the hand-off marker. Keep this narrow: the phrase appears in
 # the apply block, and a looser match ("advertiser") would also hit unrelated boilerplate.
 _EXTERNAL = re.compile(r"apply at advertiser|advertiser'?s? (own )?site|apply on the .{0,30}website", re.I)
-_CLOSED = re.compile(r"no longer (available|accepting)|vacancy has closed|closed for applications", re.I)
+# CSJ's real wording for a dead advert is "Cannot view job / This job has closed or been
+# withdrawn" — the first version of this regex missed it, so closed vacancies came back
+# as `unknown` (verified on DBT SOC Analyst 2006355 and OFGEM Snr Digital BA 2005969).
+# NB the same "Cannot view job" page is also the SID-expiry symptom documented in NOTES.md,
+# but reached via a stable jobs.cgi?jcode= URL it means the vacancy really is gone.
+_CLOSED = re.compile(r"no longer (available|accepting)|vacancy has closed|"
+                    r"closed for applications|cannot view job|"
+                    r"has closed or been withdrawn", re.I)
 _APPLY_NOW = re.compile(r"\bapply now\b", re.I)
 
 
