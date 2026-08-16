@@ -36,6 +36,7 @@ Exit: 0 applied · 1 needs a human (unanswerable required field) · 2 config/nav
 """
 import json
 import os
+import re
 import sys
 import time
 
@@ -254,7 +255,14 @@ def main():
     body = _ev("document.body?document.body.innerText:''") or ""
     ok = any(k in body.lower() for k in ("thank you for applying", "application received",
                                          "successfully submitted", "your application has been"))
-    slug = cfg.get("slug") or "sf-application"
+    # ⛔ THE PROOF DIR MUST MATCH close_out.py's COMPANY+ROLE SLUG (2026-08-16). Writing proof
+    # under a short hand-picked slug ("gla-user-researcher") while close_out looks for
+    # "greater-london-authority-user-researcher" makes a REAL, confirmed submission reconcile as
+    # NO_ARTIFACT — the under-reporting failure SKILL.md calls the dangerous one, because the
+    # row reads as a failure and gets re-driven. Derive it the same way close_out does.
+    slug = cfg.get("slug") or re.sub(r"[^a-z0-9]+", "-",
+                                     f"{cfg.get('company','')} {cfg.get('role','')}".lower()
+                                     ).strip("-")[:70] or "sf-application"
     appdir = os.path.join(_ROOT, "applications", slug)
     os.makedirs(appdir, exist_ok=True)
     shot = os.path.join(appdir, "confirmation.png" if ok else "submit-attempt.png")

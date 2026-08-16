@@ -1,7 +1,7 @@
 {
   "company": "Greater London Authority",
   "role": "User Researcher",
-  "slug": "gla-user-researcher",
+  "slug": "greater-london-authority-user-researcher",
   "location": "London",
   "url": "https://london-gov.jobs2web.com/glaopdc/job/Union-Street-User-Researcher/1363189155/",
   "cv": "/uploads/base-resume.pdf",
@@ -33,6 +33,5 @@
   "picklists_from_applicant": {
     "Faith / Religion": "religion",
     "caring responsibilities": "caring_responsibilities"
-  },
-  "already_on_form": true
+  }
 }
