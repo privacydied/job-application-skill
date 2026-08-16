@@ -159,15 +159,25 @@ _RESOLVE = r"""
     // if nothing qualifies, resolve to nothing so the caller skips rather than guesses.
     const fillable = 'input:not([type=hidden]):not([type=submit]):not([type=button])'
                    + ':not([type=reset]):not([type=image]),textarea,select';
-    let b = el;
+    // ⛔ PREFER a single-control ancestor, but do NOT return nothing (regression fixed
+    // 2026-08-16, same day). Returning '' when no ancestor holds exactly one control traded
+    // "bind the wrong field" for "bind NO field", and the commonest layout in existence —
+    // First Name and Last Name side by side in one row — is exactly that shape. Live cost on
+    // Proton: "defaults: 9 entries skipped (no matching field on this form)" while the form
+    // was simultaneously refusing to submit for want of First Name and Last Name.
+    // Keep the preference (it is what stops one Lever card's two textareas colliding), but
+    // fall back to the nearest text-bearing ancestor rather than giving up entirely.
+    let b = el, fallback = '';
     for (let k = 0; k < 5 && b; k++) {
       b = b.parentElement;
       if (!b) break;
       const t = (b.innerText || '').trim();
       if (!t || t.length >= 400) continue;   // empty, or so large it's the whole form
+      if (!fallback) fallback = t;           // remember the first usable ancestor
       if (b.querySelectorAll(fillable).length > 1) continue;  // describes a group, not this one
-      return t;
+      return t;                              // precise: this ancestor describes ONE control
     }
+    if (fallback) return fallback;
     // LAST resort only. A placeholder is frequently generic filler — Lever's card inputs all
     // say "Type your response" — so preferring it over the ancestor text would make every
     // custom question on the form resolve to the SAME meaningless string.
