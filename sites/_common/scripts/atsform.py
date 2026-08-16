@@ -2340,7 +2340,13 @@ def apply(config_path, do_submit=False):
         if hit and precheck.is_applied(hit[0]):
             print(f"SKIP_ALREADY_APPLIED {cfg.get('company')} | {cfg.get('role')} — "
                   f"tracker={hit[0]} (matched {hit[1]}). Pass \"force\": true to re-drive.")
-            return 0
+        # ⛔ NOT rc=0 (2026-08-16). Returning the SUCCESS code for a posting we did not
+        # apply to made apply_queue tally it under `applied`: drain23 reported
+        # "applied: 1" with ZERO real submissions, the count coming entirely from one
+        # already-applied Saviynt row. That is the count-integrity failure SKILL.md
+        # warns about, arriving through the tally instead of the tracker. rc=6 =
+        # "skipped, already applied": not a success, not a failure.
+            return 10
 
     import contextlib
     import io as _io

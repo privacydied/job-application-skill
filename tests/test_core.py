@@ -3810,6 +3810,41 @@ class TestAuditedWidgetInvariants(unittest.TestCase):
                       "refuse to sign an anti-AI oath")
 
 
+class TestDuplicateIsNotAnApplication(unittest.TestCase):
+    """Every driver's apply-time dedup guard returned rc=0 — the SUCCESS code — for a posting
+    it deliberately did NOT submit, so apply_queue tallied it under `applied`. drain23
+    reported "applied: 1" while its log contained ZERO APPLIED_OK lines; the whole count was
+    one already-applied Saviynt row. The headline number is what this run is judged on, so a
+    tally that counts non-events is worse than no tally."""
+
+    DRIVERS = ("sites/greenhouse/scripts/gh_apply.py", "sites/lever/scripts/lever.py",
+               "sites/ashbyhq/scripts/ashby.py", "sites/_common/scripts/atsform.py")
+
+    def _src(self, rel):
+        with open(os.path.join(os.path.dirname(_HERE), rel), encoding="utf-8") as f:
+            return f.read()
+
+    def test_dedup_guard_does_not_return_success(self):
+        for rel in self.DRIVERS:
+            src = self._src(rel)
+            i = src.find("SKIP_ALREADY_APPLIED")
+            if i < 0:
+                i = src.find("SKIP already applied")
+            self.assertGreater(i, 0, f"{rel} has no apply-time dedup guard")
+            window = src[i:i + 700]
+            self.assertIn("return 10", window,
+                          f"{rel}: the dedup guard must return 10 (skipped-duplicate), "
+                          f"never 0 — rc=0 is counted as an APPLICATION")
+
+    def test_queue_counts_10_as_skip_not_applied(self):
+        src = self._src("scripts/apply_queue.py")
+        self.assertIn("skipped_duplicate", src)
+        # and it must not be mistaken for a rate-limit signal
+        self.assertIn("(0, 5, 10)", src,
+                      "rc=10 must join the non-failure set, or re-seeing known postings "
+                      "would trip the LinkedIn cooldown")
+
+
 class TestRegionRestrictedRemote(unittest.TestCase):
     """A remote role restricted to another country is as unreachable as an onsite one abroad:
     the right-to-work answer is the same "no". The gate used to pass these, so the apply lane

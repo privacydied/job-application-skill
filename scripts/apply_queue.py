@@ -493,7 +493,10 @@ def main():
         # with LinkedIn's daily cap, but `ratelimit.detect()` reads whatever page is open — on a
         # hard-board failure that could trip the cooldown and BREAK the whole drain off one
         # unrelated posting.
-        if ats not in HARD_BOARD_ATS and (rc == 8 or (rc not in (0, 5) and ratelimit.detect(cfx))):
+        # rc=10 (already applied) joins 0/5 as a NON-failure: it must not be read as evidence
+        # of a rate limit, or a run that merely re-encountered known postings would trip the
+        # LinkedIn cooldown and defer the rest of the queue for nothing.
+        if ats not in HARD_BOARD_ATS and (rc == 8 or (rc not in (0, 5, 10) and ratelimit.detect(cfx))):
             until = ratelimit.trip()
             ratelimit.defer(r)
             rate_limited = True
@@ -502,6 +505,14 @@ def main():
             break
         if rc == 0:
             tally["applied"] += 1
+        elif rc == 10:
+            # ⛔ A DUPLICATE IS NOT AN APPLICATION (2026-08-16). Every driver's apply-time
+            # dedup guard used to `return 0` — the SUCCESS code — so a posting we deliberately
+            # did NOT submit landed in `applied`. drain23 reported "applied: 1" with zero
+            # APPLIED_OK lines in its log: the entire count was one already-applied Saviynt
+            # row. The headline number is the thing this whole run is judged on, so a tally
+            # that counts non-events is worse than no tally.
+            tally["skipped_duplicate"] = tally.get("skipped_duplicate", 0) + 1
         elif rc == 5:
             tally["dry_ok"] += 1
         elif rc == 7:

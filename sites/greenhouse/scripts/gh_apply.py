@@ -294,7 +294,13 @@ def main():
         hit = precheck.already_applied(url=url, company=company, role=role)
         if hit and precheck.is_applied(hit[0]):
             print(f"SKIP_ALREADY_APPLIED {company} | {role} — tracker={hit[0]} (matched {hit[1]})")
-            return 0
+        # ⛔ NOT rc=0 (2026-08-16). Returning the SUCCESS code for a posting we did not
+        # apply to made apply_queue tally it under `applied`: drain23 reported
+        # "applied: 1" with ZERO real submissions, the count coming entirely from one
+        # already-applied Saviynt row. That is the count-integrity failure SKILL.md
+        # warns about, arriving through the tally instead of the tracker. rc=6 =
+        # "skipped, already applied": not a success, not a failure.
+            return 10
 
     slug = _slug(company, role)
     appdir = os.path.join(APPS, slug)

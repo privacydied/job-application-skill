@@ -218,7 +218,9 @@ def apply(config_path, do_submit=False):
         try:
             if precheck.already_applied(url, company, role):
                 print(f"SKIP already applied: {company} | {role}")
-                return 0
+                # rc=6, not 0 — see the note in gh_apply: rc=0 made apply_queue
+                # count a SKIPPED duplicate as an application.
+                return 10
         except Exception:  # noqa: BLE001 — a dedup probe must never block a real application
             pass
 
