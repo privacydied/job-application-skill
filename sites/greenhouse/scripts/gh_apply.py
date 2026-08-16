@@ -635,8 +635,21 @@ def main():
     print(f"SUBMIT_NO_CONFIRM {company} {role} — logging Blocked")
     try:
         dbg = cfx.evaluate("document.body?document.body.innerText:''") or ""
-        open("/tmp/gh_debug.txt", "w").write(dbg[:3000])
-        print(f"  DEBUG_TEXT_SAVED /tmp/gh_debug.txt ({len(dbg)} chars)")
+        # ⛔ ONE FIXED PATH MEANS EVERY FAILURE OVERWRITES THE LAST (2026-08-16). A drain
+        # produces many SUBMIT_NO_CONFIRMs, all writing /tmp/gh_debug.txt, so by the time
+        # anyone reads it the contents belong to a DIFFERENT posting. It cost a misdiagnosis
+        # today: investigating why Dotmatics blocked, the dump held SumUp's form. Write the
+        # evidence next to the application it belongs to, and keep a stable path as a
+        # convenience copy of the most recent one.
+        dbg_path = os.path.join(appdir, "submit-blocked.txt") if appdir else "/tmp/gh_debug.txt"
+        with open(dbg_path, "w") as f:
+            f.write(dbg[:3000])
+        try:
+            with open("/tmp/gh_debug.txt", "w") as f:
+                f.write(f"# most recent: {company} | {role}\n" + dbg[:3000])
+        except OSError:
+            pass
+        print(f"  DEBUG_TEXT_SAVED {dbg_path} ({len(dbg)} chars)")
     except Exception as e:  # noqa: BLE001
         print(f"  DEBUG_ERR {e}")
     _log(company, role, "Greenhouse", url, "Blocked",
