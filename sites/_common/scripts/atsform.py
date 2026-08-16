@@ -116,13 +116,27 @@ _RESOLVE = r"""
     // ancestors) and had answers for them, but fill() could never bind one — the bank
     // reported "0 answered" on a form where it knew every answer. Climb until real text
     // appears, exactly like the _UNANSWERED walk, so the two agree on what a field is called.
+    // ⛔ THE ANCESTOR MUST DESCRIBE THIS FIELD ALONE (2026-08-16). The climb used to accept
+    // the first ancestor with any text under 400 chars, with nothing tying that text to THIS
+    // control. When two label-less siblings share a text-bearing wrapper — the documented
+    // Lever `cards[<uuid>][fieldN]` shape, e.g. "Why do you want to work here?" and "Describe
+    // a project you're proud of" in one card — BOTH normalised to the same wrapper blob, both
+    // landed in the same match tier, and `sel(tier[0])` returned the FIRST for both. Filling
+    // the second question therefore OVERWROTE the first question's answer in field #1, and
+    // the round-trip read matched what was just typed so it printed OK: one question answered
+    // with the other's text, the other left empty. An ancestor whose subtree holds more than
+    // one fillable control is describing a GROUP, not this field — keep climbing past it, and
+    // if nothing qualifies, resolve to nothing so the caller skips rather than guesses.
+    const fillable = 'input:not([type=hidden]):not([type=submit]):not([type=button])'
+                   + ':not([type=reset]):not([type=image]),textarea,select';
     let b = el;
     for (let k = 0; k < 5 && b; k++) {
       b = b.parentElement;
       if (!b) break;
       const t = (b.innerText || '').trim();
-      // Stop at the first ancestor with text, but not one so large it's the whole form.
-      if (t && t.length < 400) return t;
+      if (!t || t.length >= 400) continue;   // empty, or so large it's the whole form
+      if (b.querySelectorAll(fillable).length > 1) continue;  // describes a group, not this one
+      return t;
     }
     // LAST resort only. A placeholder is frequently generic filler — Lever's card inputs all
     // say "Type your response" — so preferring it over the ancestor text would make every
@@ -411,9 +425,10 @@ _COMBO_CLICK = r"""
   // appended option over a prefixed country-list entry.
   const esc = t.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
   const wb = new RegExp('(^|[^a-z0-9])' + esc + '([^a-z0-9]|$)');
-  let o = els.find(e => norm(e) === t), best = -1;
+  let o = els.find(e => norm(e) === t), best = -1, nmatch = 0;
   if (!o) for (let ix = els.length - 1; ix >= 0; ix--) {
     const s = norm(els[ix]); if (!wb.test(s)) continue;
+    nmatch++;
     let sc = 0;
     if (s.startsWith(t)) sc += 4;
     const after = s.charAt(s.indexOf(t) + t.length);
@@ -425,8 +440,28 @@ _COMBO_CLICK = r"""
     if (/(^|[^a-z])(uk|gb|united kingdom|great britain|england|scotland|wales|northern ireland)([^a-z]|$)/.test(s)) sc += 6;
     if (sc > best) { best = sc; o = els[ix]; }
   }
-  document.querySelectorAll('[data-ats-target]').forEach(e=>e.removeAttribute('data-ats-target'));
+  // ⛔ DO NOT STRIP THE MARKER BEFORE THE FAILURE RETURN (2026-08-16). This cleanup used to sit
+  // ABOVE the `if (!o)` line, so it ran on the failure path too. The free-text fallback in
+  // _combo_open_and_pick runs ONLY after this returns NO_OPTION — i.e. only ever after the
+  // marker had already been deleted — so _COMBO_FREETEXT_COMMIT never found its target and
+  // fell through to an unscoped `querySelector('input[role=combobox]')`, writing the value
+  // into whatever combobox happened to be FIRST in the document (typically the react-phone
+  // country selector at the top of the form) and reporting OK. The intended field stayed
+  // empty while an unrelated field carried a value the applicant never gave. Strip only on
+  // the success path; the caller clears the marker on failure.
   if (!o) return 'NO_OPTION:'+els.map(e=>(e.textContent||'').replace(/\s+/g,' ').trim()).slice(0,10).join(' | ');
+  // ⛔ STRICT MODE: A BROAD CATEGORY MUST NOT RESOLVE TO A NARROWER SIBLING (2026-08-16).
+  // fill_eeo falls back to the LEADING TOKEN of the profile's value when the full phrasing
+  // finds nothing ("Mixed or Multiple ethnic groups" -> "Mixed"). That is safe only when the
+  // form lists the broad census category as ONE option. When the form instead lists the
+  // sub-categories separately — "Mixed – White and Black Caribbean", "Mixed – White and
+  // Asian", … — every one of them matches the token, and the scorer's shorter-is-better
+  // bonus simply crowns the shortest. The applicant would be recorded as making a SPECIFIC
+  // ancestry claim he never made. When more than one option matches and none matched
+  // exactly, refuse: an unanswered EEO field bounces the submit and becomes a human
+  // decision, which is the correct outcome for a demographic question.
+  if (__STRICT__ && nmatch > 1) return 'AMBIGUOUS:'+els.filter(e=>wb.test(norm(e))).map(e=>(e.textContent||'').replace(/\s+/g,' ').trim()).slice(0,6).join(' | ');
+  document.querySelectorAll('[data-ats-target]').forEach(e=>e.removeAttribute('data-ats-target'));
   o.scrollIntoView({block:'center'});
   ['pointerdown','mousedown','mouseup','click'].forEach(tp => o.dispatchEvent(new MouseEvent(tp,{bubbles:true,cancelable:true,view:window})));
   return 'OK:'+(o.textContent||'').replace(/\s+/g,' ').trim().slice(0,40);
@@ -457,12 +492,29 @@ _COMBO_RESOLVE = r"""
     return JSON.stringify({kind:'none', reason:'radio-group'});
   if (el.tagName !== 'INPUT') {
     const typed = el.querySelector('input[role=combobox],input[class*="select__input"]');
-    // Only a NON-choice input may stand in for a combobox on the bare fallback.
-    const bare = typed || [...el.querySelectorAll('input')].find(
-      i => !/^(radio|checkbox|file|hidden|submit|button|reset|image)$/i.test(i.type||''));
-    if (!typed && !bare && el.querySelector('input[type=radio],input[type=checkbox]'))
+    // ⛔ A WRAPPER AROUND A NATIVE <select> IS A NATIVE SELECT (2026-08-16). The check above
+    // tests only `el.tagName === 'SELECT'`, but _FIND_CONTROL's aria-labelledby branch
+    // returns CONTAINERS, so a plain <select> wrapped in a div fell through to the combobox
+    // ladder — and with no input inside, `inp = el` marked a DIV as the target. The ladder
+    // then found no options and (before today's fix) free-texted the value elsewhere.
+    if (!typed) { const ns = el.querySelector('select');
+      if (ns) { ns.setAttribute('data-ats-native','1');
+        const c = ns.options[ns.selectedIndex];
+        return JSON.stringify({kind:'native', current:(c && c.value!=='')?[norm(c.text)]:[]}); } }
+    // ⛔ THE RADIO-GROUP GUARD MUST NOT FAIL OPEN (2026-08-16). It used to require that the
+    // container hold NO usable input (`!typed && !bare`) before declaring a radio group. But
+    // `bare` accepts ANY non-choice input — so a radiogroup that also carries an
+    // "Other (please specify)" free-text box, which is exactly how self-describe EEO
+    // questions are rendered, satisfied `bare` and resolved as kind:'combo' with the marker
+    // on that text box. The answer was then deposited into the free-text box (or, before
+    // today's free-text fix, into an unrelated field) and reported OK, while the actual radio
+    // group stayed unanswered. Presence of radios/checkboxes and no react-select input is
+    // decisive on its own: it is a choice group, and set_radio is the right primitive.
+    if (!typed && el.querySelector('input[type=radio],input[type=checkbox]'))
       return JSON.stringify({kind:'none', reason:'radio-group'});
-    inp = bare || el;
+    const bare = [...el.querySelectorAll('input')].find(
+      i => !/^(radio|checkbox|file|hidden|submit|button|reset|image)$/i.test(i.type||''));
+    inp = typed || bare || el;
   }
   if (inp.tagName === 'INPUT' && /^(radio|checkbox)$/i.test(inp.type||''))
     return JSON.stringify({kind:'none', reason:'radio-group'});
@@ -556,9 +608,15 @@ def _combo_type(option):
 _COMBO_FREETEXT_COMMIT = r"""
 (function(){
   var t=document.querySelector('[data-ats-target]');
+  // ⛔ NO UNSCOPED FALLBACK (2026-08-16). This used to end with
+  //   if(!cb) cb=document.querySelector('input[role=combobox],input[aria-autocomplete=list]');
+  // i.e. "if I can't find the field I was asked to fill, fill the first combobox on the page."
+  // That is never the right answer: a write into an unidentified field is how a location string
+  // ends up in a phone-country selector, or a Right-to-Work select, and it returned OK so the
+  // caller recorded the field as answered. Refuse instead — a NO_TARGET here surfaces as a
+  // failed pick, which the run already knows how to handle.
   var cb=(t&&t.tagName==='INPUT')?t:(t?t.querySelector('input'):null);
-  if(!cb) cb=document.querySelector('input[role=combobox],input[aria-autocomplete=list]');
-  if(!cb) return 'NO_INPUT';
+  if(!cb) return t?'NO_INPUT':'NO_TARGET';
   cb.focus();
   var set=Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype,'value').set;
   set.call(cb, __VAL__);
@@ -572,7 +630,19 @@ _COMBO_FREETEXT_COMMIT = r"""
 """
 
 
-def _combo_open_and_pick(option, multi=False):
+def _combo_clear_marker():
+    """Drop the resolver's [data-ats-target] tag. _COMBO_CLICK strips it only when it actually
+    clicked an option, so every path that gives up has to clear it here — otherwise a stale
+    marker from a FAILED pick is still on the page when the next pick runs, and that next pick
+    would resolve to the previous field."""
+    try:
+        cfx.evaluate("(()=>{document.querySelectorAll('[data-ats-target]')"
+                     ".forEach(e=>e.removeAttribute('data-ats-target'));return 1})()")
+    except Exception:  # noqa: BLE001 — best-effort cleanup; never fail a pick over it
+        pass
+
+
+def _combo_open_and_pick(option, multi=False, strict=False):
     """Open the react-select marked [data-ats-target] via the interaction LADDER, read its
     options from several fallbacks, and commit the match. THE engine every combobox caller
     shares (see the block header). Returns 0 on success, 1 otherwise."""
@@ -636,7 +706,8 @@ def _combo_open_and_pick(option, multi=False):
                 opts = _combo_options()
                 if opts:
                     break
-    clicked = cfx.evaluate(_COMBO_CLICK.replace("__OPT__", _js(option)))
+    clicked = cfx.evaluate(_COMBO_CLICK.replace("__OPT__", _js(option))
+                       .replace("__STRICT__", "true" if strict else "false"))
     if isinstance(clicked, str) and clicked.startswith("OK"):
         print(clicked)
         return 0
@@ -649,15 +720,21 @@ def _combo_open_and_pick(option, multi=False):
     if not opts:
         ft = cfx.evaluate(_COMBO_FREETEXT_COMMIT.replace("__VAL__", _js(str(option))))
         if isinstance(ft, str) and ft.startswith("OK"):
+            _combo_clear_marker()
             print(f"OK=freetext:{str(option)[:40]} (async suggestion list empty — committed typed value)")
             return 0
+        if ft == "NO_TARGET":
+            # The resolver's marker is gone — we do NOT know which field this is. Say so;
+            # never fall back to "the first combobox on the page" (see _COMBO_FREETEXT_COMMIT).
+            print("FAIL: free-text commit had no resolved target — refusing to guess a field")
+    _combo_clear_marker()
     print(clicked if isinstance(clicked, str) else "FAIL")
     print(_EXTEND_HINT)
     return 1
 
 
 def combobox_pick(target, option, multi=False, clear_first=False, quiet_notfound=False,
-                  allow_attestation=False):
+                  allow_attestation=False, strict=False):
     """THE universal dropdown/combobox primitive — native <select> AND every react-select
     variant, driven by the interaction ladder (see block header). `target` = a CSS/#id
     selector OR a substring of the field's visible label. `multi` = mark-all-that-apply
@@ -728,10 +805,11 @@ def combobox_pick(target, option, multi=False, clear_first=False, quiet_notfound
     if clear_first:
         cfx.evaluate(_COMBO_CLEAR_CHIPS)
         time.sleep(0.3)
-    return _combo_open_and_pick(option, multi=multi or bool(info.get("isMulti")))
+    return _combo_open_and_pick(option, multi=multi or bool(info.get("isMulti")),
+                                strict=strict)
 
 
-def select(label, option, quiet_notfound=False):
+def select(label, option, quiet_notfound=False, strict=False):
     """Native <select> first; else a react-select combobox (Greenhouse/Lever/WTTJ).
     quiet_notfound (defaults path only): return NOTFOUND instead of FAIL when NO
     select-like field for this label exists on the form (E.2 — replaces _field_exists)."""
@@ -870,7 +948,7 @@ def select(label, option, quiet_notfound=False):
     time.sleep(0.3)
     # react-select branch resolved (the input is marked data-ats-target) → hand off to the
     # ONE shared ladder engine so every combobox caller benefits from the same fix.
-    return _combo_open_and_pick(option)
+    return _combo_open_and_pick(option, strict=strict)
 
 
 # EXACT synonyms of the SAME answer — different employer wording, identical claim. Used only
@@ -890,7 +968,7 @@ _OPTION_SYNONYMS = {
 }
 
 
-def set_radio(question, option, quiet_notfound=False, _tried=None):
+def set_radio(question, option, quiet_notfound=False, _tried=None, strict=False):
     # ⛔ MATCH PRECEDENCE, NOT FIRST-SUBSTRING (2026-08-15 — a real wrong answer).
     # This used to take the FIRST radio whose label merely CONTAINED the wanted option, in DOM
     # order. Asking for gender "Man" therefore matched **"Woman"** ("woman".includes("man")),
@@ -916,21 +994,42 @@ def set_radio(question, option, quiet_notfound=False, _tried=None):
         const fs = r.closest('fieldset');
         const leg = fs ? fs.querySelector('legend,label') : null;
         if (leg && norm(leg.innerText)) return leg.innerText;
+        // ⛔ CLIMB PAST THE OPTIONS CONTAINER (2026-08-16). This used to return the first
+        // ancestor with more than 8 characters of text — but for a fieldset-less group that
+        // ancestor is almost always the div WRAPPING THE OPTIONS, whose text is just
+        // "Yes No Prefer not to say". That is >8 chars, so the walk stopped there and the
+        // caller's question never matched: `norm(q).includes(wq)` failed and the group came
+        // back NOT_FOUND. The symptom is a required radio left blank and a submit that
+        // bounces — the group is unanswerable, so the application is simply lost. Strip the
+        // group's OWN option labels out of each ancestor before judging it: the options
+        // container reduces to nothing and the walk continues up to the real question.
         let b = r;
-        for (let k = 0; k < 8 && b; k++) {{ b = b.parentElement;
-          if (b && norm(b.innerText).length > 8) return b.innerText; }}
+        for (let k = 0; k < 8 && b; k++) {{
+          b = b.parentElement; if (!b) break;
+          let t = norm(b.innerText); if (!t) continue;
+          for (const rr of b.querySelectorAll('input[type=radio]')) {{
+            const l = norm((rr.labels && rr.labels[0]) ? rr.labels[0].innerText : (rr.value||''));
+            if (l) t = t.split(l).join(' ');
+          }}
+          if (norm(t).length > 8) return b.innerText;
+        }}
         return r.name || '';
       }};
-      let best = null, bestRank = 99;
+      let best = null, bestRank = 99, nbest = 0;
       for (const r of document.querySelectorAll('input[type=radio]')) {{
         const q = qtext(r);
         const lbl = norm((r.labels && r.labels[0]) ? r.labels[0].innerText : (r.value||''));
         if (!norm(q).includes(wq)) continue;
         const rank = (lbl === wo) ? 0 : (wb.test(lbl) ? 1 : (lbl.includes(wo) ? 2 : 99));
-        if (rank < bestRank) {{ bestRank = rank; best = r;
+        if (rank < bestRank) {{ bestRank = rank; best = r; nbest = 1;
           if (rank === 0) break; }}
+        else if (rank === bestRank && rank < 99) nbest++;
       }}
       if (!best) return 'NOT_FOUND';
+      // Same broadening guard as _COMBO_CLICK: under STRICT (the fill_eeo leading-token
+      // fallback) an inexact match that fits several options is a coin-flip between
+      // demographic sub-categories, so refuse instead of picking one.
+      if ({'true' if strict else 'false'} && bestRank > 0 && nbest > 1) return 'AMBIGUOUS';
       const lbl = ((best.labels && best.labels[0]) ? best.labels[0].innerText : (best.value||'')).trim();
       if (!best.checked) best.click();
       return best.checked ? ('OK:'+lbl.slice(0,40)) : 'CLICK_FAILED';
@@ -955,7 +1054,7 @@ def set_radio(question, option, quiet_notfound=False, _tried=None):
             if alt.strip().lower() in tried:
                 continue
             tried.add(alt.strip().lower())
-            if set_radio(question, alt, quiet_notfound=True, _tried=tried) == 0:
+            if set_radio(question, alt, quiet_notfound=True, _tried=tried, strict=strict) == 0:
                 print(f"  (matched {option!r} via synonym {alt!r})")
                 return 0
     # Workday fallback: its Yes/No radios carry NO visible label on the input
@@ -999,17 +1098,28 @@ def set_radio(question, option, quiet_notfound=False, _tried=None):
 
 def set_checkbox(label, state="on", quiet_notfound=False):
     want = state != "off"
+    # ⛔ MATCH PRECEDENCE, NOT FIRST-SUBSTRING (2026-08-16) — the SAME defect set_radio was
+    # fixed for on 2026-08-15, never carried across to checkboxes. Taking the first label that
+    # merely CONTAINS the wanted text, in DOM order, ticks the wrong box whenever one option's
+    # text is a substring of another's: asking for "Man" ticks "Woman"; asking for consent to
+    # "contact me about this role" ticks "contact me about this role and future roles and
+    # partner offers" (a broader consent than was given); "No" ticks "Not applicable".
+    # Score every candidate and take the BEST: exact → whole-word → substring.
     res = cfx.evaluate(f"""
     (() => {{
-      const w = {_js(label)}.toLowerCase();
+      const norm = s => (s||'').replace(/\\s+/g,' ').trim().toLowerCase();
+      const w = norm({_js(label)});
+      const esc = w.replace(/[-/\\\\^$*+?.()|[\\]{{}}]/g, '\\\\$&');
+      const wb = new RegExp('(^|[^a-z0-9])' + esc + '([^a-z0-9]|$)');
+      let best = null, bestRank = 99;
       for (const c of document.querySelectorAll('input[type=checkbox]')) {{
-        const lbl = (c.labels && c.labels[0]) ? c.labels[0].innerText : '';
-        if (lbl.toLowerCase().includes(w)) {{
-          if (c.checked !== {str(want).lower()}) c.click();
-          return c.checked === {str(want).lower()} ? ('OK checked='+c.checked) : 'CLICK_FAILED';
-        }}
+        const lbl = norm((c.labels && c.labels[0]) ? c.labels[0].innerText : '');
+        const rank = (lbl === w) ? 0 : (wb.test(lbl) ? 1 : (lbl.includes(w) ? 2 : 99));
+        if (rank < bestRank) {{ bestRank = rank; best = c; if (rank === 0) break; }}
       }}
-      return 'NOT_FOUND';
+      if (!best) return 'NOT_FOUND';
+      if (best.checked !== {str(want).lower()}) best.click();
+      return best.checked === {str(want).lower()} ? ('OK checked='+best.checked) : 'CLICK_FAILED';
     }})()
     """)
     if quiet_notfound and res == "NOT_FOUND":
@@ -1883,9 +1993,17 @@ def fill_eeo(config=None):
         for lab in labels:
             hit = False
             for cand in candidates:
-                r = combobox_pick(lab, cand, multi=multi, clear_first=multi, quiet_notfound=True)
+                # STRICT for the leading-token fallback only. `val` is the applicant's own
+                # canonical wording, so matching it is always faithful; `head` is a BROADENED
+                # stand-in, and broadening is only sound if the form offers exactly one option
+                # under that token. Strict mode makes an ambiguous head match refuse rather
+                # than let the scorer pick the shortest sub-category (see _COMBO_CLICK).
+                strict = cand != val
+                r = combobox_pick(lab, cand, multi=multi, clear_first=multi, quiet_notfound=True,
+                                  strict=strict)
                 if r == NOTFOUND:
-                    r = set_radio(lab, cand, quiet_notfound=True)  # Ashby-style radio rendering
+                    r = set_radio(lab, cand, quiet_notfound=True,  # Ashby-style radio rendering
+                                  strict=strict)
                     if r == NOTFOUND:
                         break                                 # not on this form — next phrasing
                 hit = True
@@ -1949,12 +2067,27 @@ _UNANSWERED = r"""
 (() => {
   const clean = s => (s||'').replace(/\s+/g,' ').trim();
   const out = {texts: [], radios: [], combos: []};
+  // ⛔ CLEAR LAST PASS'S TAGS FIRST (2026-08-16). Indices are assigned fresh on every call
+  // (0,1,2… in DOM order) but the attribute was never removed, and a field ANSWERED by the
+  // previous pass is skipped here (`i.value` is set) so it never gets re-tagged — it just
+  // keeps its stale tag. Two elements then carry data-ats-gap="0", and the filler's
+  // querySelector('[data-ats-gap="0"]') takes the FIRST in DOM order: the already-answered
+  // one. A second gap-fill pass therefore OVERWRITES a correctly-answered field with the
+  // answer belonging to a different question. gh_apply and lever both run this pass more
+  // than once per form (before the review screenshot, and again after a re-render).
+  document.querySelectorAll('[data-ats-gap]').forEach(e => e.removeAttribute('data-ats-gap'));
   for (const i of document.querySelectorAll(
       'input[type=text],input[type=email],input[type=tel],input[type=number],input[type=url],textarea')) {
     if (i.name === 'g-recaptcha-response' || i.value) continue;
     let lbl = clean(i.labels && i.labels[0] ? i.labels[0].innerText : '');
+    // ⛔ CAP THE ANCESTOR BLOB (2026-08-16). Uncapped, the first ancestor with ANY text is
+    // often a section wrapper holding SEVERAL questions, so `lbl` became a blob containing a
+    // NEIGHBOUR's question text. screener.lookup then matched the neighbour's pattern and its
+    // answer was typed into THIS field. The combobox branch below already caps at 220; the
+    // text branch never did. Keep climbing past over-long ancestors instead of taking them.
     if (!lbl) { let b = i; for (let k = 0; k < 4 && b; k++) { b = b.parentElement;
-      if (b && clean(b.innerText)) { lbl = clean(b.innerText); break; } } }
+      if (b) { const t = clean(b.innerText);
+               if (t && t.length <= 220) { lbl = t; break; } } } }
     // ⛔ TAG THE ELEMENT, don't just report its label (2026-08-15). fill_gaps_from_bank used
     // to call fill(label), which re-resolves by label and returns the FIRST match — so on a
     // form carrying the SAME label twice (Lever posts a "Full Name" input AND a separate
@@ -1986,12 +2119,19 @@ _UNANSWERED = r"""
   for (const r of document.querySelectorAll('input[type=radio]')) (groups[r.name] ||= []).push(r);
   for (const rs of Object.values(groups)) {
     if (rs.some(r => r.checked)) continue;
-    let box = rs[0];
-    for (let k = 0; k < 8 && box; k++) { box = box.parentElement;
-      if (box && clean(box.innerText).length > 8) break; }
-    const lines = clean(box ? box.innerText : '').split(' | ');
     const opts = rs.map(r => clean(r.labels && r.labels[0] ? r.labels[0].innerText
                                   : (r.nextElementSibling ? r.nextElementSibling.innerText : r.value)));
+    // Same walk-past-the-options-container fix as set_radio's qtext (2026-08-16): the first
+    // ancestor with >8 chars is usually the div wrapping the CHOICES ("Yes No Prefer not to
+    // say"), so `q` became the option list instead of the question. screener.lookup("yes no")
+    // matches nothing, so the group was reported with a useless question and never answered.
+    // Subtract this group's own option labels before judging an ancestor.
+    let box = rs[0];
+    for (let k = 0; k < 8 && box; k++) { box = box.parentElement;
+      if (!box) break;
+      let t = clean(box.innerText); if (!t) continue;
+      for (const o of opts) if (o) t = t.split(o).join(' ');
+      if (clean(t).length > 8) break; }
     const q = clean(box ? box.innerText : '');
     if (q) out.radios.push({q: q.slice(0, 220), opts: opts.filter(Boolean).slice(0, 12)});
   }
@@ -2030,6 +2170,17 @@ def fill_gaps_from_bank():
     for idx, label in enumerate(data.get("texts", [])):
         hit = screener.lookup(label)
         if not hit:
+            skipped += 1
+            continue
+        # ⛔ A RADIO ANSWER IS NOT FREE TEXT (2026-08-16). The bank stores a `kind` per row and
+        # this branch ignored it, so a row banked for a yes/no CHOICE ("right to work" ->
+        # "Yes") would be TYPED into a free-text box whose question merely contains the same
+        # phrase — e.g. "Describe your right to work status" receives the literal string
+        # "Yes". That is a nonsense answer a human reviewer reads, not a blocked field.
+        # Choice-kind answers only belong in the radio/combo branches below.
+        if (hit.get("kind") or "text").strip().lower() in ("radio", "select", "checkbox"):
+            print(f"  bank SKIP {label[:46]!r}: banked answer is kind="
+                  f"{hit.get('kind')!r} (a choice), not free text — left unanswered")
             skipped += 1
             continue
         # Address THIS element (see the data-ats-gap note in _UNANSWERED) rather than
@@ -2074,6 +2225,25 @@ def fill_gaps_from_bank():
         # maps, leave it EMPTY — an unanswered required field blocks the submit and asks for a
         # human, which is the correct outcome; a confidently wrong answer is not.
         low = ans.strip().lower()
+        # ⛔ AN EMPTY BANKED ANSWER IS NOT A MATCH (2026-08-16). With `low` empty the
+        # word-boundary regex below degenerates to `(^|[^a-z0-9])([^a-z0-9]|$)`, which matches
+        # any option containing a space or punctuation — so a blank/whitespace bank cell
+        # sailed past this closed-set guard and SELECTED THE FIRST PUNCTUATED OPTION. The
+        # guard exists precisely to stop confident wrong answers; an empty answer is the least
+        # justified of all.
+        if not low:
+            skipped += 1
+            continue
+        # ⛔ NEVER SIGN AN ANTI-AI OATH FROM THE BANK (2026-08-16). combobox_pick refuses these
+        # (see _is_anti_ai_oath) but set_radio had no such guard, and this branch calls
+        # set_radio directly — so an "I confirm this application is entirely my own words / not
+        # AI-generated" question rendered as RADIOS was answered "Yes" by whatever generic
+        # affirmative row the bank matched. SKILL.md: attestations are the applicant's to sign.
+        if _is_anti_ai_oath(q) and _is_affirmative(ans):
+            print(f"  bank REFUSE {q[:60]!r}: anti-AI attestation — not signing an "
+                  f"'own words / no AI' oath on the applicant's behalf")
+            skipped += 1
+            continue
         match = next((o for o in opts if o.strip().lower() == low), None) \
             or next((o for o in opts if re.search(
                 r"(^|[^a-z0-9])" + re.escape(low) + r"([^a-z0-9]|$)", o.strip().lower())), None)

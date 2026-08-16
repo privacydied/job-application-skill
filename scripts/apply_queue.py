@@ -124,34 +124,32 @@ def _gh_config_from_api(row):
             print(f"    gh_jid={token} -> embed form (no slug; minimal config)", file=sys.stderr)
             return _minimal_gh(row)
         return None
+    # ⛔ THE MATCHED-URL PATH MUST NOT FALL OFF THE END (2026-08-16). It did, for one day.
+    # Commit 7a5bca9 inserted `def _gh_from_slug` in the MIDDLE of this function, so everything
+    # below the insertion point — the slug/jid extraction, the questions-API build, and BOTH
+    # integrity refusals — became unreachable code sitting after that function's `return path`.
+    # `_gh_config_from_api` then returned None for every canonical Greenhouse URL, which
+    # `_hard_board_config` reads as "not derivable" and answers with the minimal `{"fill": {}}`
+    # stub. Net effect was exactly inverted from the design: the questions API ran ONLY for the
+    # rare employer-careers `?gh_jid=` case, never for the common job-boards.greenhouse.io rows,
+    # so per-posting required screeners stayed empty and every submit bounced on "This field is
+    # required." Worse, the two refusals below (anti-AI oath, unanswered required) were bypassed
+    # for those rows — a posting demanding an attestation was driven to the submit button.
+    # There is now ONE questions-API path, shared by both entry points.
+    slug, jid = (m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))
+    return _gh_from_slug(slug, jid, row)
 
 
 def _gh_from_slug(slug, jid, row):
-    """Full questions-API config for a posting we reached by token. False = do not drive."""
-    try:
-        sys.path.insert(0, HERE)
-        import gen_gh_config  # noqa: PLC0415
-        path, _cfg, unanswered, human, oath = gen_gh_config.build(slug, jid)
-    except Exception as e:  # noqa: BLE001
-        print(f"    questions API failed ({str(e)[:50]}) — minimal config", file=sys.stderr)
-        return _minimal_gh(row)
-    if oath:
-        print("    anti-AI oath — needs the applicant's own words", file=sys.stderr)
-        return False
-    if unanswered or human:
-        for u in (unanswered + human)[:3]:
-            print(f"    UNANSWERED_REQUIRED: {u[:88]}", file=sys.stderr)
-        return False
-    return path
-    slug, jid = (m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))
+    """Full questions-API config for a posting we reached by slug+id. False = do not drive."""
     try:
         sys.path.insert(0, HERE)
         import gen_gh_config  # noqa: PLC0415
         path, _cfg, unanswered, human, oath = gen_gh_config.build(
             slug, jid, eu="eu.greenhouse.io" in (row.get("url") or ""))
     except Exception as e:  # noqa: BLE001 — API hiccup → minimal config, not a dead posting
-        print(f"    gen_gh_config failed ({str(e)[:60]}) — minimal config", file=sys.stderr)
-        return None
+        print(f"    questions API failed ({str(e)[:60]}) — minimal config", file=sys.stderr)
+        return _minimal_gh(row)
     if oath:
         print("    anti-AI oath on this posting — needs the applicant's own words",
               file=sys.stderr)
@@ -402,6 +400,23 @@ def main():
         # "apply later": fold previously-saved (rate-limited) postings back in, dropping any
         # already handled since. They lead the drain so a cleared limit retries them first.
         deferred = [r for r in ratelimit.load_deferred() if not _handled(r, by_id, by_pair)]
+        # ⛔ THE DEFERRED STORE IS 100% EASY APPLY (2026-08-16). ratelimit.defer() is called
+        # from ONE place — the Easy-Apply branch, reachable only when `ats not in
+        # HARD_BOARD_ATS` — so every row in here is a LinkedIn Easy-Apply posting. Folding them
+        # in unconditionally meant `--ats greenhouse` (the sanctioned hard-board drain, and the
+        # only form SKILL.md permits against a real target) still led with Easy-Apply rows:
+        # their ats stays 'linkedin-easyapply', so the dispatch loop runs apply_ea.py, which
+        # auto-submits off the generic base resume and appends Status=Applied. That is the
+        # forbidden application class (SKILL.md §Forbidden) and it inflates the headline count
+        # with rows §Count-integrity says must then be deleted by hand. EASYAPPLY_ATS was
+        # declared for exactly this guard and never referenced — the guard was written down
+        # but never wired. Honour --ats: a lane the caller did not select is never driven.
+        refused = [r for r in deferred if (r.get("ats_hint") or "") not in headless_ats]
+        deferred = [r for r in deferred if (r.get("ats_hint") or "") in headless_ats]
+        if refused:
+            print(f"apply_queue: holding {len(refused)} deferred Easy-Apply posting(s) — "
+                  f"not in --ats ({','.join(sorted(headless_ats)) or 'default'}). Easy Apply is "
+                  f"only ever driven when asked for by name.", file=sys.stderr)
         if deferred:
             drivable = deferred + drivable
             print(f"apply_queue: re-injecting {len(deferred)} deferred posting(s) saved from "

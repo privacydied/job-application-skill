@@ -394,7 +394,7 @@ class TestSharedEeoFiller(unittest.TestCase):
     INVERTED policy on every application it submitted. These lock both properties."""
 
     def _stub(self, atsform, calls):
-        def fake(label, val, multi=False, clear_first=False, quiet_notfound=False):
+        def fake(label, val, multi=False, clear_first=False, quiet_notfound=False, **kw):
             calls.append((label, val))
             return 0
         return fake
@@ -3543,6 +3543,7 @@ class TestComboboxRadioGuard(unittest.TestCase):
         import inspect
 
         import atsform
+        import inspect
         src = inspect.getsource(atsform.fill_eeo)
         self.assertIn("combobox_pick", src)
         self.assertIn("set_radio", src)
@@ -3658,6 +3659,186 @@ class TestGreenhouseUrlShapesDedup(unittest.TestCase):
         a = self._ids("https://www.coinbase.com/careers/positions/8126896?gh_jid=8126896")
         b = self._ids("https://join.jfrog.com/job/?job=8096818&gh_jid=8096818")
         self.assertFalse(a & b, "two different Greenhouse jobs must not share a dedup key")
+
+
+class TestScreenerFalseAnswerRegressions(unittest.TestCase):
+    """Six live wrong answers found by the 2026-08-16 adversarial audit, all reproduced against
+    the real bank before the fix. Every one of them SUBMITS a false statement rather than
+    failing loudly, which is the worst failure mode this repo has.
+
+    These are behavioural: they build a bank from the seed table and ask the real `lookup`."""
+
+    def setUp(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(_HERE), "sites", "_common", "scripts"))
+        import screener
+        self.screener = screener
+        self.tmp = tempfile.mkdtemp()
+        self._orig_csv = screener.CSV
+        screener.CSV = os.path.join(self.tmp, "screener-answers.csv")
+        screener.seed(force=True)
+        screener._rows_cached.cache_clear()
+
+    def tearDown(self):
+        self.screener.CSV = self._orig_csv
+        self.screener._rows_cached.cache_clear()
+
+    def _answer(self, q):
+        hit = self.screener.lookup(q)
+        return (hit or {}).get("answer")
+
+    def test_dob_pattern_does_not_match_adobe(self):
+        # `d\.?o\.?b` unanchored matches the d-o-b inside "A-dob-e", so every Adobe question
+        # was answered with the DATE OF BIRTH answer (live bank: the literal day number).
+        self.assertNotEqual(
+            self._answer("How many years of experience do you have with Adobe Photoshop?"),
+            self._answer("What is your date of birth?"),
+            "an Adobe tools question must not resolve to the date-of-birth row")
+
+    def test_cro_abbreviation_does_not_match_microsoft(self):
+        # "cro" unbounded matches inside "Mi-cro-soft" and "cro-ss-functional".
+        self.assertNotEqual(self._answer("How many years of experience with Microsoft Azure?"),
+                            self._answer("How many years of CRO experience?"),
+                            "'Microsoft' must not match the growth/CRO years row")
+
+    def test_specific_years_rows_outrank_the_generic_design_row(self):
+        # The generic row is `\bdesign` with no closing boundary, so it also matches "design
+        # system(s)". Listed first it won, overstating those specialisms by years.
+        self.assertEqual(self._answer("How many years of design systems experience?"), "3")
+        self.assertEqual(self._answer("How many years of accessibility experience?"), "2")
+        self.assertEqual(self._answer("How many years of product design experience?"), "6")
+
+    def test_authorised_without_sponsorship_is_yes(self):
+        # The bare `sponsorship` catch-all outranked every right-to-work row, so a question
+        # asking whether he is authorised to work WITHOUT sponsorship was answered "No" —
+        # the applicant is a British citizen with full UK right to work.
+        for q in ("Are you legally authorised to work in the UK without requiring sponsorship?",
+                  "Do you have the right to work in the UK without sponsorship?"):
+            self.assertEqual(self._answer(q), "Yes", q)
+
+    def test_requires_sponsorship_is_still_no(self):
+        # …without breaking the question the catch-all was actually for.
+        for q in ("Do you require visa sponsorship now or in the future?",
+                  "Will you require sponsorship for employment?"):
+            self.assertEqual(self._answer(q), "No", q)
+
+    def test_record_refuses_to_correct_silently(self):
+        # record() returned False for an existing pattern whether the answer matched or not,
+        # so re-teaching a WRONG banked answer looked like a no-op dedup and the bad answer
+        # shipped forever.
+        self.screener.record("notice period", "Immediately", kind="select")
+        buf = io.StringIO()
+        with contextlib.redirect_stderr(buf):
+            changed = self.screener.record("notice period", "One month", kind="select")
+        self.assertFalse(changed)
+        self.assertIn("REFUSED", buf.getvalue(),
+                      "a refused correction must say so on stderr, not return a bare False")
+        self.assertTrue(self.screener.record("notice period", "One month", kind="select",
+                                             update=True))
+        self.assertEqual(self._answer("What is your notice period?"), "One month")
+
+    def test_record_inserts_above_a_shadowing_regex_row(self):
+        # The priority scan skipped every /regex/ row, so a learn overlapping one was inserted
+        # BELOW it and could never win a lookup — inert on arrival, which is the exact
+        # silent-no-op failure record()'s docstring claims to have fixed.
+        self.assertTrue(self.screener.record(
+            "how many years of experience do you have with kubernetes", "3", kind="number"))
+        self.assertEqual(
+            self._answer("How many years of experience do you have with Kubernetes?"), "3",
+            "a learned specific row must outrank the generic /years.*experience/ regex")
+
+
+class TestAuditedWidgetInvariants(unittest.TestCase):
+    """Source invariants for the 2026-08-16 audit fixes that live in injected JS (no DOM in
+    unit tests). Each pins the ONE line whose removal silently restores a false-data bug."""
+
+    def _atsform(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(_HERE), "sites", "_common", "scripts"))
+        import atsform
+        return atsform
+
+    def test_freetext_commit_has_no_unscoped_combobox_fallback(self):
+        # Assert on EXECUTABLE js only: the fix's own comment quotes the deleted line verbatim
+        # so it can never be re-added by accident, and a naive substring check matches that.
+        js = "\n".join(l for l in self._atsform()._COMBO_FREETEXT_COMMIT.splitlines()
+                       if not l.strip().startswith("//"))
+        self.assertNotIn("if(!cb) cb=document.querySelector('input[role=combobox]", js,
+                         "the free-text commit must never fall back to 'the first combobox on "
+                         "the page' — that writes the value into an unrelated field and "
+                         "reports OK")
+        self.assertIn("NO_TARGET", js, "it must refuse with NO_TARGET instead of guessing")
+
+    def test_combo_click_strips_marker_only_after_the_failure_return(self):
+        js = self._atsform()._COMBO_CLICK
+        strip = js.index("removeAttribute('data-ats-target')")
+        fail = js.index("return 'NO_OPTION:'")
+        self.assertLess(fail, strip,
+                        "the NO_OPTION return must come BEFORE the marker cleanup, or the "
+                        "free-text fallback can never find the field it was asked to fill")
+
+    def test_combo_click_refuses_ambiguous_broadened_match(self):
+        self.assertIn("AMBIGUOUS", self._atsform()._COMBO_CLICK,
+                      "a broadened (leading-token) EEO match that fits several options must "
+                      "refuse, not let the shorter-is-better score pick a sub-category")
+
+    def test_radio_group_guard_does_not_require_an_absent_input(self):
+        js = self._atsform()._COMBO_RESOLVE
+        self.assertNotIn("if (!typed && !bare && el.querySelector('input[type=radio]", js,
+                         "the radio-group guard must not be conditional on the container "
+                         "having no other input — an 'Other, please specify' box bypassed it")
+
+    def test_set_checkbox_uses_match_precedence(self):
+        import inspect
+        src = inspect.getsource(self._atsform().set_checkbox)
+        self.assertIn("bestRank", src,
+                      "set_checkbox must score exact > word-boundary > substring, like "
+                      "set_radio — first-substring ticks 'Woman' when asked for 'Man'")
+
+    def test_unanswered_clears_stale_gap_tags(self):
+        js = self._atsform()._UNANSWERED
+        self.assertIn("removeAttribute('data-ats-gap')", js,
+                      "stale data-ats-gap tags make a second bank pass overwrite an "
+                      "already-answered field")
+
+    def test_gap_filler_guards_empty_answer_and_anti_ai_oath(self):
+        import inspect
+        src = inspect.getsource(self._atsform().fill_gaps_from_bank)
+        self.assertIn("if not low:", src,
+                      "an empty banked answer degenerates the closed-set regex into matching "
+                      "any punctuated option")
+        self.assertIn("_is_anti_ai_oath", src,
+                      "set_radio has no attestation guard of its own, so the bank path must "
+                      "refuse to sign an anti-AI oath")
+
+
+class TestApplyQueueLaneIntegrity(unittest.TestCase):
+    """apply_queue must not drive a lane the caller did not select, and must not have a
+    questions-API path that is unreachable for the URLs it exists to serve."""
+
+    def _src(self):
+        with open(os.path.join(os.path.dirname(_HERE), "scripts", "apply_queue.py"), encoding="utf-8") as f:
+            return f.read()
+
+    def test_gh_config_from_api_handles_the_matched_url(self):
+        # Commit 7a5bca9 inserted a def in the middle of this function, stranding its body
+        # after a `return` — so it returned None for EVERY canonical Greenhouse URL and every
+        # such row was driven with a minimal stub whose submit always bounced.
+        import ast as _ast
+        tree = _ast.parse(self._src())
+        fn = next(n for n in _ast.walk(tree)
+                  if isinstance(n, _ast.FunctionDef) and n.name == "_gh_config_from_api")
+        returns = [n for n in _ast.walk(fn) if isinstance(n, _ast.Return)]
+        self.assertTrue(any(isinstance(r.value, _ast.Call) for r in returns),
+                        "_gh_config_from_api must actually build a config for a URL that "
+                        "matches _GH_URL, not fall off the end and return None")
+
+    def test_deferred_rows_respect_the_selected_ats(self):
+        src = self._src()
+        i = src.index("load_deferred()")
+        window = src[i:i + 1200]
+        self.assertIn("headless_ats", window,
+                      "deferred rows are ALL LinkedIn Easy Apply; re-injecting them without "
+                      "checking --ats makes a hard-board-only run submit and log the one "
+                      "application class SKILL.md forbids")
 
 
 if __name__ == "__main__":

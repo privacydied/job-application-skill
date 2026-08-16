@@ -46,12 +46,18 @@ _SEED = [
     ("require sponsorship", "radio", "No", "profile"),
     ("need sponsorship", "radio", "No", "profile"),
     ("visa sponsorship", "radio", "No", "profile"),
-    ("sponsorship", "radio", "No", "profile"),
+    # ⛔ RIGHT-TO-WORK OUTRANKS THE BARE `sponsorship` CATCH-ALL (2026-08-16). These rows used
+    # to sit BELOW it, so any question mentioning sponsorship matched "No" first — including
+    # "Are you legally authorised to work in the UK WITHOUT requiring sponsorship?", whose
+    # truthful answer is YES (British citizen, full UK right to work). The bank was answering
+    # No to a question about his eligibility: a false statement that reads as a hard fail on
+    # the single most common screening gate. The bare row stays as the last-resort catch-all.
     ("legally authorized", "radio", "Yes", "profile:UK RTW"),
     ("authorised to work", "radio", "Yes", "profile"),
     ("authorized to work", "radio", "Yes", "profile"),
     ("right to work", "radio", "Yes", "profile"),
     ("eligible to work", "radio", "Yes", "profile"),
+    ("sponsorship", "radio", "No", "profile"),
     # relocation / location
     ("willing to relocate", "radio", "No", "profile:edit for your location rules"),
     ("open to relocation", "radio", "No", "profile"),
@@ -66,7 +72,12 @@ _SEED = [
     ("earliest start", "text", "Immediately", "profile"),
     # demographics (two disclose exceptions per profile; rest default prefer-not)
     ("pronoun", "select", "Prefer not to say", "profile:edit for your situation"),
-    ("/\\bage\\b|how old|date of birth|d\\.?o\\.?b/", "text", "Prefer not to say", "profile:edit for your situation"),
+    # ⛔ \b ON BOTH SIDES OF d.o.b (2026-08-16). Unanchored, `d\.?o\.?b` matches the letters
+    # d-o-b INSIDE ordinary words — most damagingly "A-dob-e". Every "How many years with Adobe
+    # Photoshop?" therefore matched the DATE-OF-BIRTH row and was answered with the DOB answer
+    # (in the live bank, a bare number) instead of the years figure. Same class as the `cro`
+    # bug below: an abbreviation alternative with no word boundary is a substring landmine.
+    ("/\\bage\\b|how old|date of birth|\\bd\\.?o\\.?b\\b/", "text", "Prefer not to say", "profile:edit for your situation"),
     ("gender", "select", "Prefer not to say", "profile:edit for your situation"),
     ("/ethnic|ethnicity/", "select", "Prefer not to say", "profile:edit for your situation"),
     ("disability", "select", "No", "profile"),
@@ -80,13 +91,22 @@ _SEED = [
     # MUST precede the generic "years of experience" catch-all (first match wins).
     ("/years.*figma/", "number", "6", "profile"),
     ("/years.*(research|usability|user research)/", "number", "5", "profile"),
-    ("/years.*(product|\\bux\\b|\\bui\\b|interaction|\\bdesign)/", "number", "6", "profile"),
-    ("/years.*(accessibility|wcag)/", "number", "2", "profile"),
+    # ⛔ NARROWEST FIRST (2026-08-16). These two used to sit BELOW the generic product/design
+    # row, which is `\bdesign` with no closing boundary — so it matches "design system(s)" and
+    # any "accessibility design" phrasing and won first. "How many years of design systems
+    # experience?" was answered 6 instead of 3, and "years of accessibility design" 6 instead
+    # of 2: the bank OVERSTATED experience by years on exactly the specialisms a design role
+    # screens for. First match wins, so a narrower row is only reachable ABOVE its generic.
     ("/years.*design system/", "number", "3", "profile"),
+    ("/years.*(accessibility|wcag)/", "number", "2", "profile"),
+    ("/years.*(product|\\bux\\b|\\bui\\b|interaction|\\bdesign)/", "number", "6", "profile"),
     ("/years.*(front.?end|html|css|node|web develop)/", "number", "3", "profile"),
     ("/years.*(docker|ci/cd|devops|linux)/", "number", "3", "profile"),
     ("/years.*(it support|desktop|service desk|technician|help ?desk)/", "number", "2", "profile"),
-    ("/years.*(growth|cro|a/b|marketing)/", "number", "3", "profile"),
+    # ⛔ \bcro\b (2026-08-16). Unbounded, "cro" matches inside "Mi-cro-soft" and
+    # "cro-ss-functional", so "How many years of experience with Microsoft Azure?" was answered
+    # with the growth/marketing figure. Bound the abbreviation; spell out the long form too.
+    ("/years.*(growth|\\bcro\\b|conversion rate|a/b|marketing)/", "number", "3", "profile"),
     ("/years.*(of )?experience/", "number", "5", "profile:generic default"),
     ("how many years", "number", "5", "profile:generic default"),
     # driving (hard screen elsewhere, but answer truthfully if asked)
@@ -189,7 +209,18 @@ def lookup(question):
     return None
 
 
-def record(pattern, answer, kind="text", source="learned"):
+def _write(rows):
+    """Atomic rewrite of the whole bank (tmp + os.replace). Callers hold the file lock."""
+    tmp = CSV + ".tmp"
+    with open(tmp, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(HEADER)
+        for r in rows:
+            w.writerow([r["pattern"], r["kind"], r["answer"], r["source"]])
+    os.replace(tmp, CSV)
+
+
+def record(pattern, answer, kind="text", source="learned", update=False):
     """Persist a learned answer (idempotent on exact pattern), INSERTED AT ITS CORRECT
     PRIORITY rather than blindly appended. Ensures the file exists (seeds first).
 
@@ -219,25 +250,47 @@ def record(pattern, answer, kind="text", source="learned"):
         new = pattern.strip().lower()
         for r in rows:
             if r["pattern"].strip().lower() == new:
-                return False  # already known — don't duplicate
+                # ⛔ DON'T REFUSE A CORRECTION IN SILENCE (2026-08-16). Returning False for an
+                # existing pattern conflates "already correct, nothing to do" with "you asked
+                # to change this answer and I ignored you". The second is how a WRONG banked
+                # answer becomes permanent: the operator re-teaches the right one, sees a
+                # falsy return that reads as a no-op dedup, and the bad answer keeps shipping.
+                if (r["answer"] or "") == (answer or ""):
+                    return False            # genuinely already known
+                if not update:
+                    print(f"screener: REFUSED to change {pattern!r} from {r['answer']!r} to "
+                          f"{answer!r} — pass update=True to correct a banked answer.",
+                          file=sys.stderr)
+                    return False
+                r["kind"], r["answer"], r["source"] = kind, answer, source
+                _write(rows)
+                _rows_cached.cache_clear()
+                return True
         at = len(rows)
         for i, r in enumerate(rows):
             p = r["pattern"].strip().lower()
-            # Only plain substring patterns can be compared for generality this way; a
-            # /regex/ row's breadth isn't inferable from its text, so leave those alone.
-            if p.startswith("/") or new.startswith("/"):
+            # ⛔ A /regex/ ROW SHADOWS TOO (2026-08-16). This used to `continue` past every
+            # regex row, on the theory that a regex's breadth "isn't inferable from its text".
+            # It is inferable the only way that matters: RUN IT. If the regex matches the new
+            # pattern's own text, that row will match every question the new row was meant to
+            # catch and, sitting above it, will always win — so the learn is inert on arrival.
+            # That is precisely the silent-no-op failure this function's docstring claims to
+            # have fixed, still live for the ~15 regex rows in the seed table (the years-of-X
+            # block, where a wrong number is an overstated-experience answer).
+            if p.startswith("/"):
+                # _matches is the SAME predicate lookup() uses, so "would this row shadow the
+                # new one?" is answered by the real matcher, not a reimplementation of it.
+                if not new.startswith("/") and _matches(p, new):
+                    at = i
+                    break
+                continue
+            if new.startswith("/"):
                 continue
             if p and p in new and p != new:
                 at = i
                 break
         rows.insert(at, {"pattern": pattern, "kind": kind, "answer": answer, "source": source})
-        tmp = CSV + ".tmp"
-        with open(tmp, "w", newline="", encoding="utf-8") as f:
-            w = csv.writer(f)
-            w.writerow(HEADER)
-            for r in rows:
-                w.writerow([r["pattern"], r["kind"], r["answer"], r["source"]])
-        os.replace(tmp, CSV)
+        _write(rows)
     _rows_cached.cache_clear()   # mtime-keyed, but clear anyway so a same-second
                                  # learn+lookup in one process sees the new row
     return True
