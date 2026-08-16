@@ -1023,6 +1023,17 @@ _OPTION_SYNONYMS = {
     "native or bilingual": ["C2: Proficient", "C2", "Native", "Fluent", "Native speaker"],
     "c2: proficient": ["Native or bilingual", "Native", "Fluent"],
     "fluent": ["C2: Proficient", "Native or bilingual", "Native"],
+    # "How did you hear about us?" option sets describe the SAME sourcing channel in
+    # different words (2026-08-16). The bank holds "Company careers site" — truthful, these
+    # postings come off the employer's own Greenhouse board — but Dotmatics' only matching
+    # option is "Job board, careers website, or LinkedIn". No word-boundary overlap, so the
+    # pick failed and a required field blocked the submit on a question whose answer is not
+    # in doubt. These are all the same claim; none names an affiliation (university, alumni,
+    # referral), which is the thing pick_option deliberately refuses.
+    "company careers site": ["Job board, careers website, or LinkedIn", "Careers website",
+                             "Company website", "Job board", "Careers site", "Company site"],
+    "job board": ["Job board, careers website, or LinkedIn", "Careers website",
+                  "Company website", "Careers site"],
 }
 
 
