@@ -217,3 +217,45 @@ This is the second distinct instance of the same general rule, so treat it as th
 **when Submit does not render, enumerate `.../eform/<ID>/page/1..N` and read each page's
 "There is a problem" banner.** Do not theorise about the declaration gate — in every case so
 far the gate was already correct and an earlier page was quietly incomplete.
+
+## Route classification FIRST — most CSJ adverts are not drivable (2026-08-16)
+
+`scripts/classify_route.py` splits a feed's cards into `tal` / `external` / `closed` before
+any of them costs a tailoring pass. This matters because a CSJ Section 2 is 30+ minutes of
+bespoke writing, and discovering "this one hands off to the department's own ATS" AFTER
+writing it is the expensive way to find out.
+
+Measured over 19 vacancies sourced across his role families (service/interaction design, user
+research, content design, business analysis, devops, SRE):
+
+| | count |
+|---|---|
+| in-platform TAL eform (drivable) | 9 |
+| "Apply at advertiser's site" → department ATS, needs an account | 9 |
+| closed / unknown | 1 |
+| **TAL *and* on-band (EO/HEO/SEO)** | **2** |
+
+Seven of the nine drivable ones were **Grade 6/7**, i.e. senior — off-band per the grade rule
+above. So the drivable-and-on-band CSJ set is far smaller than the raw card count suggests
+(883 cards sourced in one pass). Classify, then filter by GRADE, then write.
+
+⚠️ Two classifier traps, both of which UNDER-report the drivable set:
+1. **The apply block is inside a COLLAPSED "Apply and further information" section**, so its
+   button text is absent from `document.body.innerText`. Matching on innerText alone reported
+   1/19 drivable; querying the DOM for an `Apply now` control reported the true 9/19. Use the
+   DOM for the control, innerText for the "advertiser's site" prose.
+2. `goto()` returns before CSJ renders the apply block — poll for a marker before reading.
+
+## ⛔ HMRC "Desirable experience and skills" (`datafield_50629_1_1`) will not accept input
+
+Confirmed on TWO separate HMRC vacancies (Senior Business Analyst 2009576, Senior Test
+Engineer 2008608), so it is HMRC-form-wide, not posting-specific. The textarea reports
+`disabled=false`, `readOnly=false`, and sits inside the normal form next to `continue_button`,
+but **no input method lands a value**:
+  * `atsform.fill` → the camofox `/type` endpoint returns HTTP 500;
+  * React native value-setter + `input`/`change`/`blur` → `value.length` reads back 0;
+  * REAL per-character keystrokes via `cfx.press` → also 0.
+Continue still POSTs, so the walk advances, but the Declaration page keeps listing that page
+under "problems that need to be fixed" and **Submit never renders**. Everything else on those
+forms persisted normally. CPS (2009637) and FCDO (2007055) submitted cleanly through the same
+driver on the same day, so the driver is fine. Hand HMRC vacancies to the user in noVNC.
