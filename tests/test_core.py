@@ -299,6 +299,51 @@ class TestNoDivergentAntiAiOath(unittest.TestCase):
                              f"false positive on an ordinary label: {label[:70]!r}")
 
 
+class TestBlockedIsNotOneStatus(unittest.TestCase):
+    """"Blocked" means both "retry this" and "never retry this", and conflating them cost four
+    wasted drives on the single serial tab in one session (2026-08-16): Dotmatics, GoFundMe
+    (already diagnosed after three attempts as needing the applicant's own browser) and three
+    Twilio reqs (an anti-AI oath he must sign himself; one also Remote - India)."""
+
+    def test_terminal_causes_are_not_retried(self):
+        from precheck import classify_blocked  # noqa: PLC0415
+        for note in [
+            "needs the user's own browser",
+            "Requires signing Twilio's Candidate AI Responsible Use Policy attestation. TERMINAL, do not re-queue.",
+            "OFF-LOCATION: the req header reads \"Remote - India\"",
+            "3 attempts, all timed out — past the 2-attempt cap",
+            "blocked by hCaptcha",
+            "candidate account required — must register first",
+        ]:
+            self.assertEqual(classify_blocked("Blocked", note), "terminal", f"note={note[:50]!r}")
+
+    def test_fixable_causes_stay_retryable(self):
+        from precheck import classify_blocked  # noqa: PLC0415
+        for note in [
+            "submit blocked by required/invalid field(s): Gender; Veteran Status",
+            "nav_fail — engine died mid-drive",
+            "submit returned no confirmation (no error nodes on the page)",
+        ]:
+            self.assertEqual(classify_blocked("Blocked", note), "retryable", f"note={note[:50]!r}")
+
+    def test_an_unexplained_row_is_unknown_not_retryable(self):
+        """The whole point. 75 of 140 Blocked rows carry no reason and cannot be backfilled;
+        defaulting them to retryable is exactly the assumption that burned the serial tab."""
+        from precheck import classify_blocked, retry_pool  # noqa: PLC0415
+        self.assertEqual(classify_blocked("Blocked", ""), "unknown")
+        self.assertEqual(classify_blocked("Blocked", None), "unknown")
+        rows = [["", "A", "r", "s", "u", "Blocked", "", ""],                     # unexplained
+                ["", "B", "r", "s", "u", "Blocked", "", "timed out"],            # retryable
+                ["", "C", "r", "s", "u", "Blocked", "", "needs the user's own browser"]]
+        self.assertEqual([r[1] for r in retry_pool(rows)], ["B"])
+        self.assertEqual([r[1] for r in retry_pool(rows, include_unknown=True)], ["A", "B"])
+
+    def test_applied_and_skipped_are_never_in_a_retry_pool(self):
+        from precheck import classify_blocked  # noqa: PLC0415
+        for st in ("Applied", "Skipped", "applied"):
+            self.assertEqual(classify_blocked(st, "anything at all"), "terminal")
+
+
 class TestDriveBlockIsShared(unittest.TestCase):
     """Eligibility refusal must live on EVERY path into a submit, not just the queue.
 

@@ -488,6 +488,67 @@ def salary_band_top(s):
     return max(nums) if nums else None
 
 
+# Causes that will NOT change on a re-drive. A Blocked row whose note names one of these is
+# spent: re-driving it can only burn another turn on the single serial tab.
+_TERMINAL_NOTE = re.compile(
+    r"terminal, do not re-queue|do not re-queue|"
+    r"own browser|needs the user|user must apply|apply himself|"
+    r"oath|attestation|responsible use policy|"
+    r"off-location|remote - (?!uk\b)|no truthful right-to-work|"
+    r"account (?:wall|required)|must (?:register|create an account)|sign ?in required|"
+    r"attempt cap|past the \d+-attempt|\d+ attempts, all|"
+    r"turnstile|hcaptcha", re.I)
+
+# Causes that a code fix or a retry can plausibly clear.
+_RETRYABLE_NOTE = re.compile(
+    r"submit blocked by required/invalid field|timed out|timeout|"
+    r"no confirmation|nav_fail|engine died|stale_or_dead_tab|dead tab", re.I)
+
+
+def classify_blocked(status, note=""):
+    """Three-way verdict for a tracker row: 'terminal' | 'retryable' | 'unknown'.
+
+    ⛔ WHY THIS EXISTS (2026-08-16). "Blocked" means BOTH "retry this" and "never retry this",
+    so a retry pool built from Blocked rows re-drives dead postings. In one session that cost
+    four wasted drives on the single serial tab: Dotmatics, GoFundMe (already diagnosed after
+    three attempts as needing the applicant's own browser) and three Twilio reqs (an anti-AI
+    oath the applicant must sign himself; one also advertised Remote - India).
+
+    'unknown' is a FIRST-CLASS verdict, not a synonym for 'retryable'. 75 of 140 Blocked rows
+    carry no reason at all and cannot be backfilled — the evidence was never written to disk.
+    Treating those as retryable is precisely the assumption that produced the wasted drives, so
+    a caller must opt into them explicitly rather than get them by default."""
+    st = (status or "").strip().lower()
+    if st in ("applied", "applied?", "skipped"):
+        return "terminal"
+    txt = (note or "").strip()
+    if not txt:
+        return "unknown"
+    if _TERMINAL_NOTE.search(txt):
+        return "terminal"
+    if _RETRYABLE_NOTE.search(txt):
+        return "retryable"
+    return "unknown"
+
+
+def retry_pool(rows, include_unknown=False):
+    """Tracker rows worth re-driving. `rows` are dicts or the raw CSV lists.
+
+    Defaults to retryable-only. Pass include_unknown=True deliberately, knowing that an
+    unexplained Blocked row is a coin flip paid for in serial-tab minutes."""
+    out = []
+    for r in rows:
+        if isinstance(r, dict):
+            status, note = r.get("Status") or r.get("status"), r.get("Notes") or r.get("notes")
+        else:
+            status = r[5] if len(r) > 5 else ""
+            note = r[7] if len(r) > 7 else ""
+        verdict = classify_blocked(status, note)
+        if verdict == "retryable" or (include_unknown and verdict == "unknown"):
+            out.append(r)
+    return out
+
+
 def drive_block(location=None, url=None, company=None, title=None):
     """-> reason string if this posting MUST NOT be driven, else None. Call at the top of
     every apply driver, before the first navigation.
