@@ -1,0 +1,9 @@
+{
+  "cv": "base-resume.pdf",
+  "company": "MyFitnessPal",
+  "role": "Site Reliability Engineer",
+  "url": "https://job-boards.greenhouse.io/myfitnesspal/jobs/8085214",
+  "source": "Greenhouse",
+  "defaults": true,
+  "fill": {}
+}
