@@ -48,6 +48,23 @@ When any doc references a script, it MUST use that script's **canonical path** (
 - **Run `bash scripts/check-no-pii.sh` before EVERY push** — the push is not done until it
   prints ✓. Details and the config-routing model: §PII below.
 
+### Host quirks that have caused real damage (verified, not folklore)
+
+- ⛔ **`pgrep` IS BROKEN ON THIS HOST** — `pgrep: error while loading shared libraries:
+  libproc2.so.1`, exit **127**. Any liveness check built on it (`until ! pgrep -f x; do …`,
+  `if pgrep …`) reads "process is gone" **the instant it is armed**, because 127 is
+  indistinguishable from "no match". This has twice reported a still-running drive as ENDED;
+  the first time, two concurrent drains ran on the single serial tab as a result. Use
+  **`ps -p <pid>`** or `ps -ef | grep '[x]pattern'` instead — never `pgrep`.
+- ⛔ **`/tmp` is `noexec`.** `chmod +x /tmp/foo.sh && nohup /tmp/foo.sh &` fails with
+  *Permission denied* — and the launcher still exits **0**, so the job looks started and is
+  not. Invoke the interpreter explicitly: `nohup bash /tmp/foo.sh &`.
+- **Python buffers stdout when redirected.** A drive killed by `timeout` loses its entire log,
+  so a hang looks like silence. Always `python3 -u` for a backgrounded drive.
+- **The browser tab is a SINGLE SERIAL RESOURCE.** One drive at a time, full stop. Two
+  concurrent drives corrupt each other's page state, and `cfx.py prune-tabs` will reap another
+  process's tab (documented, deliberately unfixed).
+
 ---
 
 ## Canonical file placement (where a file lives — and where a NEW one goes)
