@@ -1,0 +1,19 @@
+Two reasons.
+
+The first is the problem space. Most product design is applied to low-stakes decisions;
+Palantir's is applied where the decision matters and the user is accountable for it. I have
+done that once already, on the NHS COVID-19 App at UKHSA, and it is the work I found most
+worth doing — designing under real constraints, at national scale, where being clear is a
+safety requirement rather than a preference.
+
+The second is the way the work is organised. My strongest trait is that I sit at the
+design–engineering seam: I do research and interaction design, and I also build — Node.js and
+Postgres on my own price-comparison product, a TypeScript monorepo with spatial indexing and
+a self-hosted vector basemap on another, CI/CD and hosting at CryptoKnowledge. Palantir's
+forward-deployed model, where the person designing sits close to the real deployment and the
+real user rather than at the end of a specification chain, matches how I already work.
+
+On the products themselves, the part I would most want to work on is where a data model meets
+an operator who has to justify a decision — the ontology-facing surfaces rather than the
+dashboards. That is where design either makes a complex system legible or quietly hides the
+uncertainty, and the second failure is the dangerous one.

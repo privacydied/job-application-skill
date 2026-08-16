@@ -212,10 +212,38 @@ def _parse_target_roles_cached(path, mtime):
     return tuple(entries)
 
 
+
+# ⛔ EARLY-CAREER PROGRAMMES ARE NOT ON-PROFILE (2026-08-16). A title screen that matches on a
+# role PHRASE lets "Product Designer, Internship" through as Tier A, because it does contain
+# "Product Designer". Caught live: a drain opened Palantir's Product Designer INTERNSHIP,
+# whose own questions give it away — "Which university are you currently attending?",
+# "your intended graduation year", "Will this be your final internship before graduating?".
+# He graduated from UAL in 2019 and has ~6 years of experience, so he is not eligible; the
+# never-teach rule already refuses to claim recent-graduate status for exactly this reason.
+# Applying anyway wastes the single serial tab and would misrepresent him if it ever
+# completed. Screen the PROGRAMME TYPE, not just the role phrase.
+#
+# Word-boundary anchored on purpose: a bare "intern" substring matches "INTERNational" and
+# "INTERNal", which is the false-cognate class this file exists to prevent (and which my own
+# audit grep fell into while checking whether any had been submitted).
+_EARLY_CAREER = re.compile(
+    r"\b(intern|interns|internship|internships|"
+    r"placement year|industrial placement|year in industry|"
+    r"graduate scheme|grad scheme|graduate programme|graduate program|"
+    r"apprentice|apprenticeship|skillbridge|"
+    r"summer analyst|summer associate|work experience|undergraduate)\b", re.I)
+
+
+def _early_career(title_l):
+    """True when the title names a student/graduate PROGRAMME rather than a role."""
+    return bool(_EARLY_CAREER.search(title_l or ""))
+
+
 def check_title(title):
     title_l = (title or "").lower()
     seniority_flag = any(re.search(r"\b" + re.escape(w) + r"\b", title_l) for w in SENIORITY_WORDS)
     discipline_flag = _industrial_design_engineer(title_l)
+    early_career_flag = _early_career(title_l)
     best = None  # (tier, phrase) -- prefer the highest tier (A > B > C) on multiple matches
     for phrase, tier in parse_target_roles():
         if phrase and phrase in title_l:
@@ -224,7 +252,16 @@ def check_title(title):
     # A tier phrase match is overridden when the title is an off-profile industrial
     # 'design engineer' (electrical/ICT/mechanical/CAD/...) — see _DESIGN_ENG_INDUSTRIAL.
     return {
+        # ⛔ FLAG, DO NOT DROP (2026-08-16, user decision). An internship at a
+        # first-choice employer can be worth applying to even for an experienced
+        # candidate — the applicant makes that call, not the screener. So
+        # early_career_flag is REPORTED and left out of `eligible`; the apply lane
+        # can skip it by default while a named posting is still drivable on request.
+        # Palantir's Product Designer Internship is the case that set this: it asks
+        # "which university are you currently attending OR DID YOU LAST ATTEND" and
+        # an intended graduation year, both of which he can answer truthfully.
         "eligible": best is not None and not discipline_flag,
+        "early_career_flag": early_career_flag,
         "tier": best[0] if best else None,
         "matched_phrase": best[1] if best else None,
         "seniority_flag": seniority_flag,

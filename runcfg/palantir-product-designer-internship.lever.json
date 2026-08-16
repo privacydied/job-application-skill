@@ -1,0 +1,23 @@
+{
+  "cv": "base-resume.pdf",
+  "company": "Palantir Technologies",
+  "role": "Product Designer, Internship",
+  "url": "https://jobs.lever.co/palantir/44129013-01e0-4699-8fc1-7a189bb37b63",
+  "source": "Lever",
+  "defaults": true,
+  "eeo": true,
+  "fill": {
+    "most challenging product": "@runcfg/answers/palantir-challenging.txt",
+    "mission is to design and solve critical business problems": "@runcfg/answers/palantir-mission.txt",
+    "most exciting to you about Palantir": "@runcfg/answers/palantir-why.txt",
+    "portfolio password": "N/A"
+  },
+  "select": {
+    "university are you currently attending or did you last attend": "Other",
+    "intended graduation year": "2019"
+  },
+  "radios": {
+    "upcoming offer deadlines": "No",
+    "final internship before graduating": "No"
+  }
+}

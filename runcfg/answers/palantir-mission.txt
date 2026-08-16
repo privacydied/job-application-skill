@@ -1,0 +1,20 @@
+The thing I find genuinely interesting about Palantir's framing is that the hard problems are
+rarely the technical ones. They are institutional: the data exists, the analysis is possible,
+and the obstacle is that the people who need to act cannot see it in a form they trust or
+understand in time.
+
+I have worked at that seam. On the NHS COVID-19 App the underlying epidemiology was not the
+bottleneck — the bottleneck was turning it into something a person could act on immediately,
+correctly, without training, across the whole population. Getting that wrong is not a usability
+inconvenience; it is a public-health outcome. That is the same category of problem as helping
+an analyst or an operator make a consequential decision from complicated data under time
+pressure.
+
+What I would want to work on is the part where a system's model of a problem meets a human
+who has to be accountable for the decision. Interfaces for expert users under pressure are
+their own discipline: the user is not confused, they are busy and responsible, and the design
+job is to be legible and honest about uncertainty rather than to simplify it away.
+
+I am also a builder rather than only a specifier — Node.js and Postgres, a self-hosted Linux
+homelab, CI/CD and infrastructure I run myself — so I am comfortable working close to the
+engineering rather than handing off a specification.

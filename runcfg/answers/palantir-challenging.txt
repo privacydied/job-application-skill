@@ -1,0 +1,22 @@
+The NHS COVID-19 App, during my two and a half years as an interaction designer at what is
+now UKHSA.
+
+The hard part was not the interface. It was that the product had to work for everyone in the
+country, under time pressure, while the underlying epidemiological guidance kept changing —
+and that a person misreading a screen had real consequences, not a bad conversion rate. We
+worked inside the GOV.UK Design System with accessibility as a hard requirement, across a
+multidisciplinary team and several government bodies, at a pace where a decision taken on
+Monday could be live by Friday.
+
+Two things from it stayed with me. The first is that clarity is a safety property: if a
+screen can be misread under stress, that is a design defect, and no amount of visual polish
+compensates. The second is that constraints from other disciplines — clinical, legal,
+epidemiological — are not obstacles to design around but the actual shape of the problem. The
+design work that mattered most was often reconciling those constraints into something a
+person could act on in fifteen seconds.
+
+Outside that, the build I am proudest of is gearo, a price-comparison engine for music gear
+that I own end to end: the product and UX, a Node.js and Postgres back end, and a multi-source
+scraping and normalisation pipeline that dedupes noisy listings across twelve-plus
+marketplaces and ranks them by relevance, geography and price context. The design problem
+there is almost entirely a data problem wearing an interface.
