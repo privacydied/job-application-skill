@@ -56,6 +56,12 @@ class CfxError(RuntimeError):
     """A camofox REST call failed (HTTP error, or an /evaluate JS throw)."""
 
 
+class _DeadTab(CfxError):
+    """CFX_TAB does not resolve to a live tab — the tab is gone, the ENGINE may be fine.
+    Kept distinct so the click-health diagnostic cannot recommend `restart-engine` (which
+    drops every tab and cannot fix a stale id) for what is really a `sync-tab` problem."""
+
+
 def _parse_json(raw: bytes, path: str) -> dict:
     """Parse a REST response body into a dict. An EMPTY body (some endpoints
     return 200 with no content) becomes `{}` rather than blowing up; a
@@ -891,7 +897,15 @@ def engine_click_healthy(timeout_s: float = 6.0) -> bool:
             "})()"
         )
     except CfxError:
-        return False  # can't even run JS on the current page -- treat as unhealthy/unknown, the safe default
+        # ⛔ A DEAD TAB IS NOT A BROKEN CLICK ENDPOINT (2026-08-16). This used to return False
+        # here unconditionally, and `check-engine` renders False as "Click endpoint is broken
+        # ... Run restart-engine to self-heal." But the commonest reason `evaluate` fails is a
+        # STALE CFX_TAB — the id in .jobenv pointing at a tab a previous restart dropped. The
+        # advice is then exactly backwards: restart-engine drops every remaining tab, the id
+        # stays stale, and the check reports "broken" again. Cost a real detour this session:
+        # the engine was healthy the whole time and .jobenv simply pointed at a dead tab.
+        # Distinguish them — if the backend answers but THIS tab doesn't exist, say so.
+        raise _DeadTab() from None
     try:
         try:
             click_selector("#__cfxSanity", pace=False)
@@ -1256,7 +1270,14 @@ def click_and_follow(ref: str = None, selector: str = None,
             if dialog_seen and not dialog_seen.get("clicked"):
                 return {"outcome": "unhandled_dialog", "dialog_text": dialog_seen.get("dialog_text", ""),
                         "url": before_url}
-            if not auto_heal or engine_click_healthy():
+            try:
+                # A dead tab here means we cannot TEST the engine, not that it is broken.
+                # Report no_change (the conservative outcome) rather than falling into the
+                # destructive restart branch below on the strength of an untestable probe.
+                engine_ok = (not auto_heal) or engine_click_healthy()
+            except _DeadTab:
+                engine_ok = True
+            if engine_ok:
                 return {"outcome": "no_change", "url": before_url}
             # Engine confirmed broken, not this button -- BUT restarting is destructive
             # (drops EVERY open tab, including any in-progress form on THIS one) and must
@@ -1655,7 +1676,20 @@ def _cli():
             # Standalone diagnostic: is the click endpoint actually working right now?
             # Useful before starting a run, or when something feels stuck for no visible
             # reason. Does NOT restart anything by itself -- see restart-engine.
-            healthy = engine_click_healthy()
+            try:
+                healthy = engine_click_healthy()
+            except _DeadTab:
+                # NOT an engine fault: CFX_TAB points at a tab that no longer exists.
+                # restart-engine would drop every remaining tab and leave the id just as
+                # stale, so recommend the fix that actually applies.
+                print(json.dumps({"click_endpoint_healthy": None,
+                                  "reason": "stale_or_dead_tab"}, indent=2))
+                print(f"CFX_TAB ({(os.environ.get('CFX_TAB') or '?')[:12]}…) is not a live "
+                      "tab, so click health could not be tested — the engine itself may be "
+                      "perfectly fine. Do NOT restart-engine (it drops every tab and cannot "
+                      "fix a stale id). Run 'python3 cfx.py ensure-tab' or 'sync-tab' and "
+                      "re-check.", file=sys.stderr)
+                return 4
             print(json.dumps({"click_endpoint_healthy": healthy}, indent=2))
             if not healthy:
                 print("Click endpoint is broken (every mouse action fails, not just one "
