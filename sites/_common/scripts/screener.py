@@ -292,6 +292,33 @@ def record(pattern, answer, kind="text", source="learned", update=False, sample=
     order, so no existing precedence changes."""
     if not pattern or answer is None:
         return False
+    # ⛔ PROVE THE RULE CAN ACTUALLY FIRE, USING `sample` AS THE ORACLE (2026-08-16).
+    # `_matches` treats a bare pattern as a WORD-BOUNDED SUBSTRING and compiles a regex ONLY
+    # when it is /slash-wrapped/. So banking `ai notetaker|notetakers to transcribe` stores a
+    # literal containing a pipe — a string no question ever contains — and the row silently
+    # never fires. That happened the same day, to a consent answer the USER had just supplied:
+    # the CSV looked perfectly correct and the answer was inert. Exactly the failure the
+    # docstring above names: "a learn that silently cannot take effect is worse than no learn."
+    #
+    # Do NOT try to infer regex-intent from metacharacters. `location (city)` is a REAL, WORKING
+    # row whose parentheses are literal (they are escaped by `_bounded`), and `Preferred Name |
+    # What would you like us to call you?` is a REAL Lever label containing a literal pipe — so
+    # a metacharacter scan would auto-wrap working rows into broken ones. The only sound test is
+    # empirical: if the caller passed the question this rule was learned from, the rule must
+    # match it. Slash-wrapping is tried only as a REPAIR when the literal reading fails.
+    if sample:
+        _p, _s = pattern.strip(), norm(sample)
+        if not _matches(_p, _s):
+            _wrapped = "/" + _p.strip("/") + "/"
+            if _matches(_wrapped, _s):
+                print(f"screener: {pattern!r} does not match its own sample as a literal; "
+                      f"banking it as {_wrapped!r} (regex) instead.", file=sys.stderr)
+                pattern = _wrapped
+            else:
+                print(f"screener: REFUSED {pattern!r} — it does not match the sample it was "
+                      f"learned from ({sample[:60]!r}), so it could never fire.",
+                      file=sys.stderr)
+                return False
     if not os.path.exists(CSV):
         seed()
     # A.4: dup-check + insert under the lock so two drivers learning the same phrasing

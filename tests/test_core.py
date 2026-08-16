@@ -299,6 +299,64 @@ class TestNoDivergentAntiAiOath(unittest.TestCase):
                              f"false positive on an ordinary label: {label[:70]!r}")
 
 
+class TestBankedRuleMustBeAbleToFire(unittest.TestCase):
+    """A banked screener answer that can never match is worse than no answer at all.
+
+    WHY (2026-08-16): `_matches` treats a bare pattern as a word-bounded SUBSTRING and compiles
+    a regex ONLY when it is /slash-wrapped/. Banking `ai notetaker|notetakers to transcribe`
+    therefore stored a literal containing a pipe — a string no question ever contains — and the
+    row silently never fired. It was a consent answer the USER had just supplied, and the CSV
+    looked perfectly correct afterwards.
+
+    The guard uses `sample` as an ORACLE rather than sniffing for metacharacters, because
+    metacharacters are NOT reliable evidence of regex intent: `location (city)` is a real,
+    working row whose parentheses are literal, and "Preferred Name | What would you like us to
+    call you?" is a real Lever label containing a literal pipe. A metacharacter scan would
+    auto-wrap working rows into broken ones — the same fix-the-example/break-the-general-case
+    mistake this suite keeps catching."""
+
+    def setUp(self):
+        import shutil, tempfile, os  # noqa: PLC0415
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "sites", "_common", "scripts"))
+        import screener  # noqa: PLC0415
+        self.screener = screener
+        self.tmp = tempfile.mkdtemp()
+        self.orig = screener.CSV
+        screener.CSV = os.path.join(self.tmp, "screener-answers.csv")
+        if os.path.exists(self.orig):
+            shutil.copy(self.orig, screener.CSV)
+        screener._rows_cached.cache_clear()
+
+    def tearDown(self):
+        import shutil  # noqa: PLC0415
+        self.screener.CSV = self.orig
+        self.screener._rows_cached.cache_clear()
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_alternation_is_repaired_to_a_regex(self):
+        q = "We may use zzai notetakers to transcribe conversations"
+        self.assertTrue(self.screener.record("zzai notetaker|zzsomething else", "Yes, I consent",
+                                             kind="select", source="t", sample=q))
+        hit = self.screener.lookup(q)
+        self.assertIsNotNone(hit, "the repaired rule must actually fire")
+        self.assertEqual(hit["answer"], "Yes, I consent")
+
+    def test_literal_parentheses_are_left_alone(self):
+        """`location (city)` works BECAUSE the parens are escaped as a literal. Wrapping it as
+        a regex would turn it into a group and break a shipped row."""
+        q = "Your zzlocation (city) please"
+        self.assertTrue(self.screener.record("zzlocation (city)", "London",
+                                             kind="text", source="t", sample=q))
+        hit = self.screener.lookup(q)
+        self.assertIsNotNone(hit)
+        self.assertEqual(hit["pattern"], "zzlocation (city)", "must NOT be slash-wrapped")
+
+    def test_a_rule_that_cannot_match_its_sample_is_refused(self):
+        self.assertFalse(self.screener.record("zzcompletely unrelated", "X", kind="text",
+                                              source="t", sample="a question about something"))
+
+
 class TestBlockedIsNotOneStatus(unittest.TestCase):
     """"Blocked" means both "retry this" and "never retry this", and conflating them cost four
     wasted drives on the single serial tab in one session (2026-08-16): Dotmatics, GoFundMe

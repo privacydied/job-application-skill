@@ -1,0 +1,30 @@
+{
+  "cv": "base-resume.pdf",
+  "company": "Palantir Technologies",
+  "role": "Product Designer, New Grad",
+  "url": "https://jobs.lever.co/palantir/76161763-bafa-4ebb-a2ce-2a25e315b7d7",
+  "source": "Lever",
+  "location": "London, United Kingdom",
+  "defaults": true,
+  "eeo": true,
+  "fill": {
+    "most challenging product": "@runcfg/answers/palantir-challenging.txt",
+    "mission is to design and solve critical business problems": "@runcfg/answers/palantir-mission.txt",
+    "most exciting to you about Palantir": "@runcfg/answers/palantir-why.txt",
+    "portfolio password": "N/A"
+  },
+  "select": {
+    "university are you currently attending or did you last attend": "Other",
+    "intended graduation year": "Other",
+    "how you heard about this opportunity": "Palantir Website"
+  },
+  "radios": {
+    "upcoming offer deadlines": "No",
+    "legally authorized to work in the country": "Yes",
+    "require sponsorship for employment visa status": "No",
+    "AI notetakers to transcribe conversations": "Yes, I consent"
+  },
+  "checkboxes": {
+    "English (ENG)": "on"
+  }
+}
