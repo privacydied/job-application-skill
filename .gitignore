@@ -174,3 +174,12 @@ scripts/probe_required_fields.py
 # Committing these would look like ordinary runcfg/ driver configs while being unusable:
 # feeding one to a driver submits the placeholder identity. Unreferenced by any script.
 runcfg_gh/
+
+# Per-application ANSWER TEXT (2026-08-16). These are generated essays and free-text answers
+# written from references/applicant-profile.md, so they carry personal narrative and sometimes
+# personal detail — a Proton answer legitimately contained "London (N1)" because the question
+# asked which office he was applying to. runcfg/ itself is tracked (471 driver configs), so
+# without this rule the next `git add -A` would commit a partial address into a public repo.
+# check-no-pii.sh would NOT have caught it beforehand: it only scans TRACKED files, so an
+# untracked file passes right up until the moment it is added.
+runcfg/answers/

@@ -1,12 +1,7 @@
 {
-  "cv": "base-resume.pdf",
-  "company": "Dotmatics",
+  "cv": "base-resume.pdf", "company": "Dotmatics",
   "role": "UX Designer (6 Months Fixed Term Contract)",
   "url": "https://boards.greenhouse.io/embed/job_app?token=4691588005",
-  "source": "Greenhouse",
-  "defaults": true,
-  "eeo": true,
-  "fill": {
-    "What about the mission of Dotmatics inspires you most": "@runcfg/answers/dotmatics-mission.txt"
-  }
+  "source": "Greenhouse", "defaults": true, "eeo": true,
+  "fill": { "What about the mission of Dotmatics inspires you most": "@runcfg/answers/dotmatics-wf0.txt" }
 }

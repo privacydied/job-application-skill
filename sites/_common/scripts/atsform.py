@@ -736,6 +736,52 @@ def _combo_open_and_pick(option, multi=False, strict=False):
                 opts = _combo_options()
                 if opts:
                     break
+    # ⛔ INPUT-LESS DROPDOWNS: OPEN, THEN CLICK THE OPTION (2026-08-16). Every rung above
+    # assumes the control owns an <input> — it focuses it, types into it, and reads the
+    # filtered listbox. A growing number of widgets have NO input at all: the trigger is a
+    # BUTTON and the options only exist once it is opened. On those, _COMBO_RESOLVE marks the
+    # trigger, _combo_type has nothing to type into, the option list stays empty, and the
+    # free-text commit reports NO_INPUT. That is exactly what blocked Dotmatics and IMC — the
+    # same failure twice, so it is a shape this engine must handle, not a per-board quirk.
+    # Proven on Workday's dropdowns earlier today: a trusted click on the trigger renders
+    # real [role=option] nodes, and clicking the option binds where typing never could.
+    if not opts:
+        try:
+            probe = cfx.evaluate("(()=>{const t=document.querySelector('[data-ats-target]');"
+                                 "return t? (t.querySelector('input')?'has-input':'no-input') : 'no-target';})()")
+        except Exception:  # noqa: BLE001
+            probe = "no-target"
+        if probe == "no-input":
+            try:
+                cfx.click_selector('[data-ats-target]', timeout=8)
+            except Exception:  # noqa: BLE001
+                cfx.evaluate("(()=>{const t=document.querySelector('[data-ats-target]');"
+                             "if(t)t.click();return 1})()")
+            time.sleep(1.6)
+            hit = cfx.evaluate("""(()=>{const want=%s.toLowerCase();
+              const norm=x=>(x.innerText||'').replace(/\\s+/g,' ').trim().toLowerCase();
+              const os=[...document.querySelectorAll('[role=option]')];
+              if(!os.length) return 'NO_OPTIONS';
+              let o=os.find(x=>norm(x)===want);
+              if(!o){const esc=want.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&');
+                     const re=new RegExp('(^|[^a-z0-9])'+esc+'([^a-z0-9]|$)');
+                     o=os.find(x=>re.test(norm(x)));}
+              if(!o) return 'NO_MATCH:'+os.slice(0,6).map(x=>norm(x)).join(' | ');
+              o.setAttribute('data-ats-opt','1'); o.scrollIntoView({block:'center'});
+              return 'FOUND:'+(o.innerText||'').trim().slice(0,40);})()""" % _js(str(option)))
+            if isinstance(hit, str) and hit.startswith("FOUND:"):
+                try:
+                    cfx.click_selector('[data-ats-opt]', timeout=8)
+                except Exception:  # noqa: BLE001
+                    cfx.evaluate("(()=>{const o=document.querySelector('[data-ats-opt]');"
+                                 "if(o)o.click();return 1})()")
+                time.sleep(0.8)
+                cfx.evaluate("(()=>{document.querySelectorAll('[data-ats-opt]')"
+                             ".forEach(e=>e.removeAttribute('data-ats-opt'));return 1})()")
+                _combo_clear_marker()
+                print(f"OK=option-click:{hit[6:]}")
+                return 0
+            print(f"  input-less dropdown: {hit}")
     clicked = cfx.evaluate(_COMBO_CLICK.replace("__OPT__", _js(option))
                        .replace("__STRICT__", "true" if strict else "false"))
     if isinstance(clicked, str) and clicked.startswith("OK"):
