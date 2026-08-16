@@ -16,7 +16,8 @@ first, then spend the writing time only on the drivable ones.
 Why it needs the browser: civilservicejobs.service.gov.uk is behind an ALTCHA "Quick Check
 Needed" interstitial, so a plain HTTP fetch returns the gate page, not the advert (verified —
 `curl` gets `<title>Quick Check Needed</title>` and zero apply markers). The sanctioned ALTCHA
-auto-solve lives in feed.py; this reuses the same live tab.
+auto-solve lives in feed.py and is invoked HERE (solve_altcha) — this module runs
+standalone from the apply lane, so it cannot assume a feed run already cleared the gate.
 
 USAGE:
   python3 sites/civilservicejobs/scripts/classify_route.py <cards.json> [<cards.json> ...] \
@@ -36,6 +37,8 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.abspath(os.path.join(_HERE, "..", "..", ".."))
 sys.path.insert(0, os.path.join(_ROOT, "sites", "_common", "scripts"))
 import cfx  # noqa: E402
+sys.path.insert(0, _HERE)
+import feed  # noqa: E402 — solve_altcha(): the sanctioned CSJ gate solver
 
 # "Apply at advertiser's site" is the hand-off marker. Keep this narrow: the phrase appears in
 # the apply block, and a looser match ("advertiser") would also hit unrelated boilerplate.
@@ -62,6 +65,20 @@ def classify_one(url):
     if not nav.get("ok"):
         out["note"] = "blank render"
         return out
+    # ⛔ SOLVE THE GATE, DON'T ASSUME SOMEONE ELSE DID (2026-08-16). This module's header said
+    # it "reuses the same live tab" as feed.py and therefore inherits its ALTCHA solve. That
+    # only holds if a feed run happened first, in this session, on this tab. Run standalone —
+    # which is exactly how the apply lane calls it — every vacancy lands on the "Quick Check
+    # Needed" interstitial instead, so no apply/external/closed marker is ever present and
+    # ALL TEN vacancies came back `unknown` with empty grade and salary. That reads as "cannot
+    # classify" when the truth is "never saw the advert", and it silently zeroes out the one
+    # lane that is UK-only by definition. feed.solve_altcha() is the sanctioned solver and its
+    # own docstring says it is "worth reusing"; do so.
+    try:
+        if "quick check" in (cfx.evaluate("(()=>document.title)()") or "").lower():
+            feed.solve_altcha()
+    except Exception as e:  # noqa: BLE001 — a gate we cannot solve stays `unknown`, as before
+        out["note"] = f"altcha: {str(e)[:50]}"
     # ⛔ SETTLE BEFORE READING (2026-08-16). goto() returns as soon as the page has content,
     # but CSJ renders the apply block a beat later. Reading immediately produced `unknown` for
     # adverts that plainly carry an "Apply now" button — i.e. it under-reported the DRIVABLE
