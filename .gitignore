@@ -168,3 +168,9 @@ references/interview-prep-README.md
 
 # throwaway field-probe (scratch; not a shipped tool — SKILL.md no-commit-probes rule)
 scripts/probe_required_fields.py
+
+# scrub_pii.py output — configs whose identity fields hold the SCRUBBED placeholders
+# ("Jane Doe" / "you@example.com" / "+44 7700 900000"), not the applicant's real values.
+# Committing these would look like ordinary runcfg/ driver configs while being unusable:
+# feeding one to a driver submits the placeholder identity. Unreferenced by any script.
+runcfg_gh/

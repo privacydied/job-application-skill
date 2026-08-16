@@ -822,10 +822,19 @@ class TestAtsRouter(unittest.TestCase):
             self.assertTrue(r["drivable"], u)
             self.assertIn("gh_apply.py", r["invoke"], u)
 
+    def test_lever_drivable(self):
+        # Lever moved out of the no-driver list on 2026-08-15 when sites/lever/scripts/lever.py
+        # shipped (first real submissions: Metabase, Palantir, The Athletic). This assertion used
+        # to live in test_recognised_but_no_driver_never_drivable below; it is the ONE ats whose
+        # drivability changed, so it gets its own case rather than being quietly deleted.
+        r = self.classify("https://jobs.lever.co/deliveroo/abc-def")
+        self.assertEqual(r["ats"], "lever")
+        self.assertTrue(r["drivable"])
+        self.assertIn("lever.py", r["invoke"])
+
     def test_recognised_but_no_driver_never_drivable(self):
-        # Lever/Workday/SmartRecruiters/Workable/SuccessFactors: recognised → NOT a false auto-submit.
-        for u, ats in (("https://jobs.lever.co/deliveroo/abc-def", "lever"),
-                       ("https://acme.wd3.myworkdayjobs.com/en-US/careers/job/London/X", "workday"),
+        # Workday/SmartRecruiters/Workable/SuccessFactors: recognised → NOT a false auto-submit.
+        for u, ats in (("https://acme.wd3.myworkdayjobs.com/en-US/careers/job/London/X", "workday"),
                        ("https://jobs.smartrecruiters.com/Acme/743999", "smartrecruiters"),
                        ("https://apply.workable.com/acme/j/ABC123/", "workable"),
                        ("https://form.typeform.com/to/BnSEtzL7", "typeform"),
