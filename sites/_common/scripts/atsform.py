@@ -2352,6 +2352,19 @@ def fill_gaps_from_bank():
         # set_radio directly — so an "I confirm this application is entirely my own words / not
         # AI-generated" question rendered as RADIOS was answered "Yes" by whatever generic
         # affirmative row the bank matched. SKILL.md: attestations are the applicant's to sign.
+        # Same country-scope guard as the config gate: the bank's right-to-work answers are
+        # UK-scoped, and asserting them about another country is a false eligibility claim.
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from precheck import foreign_work_authorisation  # noqa: PLC0415
+            _foreign = foreign_work_authorisation(q)
+        except Exception:  # noqa: BLE001
+            _foreign = None
+        if _foreign:
+            print(f"  bank REFUSE {q[:56]!r}: asks about work authorisation for "
+                  f"{_foreign}, not the UK — the banked answer would be false")
+            skipped += 1
+            continue
         if _is_anti_ai_oath(q) and _is_affirmative(ans):
             print(f"  bank REFUSE {q[:60]!r}: anti-AI attestation — not signing an "
                   f"'own words / no AI' oath on the applicant's behalf")

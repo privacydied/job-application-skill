@@ -285,6 +285,24 @@ def build(slug, jid, eu=False, out=None):
                 human.append(label[:90])
             continue
 
+        # ⛔ A RIGHT-TO-WORK ANSWER IS COUNTRY-SCOPED (2026-08-16). TRUTHS answers
+        # "authorised to work" -> Yes and "require sponsorship" -> No, which are true of the
+        # UNITED KINGDOM and false anywhere else. Yugabyte's form (location: "Remote", so the
+        # region gate had no reason to stop it) asks "Are you legally authorized to work in
+        # United States?" and "…require sponsorship (H1-B)…" — the patterns matched and would
+        # have submitted BOTH answers false. A false eligibility claim is a misrepresentation
+        # about legal status, not an approximation. The question itself is the evidence the
+        # posting is out of scope, so hand it to a human.
+        try:
+            sys.path.insert(0, os.path.join(ROOT, "sites", "_common", "scripts"))
+            from precheck import foreign_work_authorisation  # noqa: PLC0415
+            _foreign = foreign_work_authorisation(label)
+        except Exception:  # noqa: BLE001
+            _foreign = None
+        if _foreign:
+            if required:
+                human.append(f"{label[:70]} [work authorisation for {_foreign} — not the UK]")
+            continue
         answer = next((a for pat, a in TRUTHS if re.search(pat, label, re.I)), None)
         bank_answer = None
         if True:

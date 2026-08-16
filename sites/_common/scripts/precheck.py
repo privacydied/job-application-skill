@@ -214,6 +214,46 @@ def excluded_source(*fields):
     return None
 
 
+
+# ⛔ RIGHT-TO-WORK ANSWERS ARE COUNTRY-SCOPED (2026-08-16). The bank and gen_gh_config's
+# TRUTHS both answer "authorised to work" -> Yes and "require sponsorship" -> No. Those are
+# true of the UNITED KINGDOM — he is a British citizen — and FALSE of anywhere else. The
+# patterns match any country's phrasing, so a US-scoped form got:
+#     "Are you legally authorized to work in United States?"            -> Yes   (false)
+#     "Will you now, or in future, require sponsorship (H1-B) …?"       -> No    (false)
+# Caught on Yugabyte, whose location reads "Remote" so the region gate had no reason to stop
+# it — the QUESTION is what reveals the posting is US-scoped.
+#
+# A false eligibility claim is the worst answer this system can produce: it is a
+# misrepresentation to an employer about legal status, not a preference or an approximation.
+# And the truthful answers ("No" / "Yes I need sponsorship") would make the application
+# pointless anyway. So treat a foreign-country work-authorisation question as what it is —
+# evidence the posting is out of scope — and hand it to a human.
+_FOREIGN_RTW = re.compile(
+    # NB [^?] not [^?.] — the real phrasing contains "i.e." and "etc.", and excluding the
+    # period stopped the match dead before it reached the country name.
+    r"(authoris|authoriz|right to work|eligible to work|entitled to work|work permit|"
+    r"sponsorship|visa)"
+    r"[^?]{0,90}?\b(united states|u\.?s\.?a?\b|america|canada|australia|singapore|india|"
+    r"germany|france|netherlands|ireland|new zealand|japan|brazil|mexico|uae|"
+    r"switzerland|spain|poland|israel)\b", re.I)
+_UK_TOKENS = re.compile(r"united kingdom|\buk\b|britain|england|scotland|wales|"
+                        r"northern ireland", re.I)
+
+
+def foreign_work_authorisation(label):
+    """-> the foreign country named in a work-authorisation question, or None.
+
+    None when the question is UK-scoped or names no country (the bank's UK answer is then
+    correct). A country name that is NOT the UK means the banked answer would be a false
+    statement about legal status."""
+    lab = (label or "")
+    if not lab or _UK_TOKENS.search(lab):
+        return None
+    m = _FOREIGN_RTW.search(lab)
+    return m.group(2) if m else None
+
+
 def already_applied(url=None, company=None, role=None):
     """APPLY-TIME duplicate guard for DRIVERS that take a URL directly and thus BYPASS the
     sourcing precheck (e.g. jobs.theguardian.com/apply.py, reed_apply.py, a hand-driven URL).

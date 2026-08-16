@@ -4249,5 +4249,48 @@ class TestYearsGateFollowsTheProfile(unittest.TestCase):
                       "the years gate must distinguish a profile-backed row from the catch-all")
 
 
+class TestRightToWorkIsCountryScoped(unittest.TestCase):
+    """The bank and gen_gh_config's TRUTHS both answer "authorised to work" -> Yes and
+    "require sponsorship" -> No. Those are true of the UNITED KINGDOM — he is a British
+    citizen — and FALSE anywhere else, yet the patterns match any country's phrasing.
+
+    Caught on Yugabyte, whose location reads "Remote" so the region gate had no reason to stop
+    it; the QUESTION is what reveals the posting is US-scoped:
+        "Are you legally authorized to work in United States?"          -> would answer Yes
+        "Will you now, or in future, require sponsorship (H1-B) …?"     -> would answer No
+    Both false. A false eligibility claim is a misrepresentation about legal status, not an
+    approximation — the worst answer this system can produce."""
+
+    def setUp(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(_HERE), "sites", "_common", "scripts"))
+
+    def _f(self, lab):
+        from precheck import foreign_work_authorisation
+        return foreign_work_authorisation(lab)
+
+    def test_foreign_country_questions_are_flagged(self):
+        for lab in ("Are you legally authorized to work in United States?",
+                    "Will you now, or in future, require sponsorship (i.e. H1-B visa, etc.) "
+                    "to legally work in the United States?",
+                    "Are you legally entitled to work in Canada?"):
+            self.assertIsNotNone(self._f(lab), lab)
+
+    def test_uk_and_unscoped_questions_still_answer(self):
+        # These are the ones the bank SHOULD answer — over-blocking here would break the
+        # commonest screening gate there is.
+        for lab in ("Are you legally authorised to work in the United Kingdom?",
+                    "Do you have the right to work in the UK?",
+                    "Are you legally authorized to work in the country in which this "
+                    "position is based?",
+                    "Do you require visa sponsorship?",
+                    "Will you require sponsorship for employment visa status?"):
+            self.assertIsNone(self._f(lab), lab)
+
+    def test_periods_in_the_question_do_not_break_the_match(self):
+        # The first cut used [^?.] and died on the "." in "i.e." before reaching the country.
+        self.assertIsNotNone(self._f("require sponsorship (i.e. H1-B visa, etc.) to work "
+                                     "in the United States?"))
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
