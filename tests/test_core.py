@@ -4500,3 +4500,51 @@ class TestRightToWorkIsCountryScoped(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestVerificationCodeFalsePositives(unittest.TestCase):
+    """fetch_verification_code has now returned THREE non-codes to callers, each of which would
+    be typed into a form's security-code box and silently rejected: "applying" (2026-08-15,
+    all-lowercase), "Ethical" (2026-08-16, a sentence capital) and "LinkedIn" (CamelCase with an
+    inner capital). Each fix tightened the case-shape test; each time a differently-shaped
+    English or brand word walked through. There is no case-shape that separates a code from a
+    brand name, so the rule is now: a code carries a DIGIT.
+
+    A miss prints NO_CODE and halts, which is recoverable. A false positive is typed into the
+    form and the submit is rejected with no explanation — so prefer the miss."""
+
+    def setUp(self):
+        import os  # noqa: PLC0415
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        p = os.path.join(root, "scripts")
+        if p not in sys.path:
+            sys.path.insert(0, p)
+
+    def test_words_and_brands_are_not_codes(self):
+        import fetch_verification_code as v  # noqa: PLC0415
+        for tok in ("applying", "Ethical", "LinkedIn", "GitHub", "YouTube", "PayPal",
+                    "Verify", "security", "Continue"):
+            self.assertFalse(v._plausible_code(tok), f"{tok!r} must not be taken for a code")
+
+    def test_real_codes_still_pass(self):
+        import fetch_verification_code as v  # noqa: PLC0415
+        for tok in ("vC3N4JMk", "A1B2C3", "482913", "hR7kd2"):
+            self.assertTrue(v._plausible_code(tok), f"{tok!r} is a real code shape")
+
+    def test_magic_link_token_is_extracted(self):
+        """Applied/beapplied verifies by LINK — a 64-char token in an href, which the {6,8}
+        code scan cannot see. The token must come back URL-decoded, because it is PASTED into
+        an input (following the link lands back on the email gate)."""
+        import fetch_verification_code as v  # noqa: PLC0415
+        body = ('<a href="https://app.beapplied.com/apply/omrbqpfboe'
+                '?verificationCode=3nId715xke0LU7UZ%2F8mPVQg">Verify email</a>')
+        self.assertTrue(v._extract_link(body).startswith("https://app.beapplied.com/"))
+        self.assertEqual(v._extract_link_token(body), "3nId715xke0LU7UZ/8mPVQg")
+        self.assertEqual(v._extract_link_token("no link here"), "")
+
+    def test_link_verified_email_yields_no_invented_code(self):
+        """When the email verifies by link there IS no short code, so every near-match is
+        something else — Applied's was the JOB REFERENCE sitting beside the word "code"."""
+        import fetch_verification_code as v  # noqa: PLC0415
+        text = "476379 User Researcher. Copy and paste the code below to continue."
+        self.assertEqual(v._extract(text, strict=True), "")
