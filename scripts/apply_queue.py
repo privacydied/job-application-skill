@@ -78,13 +78,29 @@ def _slug(*parts):
 
 _GH_URL = re.compile(r"greenhouse\.io/(?:embed/job_app\?for=([\w.-]+)&token=(\d+)|"
                      r"([\w.-]+)/jobs/(\d+))")
+# A Greenhouse job advertised on the EMPLOYER's own careers page carries ?gh_jid=<id> and no
+# board slug — e.g. coinbase.com/careers/positions/8126896?gh_jid=8126896. Driving that page
+# fails with "no file input for '#resume'", because it is the company's marketing page, not
+# the Greenhouse form (34 of 41 failures in one drain). Greenhouse serves the real form from
+# the TOKEN ALONE, no slug required — verified live:
+#   https://boards.greenhouse.io/embed/job_app?token=<id>   -> renders, has the resume input
+# (note job-boards.greenhouse.io/embed/... needs the slug and 404s without it; boards.* does not)
+_GH_JID = re.compile(r"[?&]gh_jid=(\d+)")
+_GH_EMBED = "https://boards.greenhouse.io/embed/job_app?token=%s"
 
 
 def _gh_config_from_api(row):
     """Build a Greenhouse config via gen_gh_config (keyless questions API). None if not
     derivable, so the caller can fall back to the minimal config."""
-    m = _GH_URL.search(row.get("url") or "")
+    url = row.get("url") or ""
+    m = _GH_URL.search(url)
     if not m:
+        # employer careers page carrying ?gh_jid=<id> — rewrite to the canonical embed form
+        j = _GH_JID.search(url)
+        if j:
+            row = dict(row, url=_GH_EMBED % j.group(1))
+            print(f"    gh_jid={j.group(1)} -> canonical embed form", file=sys.stderr)
+            return _minimal_gh(row)
         return None
     slug, jid = (m.group(1), m.group(2)) if m.group(1) else (m.group(3), m.group(4))
     try:
@@ -103,6 +119,20 @@ def _gh_config_from_api(row):
         for u in (unanswered + human)[:4]:
             print(f"    UNANSWERED_REQUIRED: {u[:90]}", file=sys.stderr)
         return False        # driving this would bounce on a required field — don't spend the tab
+    return path
+
+
+def _minimal_gh(row):
+    """Config for a Greenhouse posting we know only by token (no slug -> no questions API).
+    gh_apply still fills identity/EEO from apply-defaults and the screener bank; any
+    per-posting required screener simply blocks the submit, which is the correct outcome."""
+    os.makedirs(RUNCFG, exist_ok=True)
+    cfg = {"cv": "base-resume.pdf", "company": row.get("company") or "Unknown",
+           "role": row.get("title") or "", "url": row["url"], "source": "Greenhouse",
+           "defaults": True, "fill": {}}
+    path = os.path.join(RUNCFG, f"{_slug(cfg['company'], cfg['role'])}.greenhouse.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2)
     return path
 
 
