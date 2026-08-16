@@ -87,3 +87,36 @@ reCAPTCHA. Meanwhile `sites/jobs.nhs.uk/` already sources NHS adverts freely and
 so the only thing a Trac driver buys is the *apply* leg, and only for trusts that route to Trac
 rather than Jobtrain. Prefer **Oleeo** (`sites/oleeo/NOTES.md`: HTTP sourcing, anonymous apply
 start) before investing here.
+
+
+## ✅ REACHABLE ROUTE (2026-08-16): NHS Jobs hands off straight to the Trac advert
+
+The Cloudflare wall above applies to Trac's OWN search and job-detail URLs. It does NOT block
+the hand-off from NHS Jobs, which lands on a fully-rendered Trac advert:
+
+    jobs.nhs.uk/candidate/jobadvert/<ref>              (log in first — see below)
+      -> "Apply for this job"  -> /ats-direct-apply
+      -> "Continue to third party website"             (an <input type=submit>, NOT a link:
+                                                        click_selector times out, use
+                                                        `el.form.submit()`)
+      -> apps.trac.jobs/job-advert/<id>?FromJobsNHS=1  ← renders, shows "Vacancy status: Open"
+                                                        and an "Apply" button
+
+Verified live on UKHSA Interaction Designer (NHS ref K9919-26-0233 -> Trac vacancy 8210652).
+So sourcing/reading a Trac advert IS possible today via the aggregator; the remaining wall is
+narrower than "Trac is unreachable".
+
+**NHS Jobs login** (credentials are in the gitignored ats-credentials.csv, row `jobs.nhs.uk`):
+the sign-in URL is `/candidate/auth/login` — NOT `/candidate/login`, which now returns
+"The page you're looking for is no longer active". Fill `[name=username]` / `[name=password]`
+and submit the FORM (`form.submit()`); the trusted click on `[name=submit-button]` times out.
+On success it bounces back to the advert with the account menu in the header.
+
+## ⛔ What still blocks an actual submission
+
+Trac's own **account** is the wall, and we do not have one — the `jobs.nhsbt.nhs.uk` credential
+in ats-credentials.csv is **Jobtrain**, a different ATS, not Trac. Trac registration carries a
+reCAPTCHA, which is a full halt per SKILL.md. So an NHS trust vacancy that routes to Trac is:
+  reachable ✅ · readable ✅ · submittable ❌ (needs a Trac account the user must create once)
+
+Creating that one account would open every Trac-backed NHS trust vacancy — worth asking for.
