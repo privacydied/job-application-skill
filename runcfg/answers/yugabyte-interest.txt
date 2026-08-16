@@ -1,0 +1,20 @@
+Two things.
+
+The first is that this is support for a distributed database, which means the tickets are
+genuinely diagnostic rather than procedural. I have spent a long time on the other side of
+that: I run a self-hosted Linux homelab — Docker services, monitoring, automated backups,
+hardening — and I have run production infrastructure at CryptoKnowledge, where I owned
+hosting, CI/CD, security hardening and backups for the platform I had built. I also ran a
+self-hosted LynxChan and MongoDB stack behind Cloudflare as a deliberate performance exercise,
+which is where a lot of my instinct for caching, replication behaviour and measuring before
+and after came from. So a problem that turns out to be a network partition, a slow query plan
+or a misread consistency setting is the kind of problem I want to be given.
+
+The second is the users. Two years of end-user break-fix at Comfix taught me how people
+actually describe faults, and five years of user research taught me to listen for what they
+have not said yet. Support for a database is mostly working with engineers who are already
+frustrated and already half-diagnosed — the job is to take their theory seriously, verify it,
+and be straightforward when it is wrong. I would rather do that than hand over a template.
+
+I am also comfortable in the open: Yugabyte being open source means the answer is often "read
+the source and the issue history", which is how I already work.

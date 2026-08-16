@@ -396,9 +396,16 @@ def screen_location(location):
         # do you currently reside in?" — which was the single most frequent blocker in
         # drain23. Name the restriction so the apply lane can refuse it up front, while
         # sourcing still keeps the row (a human reading the JD may find a UK req attached).
+        # A US TIME ZONE is a region restriction too (2026-08-16). Liftoff advertises
+        # "Pacific Time Zone (Remote)" — no country named, so the country list below missed it
+        # and the apply lane drove it, where it then blocked on "If you are seeking a remote
+        # position, which US time zone are you located in?". Naming a US/Canadian working zone
+        # is the restriction, however it is spelled.
         foreign = re.search(r"\bu\.?s\.?a?\b|united states|\bcanada\b|\bcanadian\b|\bindia\b|"
                             r"\baustralia\b|\bsingapore\b|\bbrazil\b|\blatam\b|\bapac\b|"
-                            r"\banz\b|\bjapan\b|\bmexico\b|\bphilippines\b", low)
+                            r"\banz\b|\bjapan\b|\bmexico\b|\bphilippines\b|"
+                            r"\b(pacific|eastern|central|mountain)\s+time\b|"
+                            r"\b(pst|pdt|est|edt|cst|cdt|mst|mdt)\b", low)
         if not uk_ok and foreign:
             return "keep", f"remote — region-restricted to {foreign.group(0).strip()} (non-UK)"
         if not uk_ok and re.search(r"[a-z]", re.sub(r"remote|home[\s-]?based", "", low)) \

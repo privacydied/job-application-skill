@@ -1,0 +1,20 @@
+Dotmatics sits where scientific work actually happens — the messy middle between an
+experiment and a decision — and that is the part of a product I most want to design. Research
+software has a particular problem: the people using it are experts in their domain and
+completely uninterested in becoming experts in your interface. Every minute spent fighting
+the tool is a minute not spent on the science. Getting that right is a real design problem,
+not a cosmetic one.
+
+That maps onto how I have worked. I spent two and a half years as an interaction designer on
+the NHS COVID-19 App at UKHSA, inside the GOV.UK Design System, where the constraint was that
+the product had to work for everybody under real scrutiny and at national scale. Public-health
+work teaches you quickly that clarity is a safety property: if someone misreads a screen, that
+is a design failure with consequences, not a preference. Scientific tooling has the same
+character — the cost of an ambiguous interface is a wrong interpretation, and it compounds
+quietly.
+
+I also build. I work at the design–engineering seam — Node.js and Postgres on my own
+price-comparison product, a TypeScript monorepo with spatial indexing and a self-hosted
+basemap on another — so I am comfortable with data-heavy interfaces and with talking to
+engineers in their own terms rather than handing over a file. For a six-month contract that
+matters: there is no time to learn the domain from a distance.

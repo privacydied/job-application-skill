@@ -965,6 +965,15 @@ _OPTION_SYNONYMS = {
                           "Decline to self identify", "Prefer not to disclose"],
     "yes": ["True"],
     "no": ["False"],
+    # CEFR vs plain-English language scales are the same claim in different vocabularies
+    # (2026-08-16). The bank holds "Native or bilingual"; Parloa's form offers only
+    # none/A1/A2/B1/B2/C1/C2, so the closed-set guard correctly refused to answer and the
+    # posting blocked on a question whose truthful answer is not in doubt — he is a British
+    # citizen and native English speaker who did content design inside the GOV.UK Design
+    # System. C2 is the CEFR label for that same proficiency, not an upgrade of the claim.
+    "native or bilingual": ["C2: Proficient", "C2", "Native", "Fluent", "Native speaker"],
+    "c2: proficient": ["Native or bilingual", "Native", "Fluent"],
+    "fluent": ["C2: Proficient", "Native or bilingual", "Native"],
 }
 
 
