@@ -191,6 +191,29 @@ def load_tracker():
     return by_id, by_pair
 
 
+# ⛔ PERMANENTLY EXCLUDED SOURCES (user decree 2026-07-20; Indeed + Reed restated 2026-08-15).
+# talent.com and indeed.com are Cloudflare Turnstile / SmartApply walls the run cannot pass
+# honestly; reed.co.uk is excluded by the same decree and by this run's standing instruction.
+#
+# This list already existed — in scripts/convertible_pool.py, which is GITIGNORED and is an
+# ANALYSIS tool. So the ban was advisory, enforced only where nothing applies. Meanwhile
+# pipeline.py still sources talent.com (17 of its rows were sitting in queue.jsonl when this
+# was written) and apply_queue.py had no notion of an excluded source at all: nothing but luck
+# — those rows happening not to classify as a hard board — kept the lane off them. A decree
+# that lives only in a gitignored file is not enforcement. It belongs here, in the shared
+# tracked module every lane already imports.
+EXCLUDED_SOURCES = ("talent.com", "indeed.com", "uk.indeed.com", "reed.co.uk")
+
+
+def excluded_source(*fields):
+    """-> the matching excluded domain, or None. Pass any mix of url/board/source strings."""
+    hay = " ".join(str(f or "") for f in fields).lower()
+    for dom in EXCLUDED_SOURCES:
+        if dom in hay:
+            return dom
+    return None
+
+
 def already_applied(url=None, company=None, role=None):
     """APPLY-TIME duplicate guard for DRIVERS that take a URL directly and thus BYPASS the
     sourcing precheck (e.g. jobs.theguardian.com/apply.py, reed_apply.py, a hand-driven URL).

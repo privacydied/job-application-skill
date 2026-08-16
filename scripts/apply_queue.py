@@ -47,7 +47,8 @@ sys.path.insert(0, os.path.join(ROOT, "sites", "linkedin", "scripts"))
 import cfx            # noqa: E402
 import pipeline       # noqa: E402  (F.2 importable funnel)
 import ratelimit      # noqa: E402  (LinkedIn daily-limit: detect/save/switch boards)
-from precheck import load_tracker, canon_ids, _norm, screen_location  # noqa: E402  (canonical dedup + location screen)
+from precheck import (load_tracker, canon_ids, _norm, screen_location,  # noqa: E402
+                      excluded_source)                    # (dedup + location + banned boards)
 
 QUEUE = os.path.join(ROOT, "queue.jsonl")
 APPLY_EA = os.path.join(ROOT, "sites", "linkedin", "scripts", "apply_ea.py")
@@ -466,6 +467,18 @@ def main():
                           file=sys.stderr)
             except Exception:  # noqa: BLE001 — routing is an optimisation, never a hard dep
                 pass
+        # ⛔ PERMANENTLY EXCLUDED SOURCES (user decree 2026-07-20; Indeed + Reed restated for
+        # this run). Enforced HERE, in the lane that actually submits, because the list
+        # previously lived only in scripts/convertible_pool.py — gitignored, and an analysis
+        # tool. pipeline.py still sources talent.com, and 17 such rows were sitting in
+        # queue.jsonl; nothing but luck (they did not classify as a hard board) kept the lane
+        # off them. A ban that only a reporting script knows about is not a ban.
+        _bad_src = excluded_source(r.get("url"), r.get("board"), r.get("source"))
+        if _bad_src:
+            print(f"\n>>> SKIP [{_bad_src}] {company} :: {role} — permanently excluded source",
+                  file=sys.stderr)
+            tally["skipped_excluded"] = tally.get("skipped_excluded", 0) + 1
+            continue
         print(f"\n>>> apply [{ats}] {company} :: {role}", file=sys.stderr)
         blocked = _location_block(r) if ats in HARD_BOARD_ATS else None
         if blocked:

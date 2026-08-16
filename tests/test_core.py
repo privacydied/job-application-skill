@@ -3810,6 +3810,48 @@ class TestAuditedWidgetInvariants(unittest.TestCase):
                       "refuse to sign an anti-AI oath")
 
 
+class TestExcludedSourcesAreEnforcedInTheApplyLane(unittest.TestCase):
+    """talent.com + indeed.com are permanently excluded by user decree (2026-07-20); reed.co.uk
+    by the same decree and by this run's standing instruction.
+
+    That list previously existed ONLY in scripts/convertible_pool.py — which is gitignored, and
+    is an analysis tool. Meanwhile pipeline.py still sources talent.com and 17 such rows were
+    sitting in queue.jsonl, while apply_queue.py had no notion of an excluded source at all.
+    Nothing but luck — those rows not classifying as a hard board — kept the submitting lane
+    off them. A ban only a reporting script knows about is not a ban."""
+
+    def setUp(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(_HERE), "sites", "_common", "scripts"))
+
+    def test_excluded_domains_are_detected(self):
+        from precheck import excluded_source
+        for url in ("https://uk.talent.com/view?id=1", "https://uk.indeed.com/viewjob?jk=a",
+                    "https://www.indeed.com/viewjob?jk=a", "https://www.reed.co.uk/jobs/x/1"):
+            self.assertIsNotNone(excluded_source(url), url)
+
+    def test_permitted_boards_are_untouched(self):
+        from precheck import excluded_source
+        for url in ("https://job-boards.greenhouse.io/monzo/jobs/1",
+                    "https://jobs.lever.co/acme/x", "https://jobs.ashbyhq.com/acme/x",
+                    "https://www.civilservicejobs.service.gov.uk/csr/jobs.cgi?jcode=1"):
+            self.assertIsNone(excluded_source(url), url)
+
+    def test_bare_board_slug_does_not_over_match(self):
+        # "talent" alone (e.g. a talentlink/TAL board slug) must not trip the talent.com ban.
+        from precheck import excluded_source
+        self.assertIsNone(excluded_source(None, "talent"))
+        self.assertIsNone(excluded_source("https://acme.talentlink.com/x"))
+
+    def test_apply_lane_refuses_them(self):
+        with open(os.path.join(os.path.dirname(_HERE), "scripts", "apply_queue.py"),
+                  encoding="utf-8") as f:
+            src = f.read()
+        self.assertIn("excluded_source", src,
+                      "the lane that SUBMITS must enforce the exclusion, not just the "
+                      "reporting script")
+        self.assertIn("skipped_excluded", src)
+
+
 class TestHearAboutOptionMakesNoClaim(unittest.TestCase):
     """A "how did you hear about us" option is not neutral when it names an affiliation.
     Jane Street's list is University job board / Employee referral / LinkedIn / Other; the
