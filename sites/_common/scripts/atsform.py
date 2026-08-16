@@ -835,8 +835,27 @@ def combobox_pick(target, option, multi=False, clear_first=False, quiet_notfound
     if clear_first:
         cfx.evaluate(_COMBO_CLEAR_CHIPS)
         time.sleep(0.3)
-    return _combo_open_and_pick(option, multi=multi or bool(info.get("isMulti")),
-                                strict=strict)
+    rc = _combo_open_and_pick(option, multi=multi or bool(info.get("isMulti")),
+                              strict=strict)
+    # ⛔ SYNONYM RETRY FOR COMBOBOXES TOO (2026-08-16). set_radio has had this since
+    # 2026-08-15: the profile records ONE canonical wording per fact, employers word the same
+    # option differently, and a truthful KNOWN answer that simply is not spelled the way this
+    # form spells it left a required field empty. combobox_pick never got it, so the identical
+    # miss on a DROPDOWN still blocked the submit — live example: the bank holds "Native or
+    # bilingual" for English proficiency while Parloa's form offers only a CEFR scale
+    # (none/A1/…/C2), so the closed-set guard correctly refused and the posting stalled on a
+    # question whose answer is not in doubt. These are exact synonyms of the SAME claim (never
+    # a broadening — see _OPTION_SYNONYMS), so retrying changes only the wording.
+    if rc != 0 and not strict:
+        tried = {str(option).strip().lower()}
+        for alt in _OPTION_SYNONYMS.get(str(option).strip().lower(), []):
+            if alt.strip().lower() in tried:
+                continue
+            tried.add(alt.strip().lower())
+            if _combo_open_and_pick(alt, multi=multi or bool(info.get("isMulti"))) == 0:
+                print(f"  (matched {option!r} via synonym {alt!r})")
+                return 0
+    return rc
 
 
 def select(label, option, quiet_notfound=False, strict=False):
