@@ -879,8 +879,36 @@ def _combo_open_and_pick(option, multi=False, strict=False):
                 print(f"OK=option-click:{again}")
                 return 0
         if ft == "NO_TARGET":
-            # The resolver's marker is gone — we do NOT know which field this is. Say so;
-            # never fall back to "the first combobox on the page" (see _COMBO_FREETEXT_COMMIT).
+            # ⛔ RE-RESOLVE, DON'T GIVE UP (2026-08-17). `NO_TARGET` means the `data-ats-target`
+            # marker is gone from the DOM — but that is almost never "the field vanished". A
+            # React form re-renders while the ladder types and clicks, REPLACING the marked node
+            # with an identical fresh one that carries no attribute. The field is still right
+            # there; only our bookmark is stale.
+            #
+            # This was the single most expensive failure of the night. Every one of five 700s
+            # timeouts ended on exactly this line — the full ladder (open, ArrowDown, trusted
+            # click, 8s option poll, type-to-filter, input-less probe) runs per label, and
+            # fill_eeo plus the bank-gap pass call it ~20 times a form, so one posting could
+            # exhaust the whole timeout without ever reaching Submit.
+            #
+            # Re-running the SAME resolver on the SAME target is not guessing — it is the
+            # deterministic lookup that produced the marker in the first place, so the
+            # "never fall back to the first combobox on the page" guarantee is untouched.
+            try:
+                info2 = json.loads(cfx.evaluate(resolve_js))
+            except (ValueError, TypeError):
+                info2 = {"kind": "none"}
+            if info2.get("kind") not in (None, "none"):
+                ft2 = cfx.evaluate(_COMBO_FREETEXT_COMMIT.replace("__VAL__", _js(str(option))))
+                if isinstance(ft2, str) and ft2.startswith("OK"):
+                    _combo_clear_marker()
+                    print(f"OK=freetext:{str(option)[:40]} (marker re-resolved after re-render)")
+                    return 0
+                again2 = _combo_click_option(option)
+                if again2:
+                    _combo_clear_marker()
+                    print(f"OK=option-click:{again2} (marker re-resolved after re-render)")
+                    return 0
             print("FAIL: free-text commit had no resolved target — refusing to guess a field")
     _combo_clear_marker()
     print(clicked if isinstance(clicked, str) else "FAIL")
