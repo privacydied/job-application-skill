@@ -27,6 +27,13 @@ The ONLY way to touch the camofox browser. Never post to `$CFX_URL` by hand from
 - `press(char)` — REAL per-char keystroke (react-select typeahead; synthetic events are ignored).
 - `click_selector` / `click_ref` / `click_and_follow` — clicks; `click_and_follow` handles new-tab/consent handoff.
 - `ensure_tab` / `set_tab` / `open_tab` / `sync_tab` / `is_tab_alive` / `prune_tabs` / `close_tab` — tab lifecycle.
+- `claim_tab(tab, note)` / `active_tabs()` / `release_tab(tab)` — **the cross-process active-tab
+  registry** (2026-08-17). A driver CLAIMS the tab it is using (pid + heartbeat, refreshed from
+  `_tab()` on every REST call) and `prune_tabs` then SKIPS any claim whose owner is alive and
+  recent. Before this, prune protected only the caller's tab and reaped everyone else's, killing
+  live drives mid-application (`HTTP 404 Tab not found`). This is what makes **parallel apply
+  lanes** safe — see `references/parallel-apply-lanes.md`. Claims self-clean on dead pid, stale
+  heartbeat, or `close_tab`, so a crashed run cannot permanently protect a leaked tab.
 - `post(path, body)` — raw REST (uploads: `POST /tabs/<tab>/upload`); `shot()` — screenshot.
 - `dismiss_cookie_banner()`, `find_popup()`, `restart_engine()`, `engine_click_healthy()`.
 
