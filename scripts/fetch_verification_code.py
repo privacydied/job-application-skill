@@ -45,6 +45,66 @@ import email_ingest as ei  # noqa: E402  — reuse _connect() (IMAP creds + logi
 _STOP = {"security", "submit", "resubmit", "greenhouse", "application", "verify",
          "verification", "confirm", "continue", "street"}
 
+# ── CONSUMED-CODE LEDGER ────────────────────────────────────────────────────────────────
+# An emailed verification code is SINGLE-USE, but get_code() only ever asked "what is the
+# newest matching email?" — so two applications to the SAME company in the same freshness
+# window both resolve to the SAME email. Verified live 2026-08-17: two Capital on Tap
+# Greenhouse applications ran minutes apart; the first typed code `9JKczrWf` and submitted
+# successfully, the second reported `CODE_MISSING` and a fully-correct application was logged
+# `Blocked`. Anything that drives more than one posting per employer hits this — a retry, a
+# second lane, a Hermes run overlapping a Claude Code run.
+#
+# The ledger makes single-use explicit: a code handed out once is never handed out again, so
+# a second drive keeps polling until ITS OWN email lands instead of silently re-using (or
+# racing for) the first drive's code. Entries expire so the file cannot grow without bound
+# and a code can never be blocked forever.
+_LEDGER = os.path.join(_ROOT, ".vcode-consumed.json")
+_LEDGER_TTL = 2 * 3600          # seconds; well past any ATS code's own validity
+
+
+def _ledger_load(now=None):
+    """Unexpired {code: ts}. Prunes as a side effect."""
+    import json  # noqa: PLC0415 — keep the module's import surface unchanged
+    now = time.time() if now is None else now
+    try:
+        with open(_LEDGER, encoding="utf-8") as f:
+            d = json.load(f)
+        if not isinstance(d, dict):
+            return {}
+    except Exception:  # noqa: BLE001 — a missing/corrupt ledger must never block a submit
+        return {}
+    return {k: v for k, v in d.items() if isinstance(v, (int, float)) and now - v < _LEDGER_TTL}
+
+
+def _ledger_consume(code):
+    """Record `code` as used. Returns False if another process got there first."""
+    import json  # noqa: PLC0415
+    try:
+        from fsutil import file_lock  # noqa: PLC0415
+    except Exception:  # noqa: BLE001
+        file_lock = None
+    ctx = file_lock(_LEDGER) if file_lock else None
+    try:
+        if ctx is not None:
+            ctx.__enter__()
+        d = _ledger_load()
+        if code in d:
+            return False
+        d[code] = time.time()
+        tmp = _LEDGER + f".{os.getpid()}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(d, f)
+        os.replace(tmp, _LEDGER)
+        return True
+    except Exception:  # noqa: BLE001 — never let bookkeeping block a real submission
+        return True
+    finally:
+        if ctx is not None:
+            try:
+                ctx.__exit__(None, None, None)
+            except Exception:  # noqa: BLE001
+                pass
+
 
 def _body_raw(msg):
     """Body with MARKUP INTACT. Link extraction must run on this, not on the stripped text:
@@ -322,6 +382,12 @@ def get_code(sender="greenhouse", minutes=20, digits=None, company=None,
                     # If this email verifies by LINK, do not let the loose scan invent a code.
                     code = _extract(text, digits, strict=bool(_extract_link(raw)))
                 if code:
+                    # Single-use: if a sibling drive already used this exact code, keep
+                    # looking (and keep polling) rather than handing out a spent one.
+                    if not _ledger_consume(code):
+                        print(f"  VCODE_ALREADY_USED {code[:3]}… — another drive consumed "
+                              f"it; waiting for this application's own email", file=sys.stderr)
+                        continue
                     return code
         finally:
             try:

@@ -184,3 +184,4 @@ runcfg_gh/
 # untracked file passes right up until the moment it is added.
 runcfg/answers/
 .cfx-active-tabs.json
+.vcode-consumed.json

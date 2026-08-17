@@ -219,12 +219,50 @@ def fetch(slug, jid, eu=False):
         return json.load(r)
 
 
-def pick_option(values, want):
+# Work-authorisation selects whose OPTIONS are whole sentences rather than Yes/No. Live
+# 2026-08-17 (Intercom/Fin "Are you authorised to work in the country in which this role is
+# located?"): options were
+#   'I am authorised to work in the country which this role is located (citizen, permanent
+#    resident etc)'  |  'My current work authorisation requires sponsorship or renewal now
+#    or in the future.'  |  'My authorisation to work in this country is unknown'
+# The truthful answer "Yes" matched none of them, so a question the applicant answers
+# trivially came back UNANSWERED_REQUIRED and the posting went undriven.
+#
+# ⛔ TRUTH-SAFETY: this only ever selects an option that ASSERTS authorisation without
+# sponsorship — the applicant's real status (British citizen, full UK right to work). Any
+# option mentioning sponsorship, renewal, "unknown", or "not authorised" is disqualified
+# outright, so a mis-fire cannot produce a false eligibility claim; it just declines to
+# answer and the question stays a REVIEW item.
+_WORKAUTH_Q = re.compile(r"authoris|authoriz|right to work|work permit|sponsor", re.I)
+_WORKAUTH_BAD = re.compile(r"sponsor|renewal|unknown|not authoris|not authoriz|"
+                           r"do(es)? not have|require[sd]?\b.{0,20}(visa|permit|support)", re.I)
+_WORKAUTH_GOOD = re.compile(r"^i am (authoris|authoriz)ed|"
+                            r"(citizen|permanent resident)|"
+                            r"do(es)? not (require|need).{0,25}(sponsor|visa|permit)|"
+                            r"no sponsorship (is )?(required|needed)", re.I)
+
+
+def _pick_workauth(labels, want):
+    """Resolve a sentence-option work-authorisation select for an affirmative answer."""
+    if str(want).strip().lower() not in {"yes", "no"}:
+        return None
+    ok = [l for l in labels if _WORKAUTH_GOOD.search(l) and not _WORKAUTH_BAD.search(l)]
+    return ok[0] if len(ok) == 1 else None
+
+
+def pick_option(values, want, label=""):
     """Choose the option whose label best matches `want`, EXACTLY where possible.
     Greenhouse binds on exact option text, so a near-miss silently fails to bind."""
     labels = [v.get("label", "") for v in values if v.get("label")]
     if not labels:
         return None
+    # Sentence-shaped work-auth options: only when no plain Yes/No option exists, so a normal
+    # binary select keeps its ordinary exact-match path below.
+    if (label and _WORKAUTH_Q.search(label)
+            and not any(l.strip().lower() in {"yes", "no"} for l in labels)):
+        hit = _pick_workauth(labels, want)
+        if hit:
+            return hit
     if want == "__CONSENT__":
         # A consent/acknowledgement select usually has ONE affirmative option — and it is
         # often the entire policy text as the label, so match loosely and fall back to the
@@ -392,7 +430,7 @@ def build(slug, jid, eu=False, out=None):
             continue
 
         if "select" in ftype:
-            chosen = pick_option(values, answer)
+            chosen = pick_option(values, answer, label)
             if not chosen and _CONSENTISH.search(label) and _is_affirmative_answer(answer or bank_answer):
                 # CONSENT SELECTS (2026-08-15). A tick-to-acknowledge question is rendered as a
                 # select whose single option is the ENTIRE policy text ("By checking this box,
