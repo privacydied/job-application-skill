@@ -162,8 +162,27 @@ def _cli(argv):
         return argv[argv.index(flag) + 1] if flag in argv and argv.index(flag) + 1 < len(argv) else default
 
     if cmd == "record" and len(argv) >= 4:
-        bid = record(argv[2], argv[3], url=opt("--url"), company=opt("--company"),
-                     role=opt("--role"), slug=opt("--slug"), what=opt("--what"))
+        # ⛔ ACCEPT BOTH CALL SHAPES (2026-08-17). kind/site were read POSITIONALLY from
+        # argv[2:4], so the documented-looking `record --kind account --site apps.trac.jobs
+        # --detail "…"` stored kind="--kind", site="account", and dropped the detail entirely —
+        # then printed "recorded … (push-notified)" as though it had worked. The blocker that
+        # gates the whole NHS/UKHSA channel was filed as an empty, mislabelled row, and
+        # human_queue.py rendered it as "[--kind-clear] account (~0 unlocked)" with no detail,
+        # i.e. the single highest-leverage human action looked like the lowest. A recorder that
+        # silently discards its payload is worse than one that errors.
+        flagged = [a for a in argv[2:] if a.startswith("--")]
+        if flagged:
+            kind = opt("--kind") or (argv[2] if not argv[2].startswith("--") else "")
+            site = opt("--site") or (argv[3] if len(argv) > 3 and not argv[3].startswith("--") else "")
+            what = opt("--what") or opt("--detail") or opt("--note")
+        else:
+            kind, site, what = argv[2], argv[3], opt("--what")
+        if not kind or not site:
+            print("blockers.py record: need a kind and a site "
+                  "(positional `record <kind> <site>` or `--kind X --site Y`)", file=sys.stderr)
+            return 2
+        bid = record(kind, site, url=opt("--url"), company=opt("--company"),
+                     role=opt("--role"), slug=opt("--slug"), what=what)
         print(f"recorded {bid} (push-notified). CAPTCHA/login stay HARD-HALT — this only "
               f"tracks + enables resume after you clear it.")
         return 0
