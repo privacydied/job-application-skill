@@ -2258,8 +2258,25 @@ def fill_eeo(config=None):
         # and the field stays empty — exactly the old behaviour, without failing the forms
         # that ask the question properly. (Closed-set validation, same rule as
         # fill_gaps_from_bank.) Religion remains untouched — it is a separate field.
-        (["what is your ethnicity", "your ethnicity", "ethnic group", "ethnicity"],
+        # ⛔ "I identify my ethnicity group as" — the FIRST-PERSON phrasing (2026-08-17).
+        # Capco's Greenhouse form marks BOTH "I identify my ethnicity group as*" and
+        # "I identify my ethnicity sub group as*" required, and neither matched any label
+        # here, so nothing was even attempted and the submit bounced with a bare "This field
+        # is required." on a question the profile answers. Same shape as the gender list
+        # above, which already carries "i identify my gender as" — the ethnicity list simply
+        # never got the matching entry.
+        # NOTE the bare "i identify my ethnicity" is deliberately ABSENT: it is a substring of
+        # the SUB-group label too, so it could bind the broad group value to the sub-group
+        # field depending on DOM order. Keep the group phrasing explicit.
+        (["what is your ethnicity", "your ethnicity", "i identify my ethnicity group",
+          "ethnic group", "ethnic origin", "ethnicity"],
          a.get("ethnicity"), True),
+        # The SUB-group question is a separate, narrower field — answer it from the profile's
+        # own sub-category (`ethnicity_sub`) rather than letting the broad group value bind to
+        # it. Listed after the group entry so the more specific label wins its own field.
+        (["ethnicity sub group", "ethnic sub group", "ethnicity subgroup",
+          "any other mixed", "sub group"],
+         a.get("ethnicity_sub") or a.get("ethnicity"), True),
         (["transgender"], a.get("transgender"), False),
         (["disability", "chronic condition", "consider yourself disabled"], a.get("disability"), False),
         (["veteran"], a.get("veteran"), False),
