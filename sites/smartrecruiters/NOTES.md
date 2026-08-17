@@ -214,3 +214,54 @@ change that opens this channel.
 | Entain | Motion Designer - Ladbrokes & Coral | `/entain/744000142593084` |
 | Entain | Motion Designer | `/entain/744000142594832` |
 | ASOS | Platform Engineer – Data Science & AI Platform | `/asos/744000143391739` |
+
+## ✅ CHANNEL PROVEN 2026-08-17 — three submissions, two employers, no server/atsform change
+
+Entain "Motion Designer - Ladbrokes & Coral", Entain "Motion Designer", ASOS "Platform Engineer
+– Data Science & AI Platform" all reached **"Application submitted!"**. Corrections and
+additions to the recipe above, all learned the hard way in this run:
+
+**`/uploadViaChooser` IS DEPLOYED.** The July note calling it a 404 blocker is stale — it lives
+at `server.js:3747`. Use `{"userId":…, "triggerRef":"<eN>", "path":"<file in uploads/>"}`;
+it returns `{"ok":true,"via":"filechooser"}`. **Target the resume dropzone by REF, not by
+role=**: the page has TWO `textbox "Choose a file or drop it here"` (the top autocomplete one
+and the Resume one) — the Resume one is the **LAST** match in the snapshot.
+
+**`/type` modes are `fill` or `keyboard` ONLY.** `mode: "type"` 400s with
+`mode must be 'fill' or 'keyboard'`. Autocomplete comboboxes need `keyboard` (real keystrokes)
+then `ArrowDown` + `Enter`; plain textboxes take `fill`.
+
+**Read the a11y snapshot — it pierces shadow DOM.** `GET /tabs/<tab>/snapshot` returns the full
+control list with `[eN]` refs even though `evaluate`/`querySelectorAll` see nothing. This is the
+fastest way to enumerate a page here, and the only reliable way to find conditional fields.
+
+**⛔ REFS GO STALE ACROSS A RE-RENDER — re-snapshot before every step.** On ASOS a submit
+bounced with six `Value is required` alerts on questions that had been answered: the earlier
+ref-targeted clicks had landed on elements that no longer existed after the page re-rendered.
+Answers set by `role=` selector survived; answers set by stale `[eN]` ref did not. Rule: take a
+fresh snapshot immediately before each interaction, and **verify by re-reading the snapshot**
+rather than trusting a 200 response.
+
+**⛔ A LABEL CAN CONTAIN A FAKE REF.** ASOS's flexibility question renders as
+`textbox "If you selected \" [e14]I need work pattern or location flexibility\" above, …"` —
+the `[e14]` is *inside the accessible name*, not the element's ref. A regex scraping `\[(e\d+)\]`
+from the line picks up the wrong element and `/type` then 500s. Match refs only at END of line,
+or target by **`role=textbox[name=/regex/]`**, which worked here.
+
+**Conditional questions appear only after their parent is answered** — Entain's "Have you
+previously worked for Entain in the last 2 years?" renders after "currently employed?" is set.
+Re-snapshot before submitting or it silently stays required-empty.
+
+**Per-employer screener shape differs.** Entain: postal code, over-18, self-exclusion (gambling),
+non-compete, background-check consent. ASOS: City autocomplete, eligibility BASIS, salary as a
+**band combobox**, on-site-2-days commitment, convictions, and a full EEO block (age / race /
+religion / orientation / gender identity / disability). Do not assume one form generalises.
+
+**Consent checkboxes: tick the recruitment one, never the talent-community one.** Both employers
+present two near-identical "privacy notice" checkboxes; the second adds "…and agree to be part
+of communities for future career opportunities" (Entain) / "…future career opportunities and
+talent communities" (ASOS). That is a marketing opt-in — leave it unticked per SKILL.md, and
+never use the "Select all" shortcut, which ticks it.
+
+**Verify checkbox truth via the shadow-recursive read** (block above), not the snapshot's
+`[checked]` tag: `false,true,false` was the correct end state on Entain.
