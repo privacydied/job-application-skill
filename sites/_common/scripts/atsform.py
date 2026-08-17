@@ -795,12 +795,26 @@ def _combo_open_and_pick(option, multi=False, strict=False, resolve_js=None):
         # reported `NO_OPTION:No options`, i.e. a perfectly bindable typeahead looked like an
         # unbindable widget and blocked the submit (Greenhouse education: School, Discipline).
         # Retry with progressively shorter prefixes, which strictly widens the filter.
+        # ⛔ A PREFIX IS THE WRONG PROBE WHEN THE PREFIX IS GENERIC (2026-08-17). Every retry
+        # below shortens from the LEFT, so "University of the Arts London" degrades to
+        # "University of th" → "University" → "Univer" — the most common word in a school
+        # database. On Greenhouse's async School typeahead that returns a huge slow result
+        # set (or nothing in time), so all three rungs came back empty and a REQUIRED field
+        # blocked the submit with "School is required." (Stripe, live) even though the school
+        # is on the list. The DISTINCTIVE part of a name is rarely its first word.
+        # So probe the distinctive tokens too — longest-first, stopwords dropped: for the
+        # example above that types "London", then "University", and the typeahead answers.
+        probes = [str(option)[:n] for n in (16, 10, 6) if n < len(str(option))]
+        _STOP_TOK = {"of", "the", "and", "for", "at", "in", "de", "la", "&"}
+        toks = [w.strip(",.;:()&") for w in str(option).split()]
+        toks = [w for w in toks if len(w) >= 5 and w.lower() not in _STOP_TOK]
+        probes += sorted(set(toks), key=len, reverse=True)[:3]
         if not opts:
-            for n in (16, 10, 6):
-                if n >= len(str(option)):
+            for probe in probes:
+                if not probe:
                     continue
                 _combo_clear_input()
-                _combo_type(str(option)[:n])
+                _combo_type(probe)
                 cfx.poll(_COMBO_READ_OPTS,
                          predicate=lambda r: isinstance(r, str) and r not in ("", "[]"),
                          timeout=8.0)
