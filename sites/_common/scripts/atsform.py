@@ -2294,6 +2294,17 @@ def fill_eeo(config=None):
         # category without broadening the claim: both name the same census group. Only ever a
         # FALLBACK, so a form using the full phrasing still binds exactly.
         candidates = [val]
+        # ⛔ DROP THE APPLICANT'S OWN PARENTHETICAL (2026-08-17). Profile values carry a
+        # clarifying suffix the employer's option list never has: ethnicity_sub is
+        # "Any other Mixed/Multiple background (Caribbean & North African)" while the form
+        # offers "Any other Mixed/Multiple ethnic background". Exact match fails, and the
+        # leading-token fallback below cannot help because the first word is "Any" (3 chars,
+        # under its length floor) — so a REQUIRED sub-group select stayed empty and bounced
+        # the submit. Stripping a trailing parenthetical NARROWS nothing and broadens
+        # nothing: it removes detail the applicant added, leaving his own category intact.
+        bare = re.sub(r"\s*\([^)]*\)\s*$", "", str(val)).strip()
+        if bare and bare.lower() != str(val).strip().lower():
+            candidates.append(bare)
         head = str(val).split()[0].strip(",;/") if str(val).split() else ""
         if head and len(head) >= 4 and head.lower() != str(val).strip().lower():
             candidates.append(head)
