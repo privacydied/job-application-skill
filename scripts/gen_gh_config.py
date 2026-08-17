@@ -490,6 +490,35 @@ def build(slug, jid, eu=False, out=None):
     os.makedirs(CFG_DIR, exist_ok=True)
     slugrole = re.sub(r"[^a-z0-9]+", "-", role.lower()).strip("-")[:44] or "role"
     path = out or os.path.join(CFG_DIR, f"{slug}-{slugrole}.json")
+
+    # ⛔ MERGE, DON'T CLOBBER (2026-08-17). This used to overwrite the file outright, so a
+    # regeneration silently DESTROYED everything a caller had added by hand: the tailored `cv`
+    # (back to base-resume.pdf — generic-résumé spam again), the live `location` the drive-time
+    # gate reads, and — worst — the written free-text essay answers, which are the expensive
+    # part of a high-quality application. That happened here for real: six essays were written
+    # into five configs, then a later `--batch` run over the same postings (invoked only to
+    # LIST the still-unanswered questions) wiped every one of them, and four postings were
+    # driven with an empty essay field and timed out on the required question.
+    #
+    # Regenerating must be safe to do at any time, so freshly-derived answers win per key while
+    # anything the generator did not produce is carried forward.
+    prior = {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            prior = json.load(f)
+    except Exception:  # noqa: BLE001 — no prior file (or an unreadable one) is the normal case
+        prior = {}
+    if isinstance(prior, dict):
+        for key in ("cv", "location", "cover", "force", "no_submit"):
+            if prior.get(key) and key not in ("cv",) or (key == "cv" and prior.get(key)
+                                                         and prior[key] != "base-resume.pdf"):
+                cfg[key] = prior[key]
+        for block in ("fill", "combo", "select", "radios", "checkboxes"):
+            kept = {k: v for k, v in (prior.get(block) or {}).items()
+                    if k not in cfg.get(block, {})}
+            if kept:
+                cfg.setdefault(block, {}).update(kept)
+
     with open(path, "w") as f:
         json.dump(cfg, f, indent=2)
 
