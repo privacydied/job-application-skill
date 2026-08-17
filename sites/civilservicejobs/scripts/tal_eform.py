@@ -66,7 +66,42 @@ def _set_field(name, kind, value):
         expr = """(name, want) => {
           const s=document.querySelector(`select[name="${name}"]`);
           if(!s) return 'NO_FIELD:'+name;
-          const opt=[...s.options].find(o=>(o.text||'').trim()===want || (o.text||'').toLowerCase().includes(want.toLowerCase()));
+          // ⛔ ONE DEPARTMENT'S WORDING IS NOT ANOTHER'S (2026-08-17). Exact-then-substring is
+          // too brittle for CSJ's per-campaign option lists: the spec says
+          // "Any other Mixed / Multiple background" and HMRC's list offers
+          // "Any other Mixed background" — no substring relation either way — so the ethnicity
+          // select stayed empty, Diversity monitoring was listed under "problems that need to
+          // be fixed", and SUBMIT NEVER RENDERED. That is the exact symptom previously
+          // attributed to an HMRC-wide persistence bug, on a form where nothing was broken.
+          // Fall back to token-overlap: pick the option sharing the most meaningful words with
+          // the wanted value, and only when it is an unambiguous single best match, so a
+          // near-miss can never silently select a different demographic.
+          const norm=s2=>(s2||'').toLowerCase().replace(/[^a-z0-9 ]+/g,' ').replace(/\\s+/g,' ').trim();
+          const STOP=new Set(['any','other','the','and','or','of','a','background','group','groups']);
+          // "A / B" inside a value is an ALTERNATIVE, not literal text: the census wording
+          // "Any other Mixed / Multiple background" means the same category HMRC spells
+          // "Any other Mixed background". Expanding the slash gives an EXACT hit and cannot
+          // invent a category — every expansion is a phrase the value itself contains.
+          const alts=[want];
+          const sl=want.match(/^(.*?)([A-Za-z]+)\\s*\\/\\s*([A-Za-z]+)(.*)$/);
+          if(sl){ alts.push((sl[1]+sl[2]+sl[4]).replace(/\\s+/g,' ').trim());
+                  alts.push((sl[1]+sl[3]+sl[4]).replace(/\\s+/g,' ').trim()); }
+          let opt=null;
+          for(const w of alts){
+            opt=[...s.options].find(o=>(o.text||'').trim()===w)
+             || [...s.options].find(o=>norm(o.text)===norm(w))
+             || [...s.options].find(o=>(o.text||'').toLowerCase().includes(w.toLowerCase()))
+             || [...s.options].find(o=>w.toLowerCase().includes(norm(o.text)) && norm(o.text).length>6);
+            if(opt) break;
+          }
+          if(!opt){
+            const wt=norm(want).split(' ').filter(w=>w&&!STOP.has(w));
+            const scored=[...s.options].filter(o=>o.value!=='').map(o=>{
+              const ot=norm(o.text).split(' ').filter(w=>w&&!STOP.has(w));
+              return {o, n: wt.filter(w=>ot.includes(w)).length};
+            }).filter(x=>x.n>0).sort((a,b)=>b.n-a.n);
+            if(scored.length && (scored.length===1 || scored[0].n>scored[1].n)) opt=scored[0].o;
+          }
           if(!opt) return 'NO_OPT:'+name+'|'+want+'|'+[...s.options].map(o=>o.text.trim()).join(' , ');
           s.value=opt.value; s.dispatchEvent(new Event('change',{bubbles:true})); s.dispatchEvent(new Event('input',{bubbles:true}));
           return 'OK:'+opt.text.trim().slice(0,30);
@@ -216,6 +251,28 @@ def walk(spec, submit=False, max_page=99):
                 r = _set_field(nm, "checkbox", "1")
                 if not str(r).startswith("NO_FIELD"):
                     results.append(("check " + nm, r))
+        # ⛔ TOP-UP: A LATER RADIO CLEARS AN EARLIER CONDITIONAL TEXT FIELD (2026-08-17).
+        # Fields are filled text → select → radio, but CSJ's conditional "describe/specify"
+        # inputs are OWNED by a radio or select: setting that control re-renders the pair and
+        # WIPES the text that was already typed. Live on HMRC Diversity monitoring — the three
+        # `Describe your gender` / `Describe your sexual orientation` / `Specify your other
+        # ethnicity` fields all reported OK on the way in and read back EMPTY afterwards, all
+        # three `required`. The page then sat under "problems that need to be fixed" and
+        # **Submit never rendered** — the same end symptom previously attributed to a
+        # mysterious HMRC persistence bug, on a form where nothing was broken.
+        # So re-assert every spec text/textarea that this page still shows empty, AFTER the
+        # controls that own them have settled. Only re-fills fields already in the spec, so it
+        # can never invent an answer.
+        for kind in ("text", "textarea"):
+            for nm, val in spec.get(kind, {}).items():
+                cur_val = cfx.evaluate(
+                    "(()=>{const e=document.querySelector('[name=\"%s\"]');"
+                    "return e?(e.value||''):null;})()" % nm)
+                if cur_val == "" and val:
+                    r2 = _set_field(nm, kind, val)
+                    if not str(r2).startswith("NO_FIELD"):
+                        results.append(("topup %s %s" % (kind, nm), r2))
+
         # advance: on the last page Continue == submit, so _continue() gates it on `submit`.
         r = _continue(submit=submit)
         results.append(("continue p%d" % page, r))
