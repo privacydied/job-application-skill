@@ -495,6 +495,14 @@ _TERMINAL_NOTE = re.compile(
     r"own browser|needs the user|user must apply|apply himself|"
     r"oath|attestation|responsible use policy|"
     r"off-location|remote - (?!uk\b)|no truthful right-to-work|"
+    # ⛔ OFF-PROFILE IS TERMINAL (2026-08-17). A previous run had written Monzo "Platform
+    # Engineer" off in its own row — "Off-profile: production Kubernetes/Envoy/service-mesh …
+    # not a truthful match at this level" — and the retry pool re-queued it anyway, because
+    # none of the patterns here recognise that wording. It was then driven TWICE on the single
+    # serial tab. A judgement that the applicant does not truthfully fit the ROLE cannot be
+    # cleared by any code fix, which is the definition of terminal here.
+    r"off-profile|off profile|off-lane|not a truthful match|not truthfully|"
+    r"seniority gate|senior/staff-level|truthfully ineligible|"
     r"account (?:wall|required)|must (?:register|create an account)|sign ?in required|"
     r"attempt cap|past the \d+-attempt|\d+ attempts, all|"
     r"turnstile|hcaptcha", re.I)

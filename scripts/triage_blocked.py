@@ -26,6 +26,7 @@ _ROOT = os.path.dirname(_here)
 sys.path.insert(0, os.path.join(_ROOT, "sites", "_common", "scripts"))
 import pipeline  # noqa: E402  — reuse ats_hint/family_of so retry rows match queue.jsonl
 import board_cooldown as bc  # noqa: E402
+import precheck  # noqa: E402  — classify_blocked/retry_pool: "Blocked" is TWO statuses in one
 
 TRACKER = os.path.join(_ROOT, "application-tracker.csv")
 
@@ -79,6 +80,30 @@ def main():
 
     selected = rows if want_all else [
         r for r in rows if pipeline.ats_hint((r.get("URL") or ""), bc.norm(r.get("Source") or "")) == ats]
+
+    # ⛔ A `Blocked` ROW IS NOT AUTOMATICALLY RETRYABLE (2026-08-17). `precheck.retry_pool` /
+    # `classify_blocked` were built for exactly this ("Blocked means BOTH 'retry this' and
+    # 'never retry this'"), and this emitter — the main producer of retry queues — never
+    # called them. So a pool built here re-drives postings a previous run correctly judged
+    # TERMINAL: off-profile, an anti-AI oath the applicant must sign himself, a truthful
+    # eligibility gate. Live tonight: Monzo "Platform Engineer", whose own row reads
+    # "Off-profile: production Kubernetes/Envoy/service-mesh … not a truthful match at this
+    # level", was re-queued and driven TWICE on the single serial tab.
+    #
+    # DEFAULT: drop TERMINAL, keep UNKNOWN. Measured on this tracker, greenhouse's Blocked
+    # rows are 72 unknown / 4 terminal — most carry no note at all — so excluding unknown by
+    # default (retry_pool's own default) would empty the queue and make this tool useless.
+    # The valuable half is dropping the 4 that a previous run explicitly judged dead. Pass
+    # --retryable-only for retry_pool's stricter default, or --no-classify for the old
+    # everything-goes sweep.
+    if "--no-classify" not in argv:
+        before = len(selected)
+        selected = precheck.retry_pool(selected, include_unknown="--retryable-only" not in argv)
+        if before != len(selected):
+            print(f"  classify_blocked: dropped {before - len(selected)} row(s) a previous run "
+                  f"judged terminal, of {before} (--no-classify to keep them)",
+                  file=sys.stderr)
+
     retry = [_as_retry(r) for r in selected if (r.get("URL") or "").strip()]
     retry.sort(key=lambda x: x["apply_rank"])
     blob = "\n".join(json.dumps(r, ensure_ascii=False) for r in retry)
