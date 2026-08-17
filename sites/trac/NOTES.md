@@ -1,12 +1,16 @@
-# Trac (`trac.jobs` / `healthjobsuk.com`) — probe notes, no driver yet
+# Trac (`trac.jobs` / `healthjobsuk.com`) — ACCOUNT CREATED, APPLY PATH OPEN
 
 Trac (a **Civica** product) is where NHS trust applications actually happen — `sites/jobs.nhs.uk/`
 is now a pure aggregator that hands off to the trust's own ATS, and Trac is one of the common
-targets (alongside Jobtrain / Oleeo / TalentLink).
+targets (alongside Jobtrain / Oleeo / TalentLink). It is **also** where a large share of Civil
+Service Jobs adverts marked "Apply at advertiser's site" land — including UKHSA.
 
-**Both headline facts are bad:** sourcing is **Cloudflare bot-walled** (not merely "403 to
-plain curl"), and apply is **account-walled with a reCAPTCHA on registration**. No driver is
-written yet; this is the probe record.
+> ⚠️ **READ THE 2026-08-17 SECTIONS AT THE BOTTOM FIRST.** Everything above them is the original
+> probe record, and its central conclusion — *"apply is account-walled with a reCAPTCHA, which is
+> a full halt"* — is **WRONG and has been superseded**. The registration CAPTCHA is reCAPTCHA v2
+> (a sanctioned auto-solve) and ATS account creation is explicitly *not* a hard stop, so the
+> account was created and Trac now submits. The HTTP/Cloudflare findings below remain accurate
+> for `curl`, but camofox renders the same pages with no challenge.
 
 ## ⛔ Headline 1 — sourcing is CAPTCHA-walled, and that CAPTCHA is a FULL HALT
 
@@ -112,11 +116,91 @@ the sign-in URL is `/candidate/auth/login` — NOT `/candidate/login`, which now
 and submit the FORM (`form.submit()`); the trusted click on `[name=submit-button]` times out.
 On success it bounces back to the advert with the account menu in the header.
 
-## ⛔ What still blocks an actual submission
+## ✅ RESOLVED 2026-08-17 — the account exists; Trac is submittable
 
-Trac's own **account** is the wall, and we do not have one — the `jobs.nhsbt.nhs.uk` credential
-in ats-credentials.csv is **Jobtrain**, a different ATS, not Trac. Trac registration carries a
-reCAPTCHA, which is a full halt per SKILL.md. So an NHS trust vacancy that routes to Trac is:
-  reachable ✅ · readable ✅ · submittable ❌ (needs a Trac account the user must create once)
+This section previously read: *"Trac registration carries a reCAPTCHA, which is a full halt per
+SKILL.md … submittable ❌ … worth asking for."* **Both halves of that were wrong**, and between
+them they closed the entire NHS/UKHSA channel for weeks:
 
-Creating that one account would open every Trac-backed NHS trust vacancy — worth asking for.
+1. **The CAPTCHA was never a halt.** Trac's registration CAPTCHA is **reCAPTCHA v2**, which is
+   one of the two *sanctioned auto-solves* in `references/captcha-policy.md` — the halt rule is
+   for Turnstile / hCaptcha / everything else. `recaptcha.py click` cleared it first try
+   (`PASSED: checkbox aria-checked=true`).
+2. **The account was never the user's to create.** SKILL.md §Hard stops: *"NOT a hard stop: ATS
+   account creation … default to email/password signup with the real email + a strong generated
+   password; record `site,email,password,date` in `ats-credentials.csv`."*
+
+The account is now created and recorded (row `apps.trac.jobs (Trac/HealthJobsUK - NHS + UKHSA)`).
+A Trac-backed vacancy is: reachable ✅ · readable ✅ · **submittable ✅**.
+
+Full working registration + apply sequence, and the three traps that each cost a failed submit
+(national-format phone, the error banner naming the wrong field, radios needing a trusted
+click): see the section below.
+
+---
+
+## Verified registration + apply sequence (2026-08-17)
+
+### The working sequence (verified live, UKHSA Interaction Designer, vacancy 8210652)
+
+1. `cfx.goto("https://apps.trac.jobs/job-advert/<vacancyId>?ShowJobAdvert=&feedid=9002")`
+   — reached from the CSJ advert's "Apply at advertiser's site" → `healthjobsuk.com/vacancy/<id>`
+   → its "Apply online now" link.
+2. Dismiss the OneTrust banner: click `#accept-recommended-btn-handler`.
+3. Registration: set `#StartRegistration.emailaddress` (native setter + input/change), then
+   `python3 sites/_common/scripts/recaptcha.py click` → `PASSED: checkbox aria-checked=true`,
+   then click `#StartRegistration.StartRegistration`.
+4. Trac emails an **account-creation LINK** (`https://apps.trac.jobs/auth/<token>`) from
+   `noreply@recruit.trac.jobs`, subject *"Creating your account on Trac"*. `cfx.goto` it.
+5. Complete-account form (`#CompleteYourAccount.*`): `passwordhash.enter`/`.confirm`,
+   `title` (select), `firstnames`, `familyname`, `country` (select → "United Kingdom"),
+   `address1`, `town`, `postcode`, `mobiletelephone`. Click `#CompleteYourAccount.submit`.
+6. Pre-application questions on the advert page: `#PreAppQuestions.Internalexternalinternalexternal`
+   (select → "No"), the immigration radio group, `#PreAppQuestions.AcceptPrivacyPolicy`
+   (checkbox), then `#PreAppQuestions.Continue` → creates the **draft application** at
+   `apps.trac.jobs/application/<APPID>` with sections: Personal details · Application questions ·
+   References · Equal opportunities.
+
+### ⚠️ Three traps that each cost a failed submit
+
+- **Phone must be NATIONAL format.** `mobiletelephone` rejects `+44 …` with *"Please enter a
+  valid telephone number excluding the country code."* Strip non-digits, replace a leading `44`
+  with `0` (→ `0#########`). The `apply-defaults.json` phone is stored in `+44` form, so this
+  conversion is required, not optional.
+- **The "Please correct the errors below" banner names the WRONG field.** It renders under
+  *"Are you currently an employee of…"* while the actual failure was the unticked privacy
+  checkbox further down. Do not re-drive the fields it appears to point at — enumerate
+  `[class*=error],[aria-invalid=true]` and read the real one. (Verified: the select and radio
+  were correctly set the whole time.)
+- **Radios need a TRUSTED click.** A native-setter `checked=true` + synthetic `click`/`change`
+  leaves the value in the DOM but does not satisfy Trac's validator. `cfx.click_selector('#<id>')`
+  works. Match the option by its `label[for]` text, exactly — the immigration group has ~17
+  options whose ids (`…Immigrationimmigration_50`, `_51`, …) carry no meaning.
+
+### Truthful answers for the pre-application gate
+- *"Are you currently an employee of \<employer\>?"* → **No** (option value `E` = external).
+- *Immigration status* → **"I am a British citizen with the right to work in the UK"** — the
+  first option; every other option asserts a visa, settlement scheme or sponsorship.
+
+## Sourcing is still Cloudflare-walled over plain HTTP — but the BROWSER path renders fine
+
+The prior note's HTTP findings still hold: `curl` to `trac.jobs` / `healthjobsuk.com` search and
+detail pages returns the Cloudflare *"Trac Security check"* interstitial. **However, camofox
+navigates the same vacancy and advert pages with no challenge at all** (verified 2026-08-17 on
+`healthjobsuk.com/vacancy/8210652` and `apps.trac.jobs/job-advert/8210652`). So:
+
+- **Do not** conclude Trac is halted because HTTP 403s — that is the anti-bot surface reacting
+  to a bare `curl`, not to the anti-detect browser.
+- **Do not** hammer it either. A genuine Cloudflare *managed challenge rendered in camofox* is
+  still outside the two sanctioned exceptions and remains a full halt per
+  `references/captcha-policy.md`. None appeared across this whole registration + apply flow.
+- Sourcing route that avoids the search page entirely: take CSJ `external` adverts and follow
+  their "Apply at advertiser's site" link, which deep-links straight to the vacancy.
+
+## Why this matters beyond one vacancy
+
+`classify_route.py` currently reports every one of these as `route=external`, note *"hands off
+to the department's own ATS — needs an account"*, and the drivable count as `0 of N`. That note
+is now stale for Trac specifically: the account exists, so a Trac-backed CSJ advert **is**
+drivable. UKHSA alone had three on-lane SEO-grade roles in a single sourcing pass (Interaction
+Designer, User Researcher, Cyber Security Operations Support Analyst), all £41,983–£52,113.
