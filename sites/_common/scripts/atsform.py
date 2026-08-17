@@ -2282,7 +2282,14 @@ def fill_eeo(config=None):
         # NOTE the bare "i identify my ethnicity" is deliberately ABSENT: it is a substring of
         # the SUB-group label too, so it could bind the broad group value to the sub-group
         # field depending on DOM order. Keep the group phrasing explicit.
-        (["what is your ethnicity", "your ethnicity", "i identify my ethnicity group",
+        # ⛔ MOST SPECIFIC LABEL FIRST (2026-08-17). The list is tried in order and stops at the
+        # first success, so a GENERIC label that also matches a NARROWER field binds the wrong
+        # one. Live on Capco: "what is your ethnicity" was tried first, matched the *sub-group*
+        # select (its label contains "ethnicity" too), reported OK — and the real
+        # "I identify my ethnicity group as*" stayed empty and bounced the submit. Putting the
+        # exact phrasing ahead of the generic ones makes the group bind its own field, and the
+        # generic entries are then never reached on such a form.
+        (["i identify my ethnicity group", "what is your ethnicity", "your ethnicity",
           "ethnic group", "ethnic origin", "ethnicity"],
          a.get("ethnicity"), True),
         # The SUB-group question is a separate, narrower field — answer it from the profile's
