@@ -246,7 +246,44 @@ above. So the drivable-and-on-band CSJ set is far smaller than the raw card coun
    DOM for the control, innerText for the "advertiser's site" prose.
 2. `goto()` returns before CSJ renders the apply block — poll for a marker before reading.
 
-## ⛔ HMRC "Desirable experience and skills" (`datafield_50629_1_1`) will not accept input
+## ✅ SOLVED 2026-08-17 — HMRC "Desirable experience and skills" was a HIDDEN CONDITIONAL FIELD
+
+**The section below is superseded. HMRC CSJ vacancies are drivable.** Verified end to end on
+the re-advertised Senior Business Analyst (jcode 2009725, ref 476852, eform 57897164).
+
+`datafield_50629_1_1` is **owned by a Yes/No radio, `datafield_50626_1_1`** ("Do you have the
+relevant experience and skills as outlined above?"). Until that radio is set, the textarea is
+rendered with **`offsetParent === null` — it is HIDDEN** — and the server discards anything
+typed into it. That is the whole mechanism:
+
+```
+before: input[name=datafield_50626_1_1] (radio Yes/No)  -> UNSET
+        textarea[name=datafield_50629_1_1]              -> required=true, visible=FALSE
+set the radio to Yes  ->  textarea visible=TRUE
+fill it               ->  reads back 1575 chars
+Continue, navigate away, come back  ->  radio still Yes, textarea STILL 1575 chars
+```
+
+The old spec set the textarea and never set the radio, so every attempt typed into a hidden
+control. The prior diagnosis ("the value LANDS then is dropped — look at the POST body")
+had the mechanism right and simply never found the cause. It is not HMRC-wide platform
+behaviour and it is not a persistence bug: it is one missing spec key.
+
+**Fix in the spec, not the driver:** include `"radio": {"datafield_50626_1_1": "Yes"}` (or
+`"No"`) alongside the textarea. Generally — **on any CSJ page, set radios/selects BEFORE the
+text they control, and treat `offsetParent === null` on a required field as "its owner is
+unset", never as "the field is broken."** `tal_eform.walk()` now also runs a top-up pass that
+re-asserts any spec text/textarea reading back empty after the owning controls settle.
+
+⚠️ Truthfulness note for this specific question: the four desirable criteria are a mixed bag
+for this applicant (has data analysis/visualisation and Agile; has NOT customs/trade
+regulations or line management). Desirable criteria are not pass/fail and the field is a
+250-word details box, so the honest construction is Yes **with the details box stating exactly
+which are met and which are not** — never a bare Yes implying all four.
+
+---
+
+## ⛔ SUPERSEDED (2026-08-16 diagnosis) — HMRC "Desirable experience and skills" will not accept input
 
 Confirmed on TWO separate HMRC vacancies (Senior Business Analyst 2009576, Senior Test
 Engineer 2008608), so it is HMRC-form-wide, not posting-specific. The textarea reports
@@ -266,8 +303,8 @@ the natural next step was a fourth way of typing — which cannot work, because 
 works. Anyone picking this up should look at the POST body (is `datafield_50629_1_1` in it?)
 and at whether the field belongs to a different form/section than `continue_button` submits.
 
-Net effect is unchanged and the operational advice stands: Submit never renders, so **HMRC
-CSJ vacancies remain undrivable and belong to the user in noVNC.**
+Net effect at the time: Submit never rendered. **That conclusion is now WRONG — see the
+SOLVED section above; the cause was the unset owning radio, and HMRC vacancies drive fine.**
 Continue still POSTs, so the walk advances, but the Declaration page keeps listing that page
 under "problems that need to be fixed" and **Submit never renders**. Everything else on those
 forms persisted normally. CPS (2009637) and FCDO (2007055) submitted cleanly through the same
