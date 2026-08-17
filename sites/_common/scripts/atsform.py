@@ -739,10 +739,14 @@ def _combo_click_option(option):
     return hit
 
 
-def _combo_open_and_pick(option, multi=False, strict=False):
+def _combo_open_and_pick(option, multi=False, strict=False, resolve_js=None):
     """Open the react-select marked [data-ats-target] via the interaction LADDER, read its
     options from several fallbacks, and commit the match. THE engine every combobox caller
-    shares (see the block header). Returns 0 on success, 1 otherwise."""
+    shares (see the block header). Returns 0 on success, 1 otherwise.
+
+    `resolve_js` is the caller's own resolver script for THIS target. It is used only to
+    re-mark the field if a React re-render drops the [data-ats-target] marker mid-ladder —
+    never to pick a different field."""
     want = str(option).strip().lower()
     _wb = re.compile(r'(^|[^a-z0-9])' + re.escape(want) + r'([^a-z0-9]|$)') if want else None
 
@@ -894,10 +898,12 @@ def _combo_open_and_pick(option, multi=False, strict=False):
             # Re-running the SAME resolver on the SAME target is not guessing — it is the
             # deterministic lookup that produced the marker in the first place, so the
             # "never fall back to the first combobox on the page" guarantee is untouched.
-            try:
-                info2 = json.loads(cfx.evaluate(resolve_js))
-            except (ValueError, TypeError):
-                info2 = {"kind": "none"}
+            info2 = {"kind": "none"}
+            if resolve_js:
+                try:
+                    info2 = json.loads(cfx.evaluate(resolve_js))
+                except (ValueError, TypeError):
+                    info2 = {"kind": "none"}
             if info2.get("kind") not in (None, "none"):
                 ft2 = cfx.evaluate(_COMBO_FREETEXT_COMMIT.replace("__VAL__", _js(str(option))))
                 if isinstance(ft2, str) and ft2.startswith("OK"):
@@ -989,6 +995,7 @@ def combobox_pick(target, option, multi=False, clear_first=False, quiet_notfound
         cfx.evaluate(_COMBO_CLEAR_CHIPS)
         time.sleep(0.3)
     rc = _combo_open_and_pick(option, multi=multi or bool(info.get("isMulti")),
+                              resolve_js=resolve_js,
                               strict=strict)
     # ⛔ SYNONYM RETRY FOR COMBOBOXES TOO (2026-08-16). set_radio has had this since
     # 2026-08-15: the profile records ONE canonical wording per fact, employers word the same
@@ -1005,7 +1012,8 @@ def combobox_pick(target, option, multi=False, clear_first=False, quiet_notfound
             if alt.strip().lower() in tried:
                 continue
             tried.add(alt.strip().lower())
-            if _combo_open_and_pick(alt, multi=multi or bool(info.get("isMulti"))) == 0:
+            if _combo_open_and_pick(alt, multi=multi or bool(info.get("isMulti")),
+                                    resolve_js=resolve_js) == 0:
                 print(f"  (matched {option!r} via synonym {alt!r})")
                 return 0
     return rc

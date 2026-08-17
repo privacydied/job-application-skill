@@ -344,11 +344,33 @@ def main():
             "return ls.slice(0,4).join(' | ');})()") or ""
     except Exception:  # noqa: BLE001
         loc = ""
-    if loc:
+    # ⛔ ONLY JUDGE TEXT THAT IS ACTUALLY A LOCATION (2026-08-17). The four lines above are
+    # whatever `main` happens to start with, and on a Greenhouse EMBED page that is form
+    # chrome, not the req header: Stripe's read back as
+    #   'Apply for this job | * | indicates a required field | Autofill my application'
+    # and Akuna's as 'Create a Job Alert | Interested in building your career at …'.
+    # Neither contains a location, yet drive_block found something to match and refused —
+    # so Stripe "Product Designer, Risk" (Ireland / United Kingdom, squarely eligible) was
+    # rejected as "abroad" and never applied to. A gate that fabricates a location from
+    # chrome is worse than no gate: it silently drops good applications and looks like a
+    # correct screen in the log.
+    #
+    # Require a real location signal before trusting the page over the config. When the
+    # header carries none, stay silent — the config-level gate above already ran, and the
+    # JD screen ran before that.
+    _LOC_SIGNAL = re.compile(
+        r"\bremote\b|\bhybrid\b|\bon-?site\b|\bunited kingdom\b|\bu\.?k\.?\b|\blondon\b|"
+        r"\bengland\b|\bscotland\b|\bwales\b|\bireland\b|\beurope\b|\bemea\b|\bapac\b|"
+        r"\bunited states\b|\bu\.?s\.?a?\b|\bcanada\b|\bindia\b|\baustralia\b|"
+        r"\b[A-Z]{2},\s|\bbased in\b|\blocation\b", re.I)
+    if loc and _LOC_SIGNAL.search(loc):
         page_block = precheck.drive_block(location=loc)
         if page_block:
             print(f"OFF_LOCATION {company} | {role} — page header {loc[:80]!r}: {page_block}")
             return 11
+    elif loc:
+        print(f"  page-header location unreadable ({loc[:60]!r}) — keeping the config's "
+              f"location screen, not inventing one")
 
     # ⛔ THE CONFIG'S `cv` WAS BEING IGNORED (fixed 2026-08-17). This line read
     # "/uploads/base-resume.pdf" as a literal, so EVERY Greenhouse application uploaded the
