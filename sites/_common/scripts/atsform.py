@@ -2337,8 +2337,15 @@ _LABEL_ALIASES = {
     "portfolio": ["website/portfolio", "portfolio url", "website"],
     "website": ["website/portfolio", "personal website"],
     "phone": ["phone number", "mobile", "telephone"],
-    "city": ["location", "where are you located", "current location"],
+    "city": ["location", "where are you located", "current location", "town", "town/city",
+             "city/town"],
     "location": ["city", "where are you located", "current location"],
+    # "Legal Address" blocked iFIT's submit as a required field while apply-defaults held the
+    # value the whole time under "Address line 1" (2026-08-17). Same class as the
+    # preferred-surname and zip-code misses above: the config answers it, the label differs.
+    "address line 1": ["legal address", "address", "street address", "address 1",
+                       "home address", "address line one"],
+    "postal": ["postcode", "postal code", "zip code", "zip code/postal code", "zip"],
 }
 
 
