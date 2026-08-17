@@ -46,11 +46,24 @@ SKIP = re.compile(
 # Every answer here is TRUE for this applicant: British citizen, London-based, no sponsorship,
 # immediately available, no current employment at the target company.
 TRUTHS = [
-    (r"require.{0,30}(visa )?sponsorship|need.{0,20}sponsorship|sponsorship.{0,20}(now|future)", "No"),
-    (r"authoris?z?ed to work|legal right to work|right to work|eligible to work", "Yes"),
+    # "Would <company> need to apply for a working permit or visa on your behalf?" is the
+    # same question as sponsorship in a vocabulary the sponsorship pattern never covered —
+    # it says "permit", never "sponsorship" (live: On, Sigma Computing, 2026-08-17).
+    (r"require.{0,30}(visa )?sponsorship|need.{0,20}sponsorship|sponsorship.{0,20}(now|future)|"
+     r"(apply for|obtain|need|require).{0,40}(work(ing)? (permit|visa)|visa)\b.{0,25}(on your behalf)?", "No"),
+    # ⛔ Plural + "full rights": Greenhouse forms say "Do you have full rights to work in the
+    # country this role is based from" — the old `right to work` literal did NOT match
+    # "rightS to work" (the 's' breaks the substring), so a question the applicant answers
+    # truthfully Yes surfaced as UNANSWERED_REQUIRED and blocked the whole posting.
+    (r"authoris?z?ed to work|legal rights? to work|rights? to work|eligible to work|"
+     r"legally (be )?(able|entitled) to work|permission to work", "Yes"),
     (r"notice period", "Available immediately"),
     (r"earliest.{0,20}(start|available)|when.{0,20}(can you|could you).{0,15}start", "Immediately"),
-    (r"salary (expectation|requirement)|expected salary|compensation expectation", "GBP 55,000"),
+    # "expected BASE salary" / "salary expectations for this role" / "desired base salary" —
+    # the old literal `expected salary` missed every variant that put a word between the two.
+    (r"salary (expectation|requirement)|expect\w*\s+\w{0,10}\s?salary|"
+     r"(desired|target|required)\s+\w{0,10}\s?salary|salary expectations?|"
+     r"compensation expectation|expected (base )?(compensation|remuneration)", "GBP 55,000"),
     (r"referred.{0,30}(by|to this role)|employee referral", "No"),
     (r"(currently|ever|previously).{0,25}(employed|worked|been).{0,20}(by|at|for|part of)", "No"),
     (r"current or former .{0,20}employee", "No"),
@@ -62,8 +75,29 @@ TRUTHS = [
     # He IS a crypto/blockchain-sector alum — CryptoKnowledge (Frontend Dev & DevOps,
     # Dec 2024-Jul 2025) was a crypto/finance education company. Answering "Yes" is true.
     (r"(worked|experience).{0,30}(crypto|blockchain|digital asset)", "Yes"),
-    (r"current (employer|company)", "CryptoKnowledge (most recent)"),
-    (r"current job title|current.{0,10}role|most recent (job )?title", "Frontend Developer & DevOps"),
+    # "Current or most recent company?" — the old adjacent-word pattern needed the two words
+    # touching, so this extremely common Greenhouse field went UNANSWERED_REQUIRED (Intercom).
+    (r"current (employer|company)|current or (most recent|previous|last) (employer|company)|"
+     r"(most recent|previous|last) (employer|company)", "CryptoKnowledge (most recent)"),
+    # Opt OUT of marketing/job-alert lists (SKILL.md §Applicant facts) — but never the
+    # required contact email, which is an identity field handled by `defaults`.
+    (r"email me about (future|other) (job )?(openings|opportunities|roles)|"
+     r"(join|add me to).{0,25}(talent|mailing) (community|pool|list)|"
+     r"marketing (emails|communications)", "No"),
+    # Unspent convictions / criminal record: truthfully No (profile). Deliberately scoped to
+    # the "do you have" shape so a policy paragraph about DBS checks can't trip it.
+    (r"(unspent )?convictions? or conditional cautions|unspent convictions?|"
+     r"criminal (record|convictions?|offences?)", "No"),
+    (r"current job title|current.{0,10}role|most recent (job )?title|"
+     r"current or (previous|most recent|last) job title|(previous|last) job title|"
+     r"what is your (current|present) (job )?title", "Frontend Developer & DevOps"),
+    # Interview-recording consent asked without the word "interview" nearby ("we use
+    # BrightHire to record and transcribe our conversation") — live: Stripe, 2026-08-17.
+    (r"(record|transcri).{0,40}(conversation|call|interview|session)|"
+     r"(brighthire|metaview|otter|notetak)", "Yes"),
+    # WhatsApp/SMS recruiting opt-in is marketing contact, not the required contact email.
+    (r"opt[- ]?in to receive|receive (whatsapp|sms|text) messages|"
+     r"text message updates", "No"),
     (r"desired compensation", "GBP 55,000"),
     # Office-attendance questions: he lives in London, so a London-office requirement is a
     # truthful Yes. Deliberately narrow — it must name an office/days, not relocation.
@@ -73,7 +107,14 @@ TRUTHS = [
     (r"data transfer", "__CONSENT__"),
     (r"willing to relocate|open to relocat", "No"),
     (r"reasonable adjustment|accommodation", "No"),
-    (r"how did you hear", "Job Board"),
+    # "Where did you FIRST hear about this role?" / "How did you find out about…" — same
+    # question, three vocabularies; only the first was covered (live: Vercel, 2026-08-17).
+    (r"how did you hear|where did you (first )?hear|how did you (find out|come across|learn)|"
+     r"where did you (find|see) (this|the) (role|job|position|opening)", "Job Board"),
+    # Office-attendance asked the other way round ("open to working 4 days onsite in one of
+    # our central offices") — the office/days pattern below only matched office-before-days.
+    (r"(open to|able to|willing to|happy to).{0,30}(work|be).{0,25}(onsite|on-site|in (the|our) office|"
+     r"\d\s*days?)", "Yes"),
     # NOTE: LinkedIn / portfolio / website / GitHub / pronouns are deliberately NOT here.
     # They are personal data, and this file is TRACKED — hardcoding them is exactly the leak
     # AGENTS.md §PII forbids ("drivers must not hardcode PII"), which is why scrub_pii.py
@@ -82,13 +123,22 @@ TRUTHS = [
     # apply-defaults.json and gh_apply already fills them via `defaults`, so the right move is
     # to emit nothing and let the config-routing model supply the real values at drive time.
     # They are listed in SKIP below for the same reason.
-    (r"country.{0,20}(reside|based|located|work)|where are you based|current country", "United Kingdom"),
+    # "Do you live in one of the following states? Alabama, Alaska, …" — a US-state residency
+    # screen. He lives in London, so the truthful answer is No. MUST come before the generic
+    # country rule below, which would otherwise answer "United Kingdom" into a Yes/No select.
+    (r"(live|based|reside).{0,30}(following|these) states|"
+     r"(do you )?(live|reside) in (any of )?(the )?(following|these)", "No"),
+    (r"country.{0,20}(reside|based|located|work)|where are you based|current country|"
+     r"(currently )?(based|located|living) in (any of )?(these|the following) countr", "United Kingdom"),
     (r"^location|location \(city\)|city", "London"),
     # "read our GDPR statement" is the same routine acknowledgement as the privacy notice
     # already handled here — it confirms the applicant has READ a document, which is true
     # of an application being submitted. It is NOT an attestation about the applicant's
     # own work (those are caught by ANTI_AI and never auto-signed).
-    (r"privacy (notice|policy|statement)|data protection|acknowledge|\bgdpr\b", "__CONSENT__"),
+    # "Please double-check all the information provided above. Ensuring accuracy is crucial…"
+    # is an acknowledgement of what the applicant just typed, not a claim about him.
+    (r"double[- ]check all the information|confirm.{0,30}information.{0,20}(above|provided).{0,20}(is )?(accurate|correct)|"
+     r"privacy (notice|policy|statement)|data protection|acknowledge|\bgdpr\b", "__CONSENT__"),
     (r"gender", "Male"),
 ]
 

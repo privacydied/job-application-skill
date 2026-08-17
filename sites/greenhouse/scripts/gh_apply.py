@@ -350,8 +350,22 @@ def main():
             print(f"OFF_LOCATION {company} | {role} — page header {loc[:80]!r}: {page_block}")
             return 11
 
+    # ⛔ THE CONFIG'S `cv` WAS BEING IGNORED (fixed 2026-08-17). This line read
+    # "/uploads/base-resume.pdf" as a literal, so EVERY Greenhouse application uploaded the
+    # generic master résumé — while the module docstring documents a `cv` key and every
+    # generated config carries one (gen_gh_config writes `"cv": "base-resume.pdf"`, callers
+    # override it with a family/tailored PDF). The result was silent generic-résumé spam, the
+    # #1 pitfall SKILL.md names ("never send a generic resume"), with no warning anywhere: the
+    # config LOOKED tailored and the driver ignored it.
+    #
+    # `cv` is a BARE BASENAME already staged in uploads/ (the camofox server reads
+    # /uploads/<basename>; a host path 400s) — same contract as atsform `upload`.
+    cv = os.path.basename((cfg.get("cv") or "base-resume.pdf").strip()) or "base-resume.pdf"
+    if not os.path.exists(os.path.join(UPLOADS, cv)):
+        print(f"CV_MISSING {cv!r} is not staged in uploads/ — falling back to base-resume.pdf")
+        cv = "base-resume.pdf"
     try:
-        _upload_and_verify("#resume", "/uploads/base-resume.pdf")
+        _upload_and_verify("#resume", f"/uploads/{cv}")
     except Exception as e:  # noqa: BLE001
         print(f"RESUME_UPLOAD_FAIL {e}")
         return 4
@@ -729,5 +743,33 @@ def main():
     return 5
 
 
+def _is_engine_death(exc):
+    """A dead tab / dead REST engine is INFRA, not a form problem.
+
+    Verified live 2026-08-17 (Liberis Product Designer): the camofox tab was reaped
+    mid-drive, and every later step — FILL_TOPUP, the identity backstop, the education
+    backstop — printed its own `HTTP 404 Tab not found` warning before `_fill_eeo()`
+    finally raised the same error as an unhandled traceback. The combo loop already
+    handles this case and logs a clean retryable `Blocked`; nothing else did, so the run
+    ended with a stack trace, NO tracker row, and no record that the posting still needs
+    driving. One posting silently lost per tab death.
+    """
+    s = str(exc)
+    return "Tab not found" in s or "HTTP 404" in s or "browser was restarted" in s or "HTTP 410" in s
+
+
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except cfx.CfxError as _e:
+        if not _is_engine_death(_e):
+            raise
+        try:
+            _cfg = json.load(open(sys.argv[1]))
+            _log(_cfg["company"], _cfg["role"], "Greenhouse", _cfg["url"], "Blocked",
+                 note=f"camofox tab/engine died mid-drive ({str(_e)[:60]}) — retry on a fresh tab",
+                 proof=None)
+        except Exception:  # noqa: BLE001 — logging is best-effort; the exit code is the contract
+            pass
+        print(f"ENGINE_DEAD {_e}")
+        sys.exit(6)

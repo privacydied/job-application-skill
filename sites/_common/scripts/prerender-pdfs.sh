@@ -156,6 +156,31 @@ else
   done
 fi
 
+# ── SERIAL RETRY for connection-contention failures ────────────────────────────────────
+# All jobs share ONE Playwright container, and connecting N of them at the same instant
+# makes some connects miss the 15s window ("browserType.connect: Timeout 15000ms exceeded")
+# — the render itself is fine, only the concurrent connect lost. Verified live 2026-08-17:
+# a batch of 11 family bases reported 4 FAIL, and every one of those 4 rendered first try
+# when re-run alone. Reporting them as failures made a healthy render look like a broken
+# tool (and, on the apply path, sends a posting to Blocked for want of a PDF). So retry
+# exactly those, ONE at a time, before reporting.
+retry_idx=()
+for ((j=0; j<N; j++)); do
+  rc="$(cat "$LOGDIR/$j.rc" 2>/dev/null || echo 99)"
+  [ "$rc" = "0" ] && continue
+  if grep -qE 'connect: Timeout|browserType\.connect|ECONNREFUSED|WebSocket error|socket hang up' \
+       "$LOGDIR/$j.log" 2>/dev/null; then
+    retry_idx+=("$j")
+  fi
+done
+if [ "${#retry_idx[@]}" -gt 0 ]; then
+  echo "[prerender] retrying ${#retry_idx[@]} connect-contention failure(s) serially" >&2
+  for j in "${retry_idx[@]}"; do
+    sleep 1
+    run_one "$j" "${DIRS[$j]}"
+  done
+fi
+
 fail=0
 for ((j=0; j<N; j++)); do
   rc="$(cat "$LOGDIR/$j.rc" 2>/dev/null || echo 99)"

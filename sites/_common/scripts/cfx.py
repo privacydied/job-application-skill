@@ -51,6 +51,94 @@ _ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 # BEFORE opening — preventing the wedge is far cheaper than the restart that recovers it.
 TAB_BUDGET = int(os.environ.get("CFX_TAB_BUDGET") or 7)
 
+# ── ACTIVE-TAB REGISTRY (the fix prune_tabs's docstring asked for) ───────────────────────
+# `prune_tabs(keep=…)` protects exactly ONE tab: the caller's. Every other process's tab is
+# fair game and, being older, is reaped FIRST — so any `ensure_tab` (a feed self-healing, a
+# shell `cfx.py init`, a second agent) silently kills a live drive's tab mid-application,
+# surfacing as `HTTP 404 Tab not found` several steps later. Measured four times in one
+# session on 2026-08-16 and twice more on 2026-08-17 (a Greenhouse fill lost its tab ~60s in,
+# right as a sourcing pass started), each loss abandoning a part-filled application.
+#
+# The registry makes "in use" observable across processes: a driver claims its tab id with
+# its pid + a heartbeat, and prune skips any claimed tab whose owner is still alive and
+# recently active. Claims are self-cleaning — a dead pid or a stale heartbeat is dropped, so
+# a crashed run can never permanently protect a leaked tab (which would re-create the very
+# wedge the budget guard exists to prevent).
+_TAB_REGISTRY = os.path.join(_ROOT, ".cfx-active-tabs.json")
+TAB_CLAIM_TTL = int(os.environ.get("CFX_TAB_CLAIM_TTL") or 900)   # seconds since last beat
+
+
+def _pid_alive(pid) -> bool:
+    """`pgrep` is BROKEN on this host (libproc2.so.1 → exit 127, indistinguishable from
+    'no match' — AGENTS.md §host quirks), so never shell out. /proc is the truth."""
+    try:
+        return os.path.isdir(f"/proc/{int(pid)}")
+    except (TypeError, ValueError):
+        return False
+
+
+def _registry_read() -> dict:
+    try:
+        with open(_TAB_REGISTRY, encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except Exception:  # noqa: BLE001 — a missing/corrupt registry must never break a call
+        return {}
+
+
+def _registry_write(d: dict) -> None:
+    try:
+        tmp = _TAB_REGISTRY + f".{os.getpid()}.tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(d, f)
+        os.replace(tmp, _TAB_REGISTRY)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def active_tabs(now: float = None) -> dict:
+    """Live claims only: owner process still exists AND beat within TAB_CLAIM_TTL.
+    Prunes dead claims from the file as a side effect (self-cleaning)."""
+    now = time.time() if now is None else now
+    reg = _registry_read()
+    live = {tid: c for tid, c in reg.items()
+            if isinstance(c, dict) and _pid_alive(c.get("pid"))
+            and (now - float(c.get("ts") or 0)) < TAB_CLAIM_TTL}
+    if len(live) != len(reg):
+        _registry_write(live)
+    return live
+
+
+def claim_tab(tab_id: str, note: str = "") -> None:
+    """Mark `tab_id` as in use by THIS process, so another process's prune skips it."""
+    if not tab_id:
+        return
+    reg = active_tabs()
+    reg[tab_id] = {"pid": os.getpid(), "ts": time.time(), "note": note[:80]}
+    _registry_write(reg)
+
+
+def release_tab(tab_id: str) -> None:
+    """Drop this process's claim (called on close_tab; also safe to call explicitly)."""
+    if not tab_id:
+        return
+    reg = _registry_read()
+    if reg.pop(tab_id, None) is not None:
+        _registry_write(reg)
+
+
+_LAST_BEAT = [0.0]
+
+
+def _beat(tab_id: str) -> None:
+    """Refresh this process's claim, rate-limited so a per-request write is not per-request
+    I/O. Called from post()/get() so simply DRIVING a tab keeps it protected."""
+    now = time.time()
+    if not tab_id or now - _LAST_BEAT[0] < 30:
+        return
+    _LAST_BEAT[0] = now
+    claim_tab(tab_id)
+
 
 class CfxError(RuntimeError):
     """A camofox REST call failed (HTTP error, or an /evaluate JS throw)."""
@@ -92,6 +180,10 @@ def _tab(explicit: str = None) -> str:
     tab = explicit or os.environ.get("CFX_TAB")
     if not tab:
         raise CfxError("Set CFX_TAB to the target tab ID (from POST /tabs)")
+    # Every tab-scoped REST call funnels through here, so this is the one place that can
+    # keep the active-tab claim fresh without touching each call site. Rate-limited to one
+    # write per 30s inside _beat, so a chatty fill loop costs a single file write a minute.
+    _beat(tab)
     return tab
 
 
@@ -526,12 +618,19 @@ def prune_tabs(budget: int = None, keep: str = None) -> list:
     excess = len(tabs) - (budget - 1)
     if excess <= 0:
         return []
+    # Tabs another LIVE process is actively driving (see the registry above). Reaping one of
+    # these is what killed part-filled applications; a claim is only honoured while its owner
+    # pid exists and its heartbeat is fresh, so a crashed run can't leak protection forever.
+    inuse = set(active_tabs()) - {keep}
+    if inuse:
+        print(f"cfx: prune skipping {len(inuse)} tab(s) claimed by live driver(s)",
+              file=sys.stderr)
     closed = []
     for tid in tabs:                       # oldest first
         if excess <= 0:
             break
-        if tid == keep:
-            continue                        # never reap the active tab
+        if tid == keep or tid in inuse:
+            continue                        # never reap the active tab, or another live drive's
         try:
             close_tab(tid)
             closed.append(tid)
@@ -799,6 +898,7 @@ def close_tab(tab_id: str) -> dict:
     `list_tabs()` kept showing them — verified live 2026-07-13). Genuinely
     idempotent server-side once userId IS passed — treated as success even if the
     tab is already gone."""
+    release_tab(tab_id)          # a closed tab must never keep a claim alive
     try:
         return delete(f"/tabs/{tab_id}", {"userId": _uid()})
     except CfxError:

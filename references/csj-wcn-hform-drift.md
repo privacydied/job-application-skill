@@ -66,3 +66,29 @@ cfx.evaluate("document.querySelector('input[type=submit][value=\"Apply now\"]').
 # -> .../application/<APPID>/view_form/<FORMID>
 # dump: document.querySelectorAll('input,textarea,select')  -> 1 (XSRF token only)
 ```
+
+---
+
+## ⚠️ SUPERSEDED IN PRACTICE — CSJ TAL IS DRIVING AGAIN (2026-08-17)
+
+**Do not read the conclusion above as current fact.** The tracker shows CSJ eform
+applications submitted with proof as recently as **2026-08-16**, driven by exactly the
+tools this note called inapplicable:
+
+| Date | Department | Role | Driver |
+|---|---|---|---|
+| 2026-08-15 | DSIT | Programme Support Officer | `tal_eform.py` (`datafield_74443_1_1` on Preferences) |
+| 2026-08-15 | ONS | SRS Statistical Support Officer | `tal_eform.py`, `proof=confirmation.png` |
+| 2026-08-16 | Crown Prosecution Service | Senior Service Designer | `tal_eform.py` (S1) + `tal_sec2.py` (S2) |
+| 2026-08-16 | FCDO | Senior DevOps Engineer | `tal_eform.py` (S1) + `tal_sec2.py` (S2) |
+
+Those rows cite Knockout-style `datafield_NNNNN_1_1` ids and `…/eform/<ID>/page/N`
+navigation — the "retired" renderer. So the 2026-07-22 observation was **campaign-specific,
+not platform-wide**: CSJ serves BOTH renderers, and which one a vacancy uses depends on the
+campaign, not the date.
+
+**Operational rule:** treat the renderer as a per-vacancy property. Open the eform, count
+real inputs (`document.querySelectorAll('input,textarea,select').length`); >1 means the
+Knockout path and `tal_eform.py` applies. Only a form that genuinely renders as WCN `hform`
+(1 hidden XSRF input) is out of scope — and that is a per-vacancy `Blocked`, never a reason
+to skip the CSJ channel, which is the single largest source of on-lane public-sector roles.

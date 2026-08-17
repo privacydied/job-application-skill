@@ -183,3 +183,4 @@ runcfg_gh/
 # check-no-pii.sh would NOT have caught it beforehand: it only scans TRACKED files, so an
 # untracked file passes right up until the moment it is added.
 runcfg/answers/
+.cfx-active-tabs.json

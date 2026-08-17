@@ -1137,6 +1137,19 @@ _OPTION_SYNONYMS = {
         "Mixed/Multiple ethnic groups - Any other Mixed/Multiple ethnic background",
         "Mixed/Multiple ethnic groups", "Any other Mixed/Multiple ethnic background"],
 
+    # A country select spells the applicant's country any of ~six ways. Verified live
+    # 2026-08-17 on Stripe's "Please select the country you are currently located in."
+    # (options: …, 'UK', 'US', 'Other') — the truthful answer "United Kingdom" matched no
+    # option, so a required field the applicant CAN answer came back UNANSWERED_REQUIRED and
+    # the posting was not driven at all. Same class as the ethnicity-wording miss below:
+    # the claim is identical, only the vocabulary differs.
+    "united kingdom": ["UK", "U.K.", "Great Britain", "GB",
+                       "United Kingdom of Great Britain and Northern Ireland",
+                       "United Kingdom (UK)", "England"],
+    "uk": ["United Kingdom", "U.K.", "Great Britain", "GB", "United Kingdom (UK)"],
+    "british": ["British Citizen", "British or Irish Citizen", "UK national",
+                "British / Irish", "United Kingdom"],
+
     "heterosexual": ["Straight", "Heterosexual/Straight"],
     "straight": ["Heterosexual", "Heterosexual/Straight"],
     "male": ["Man"],
