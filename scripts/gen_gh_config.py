@@ -239,7 +239,14 @@ _WORKAUTH_BAD = re.compile(r"sponsor|renewal|unknown|not authoris|not authoriz|"
 _WORKAUTH_GOOD = re.compile(r"^i am (authoris|authoriz)ed|"
                             r"(citizen|permanent resident)|"
                             r"do(es)? not (require|need).{0,25}(sponsor|visa|permit)|"
-                            r"no sponsorship (is )?(required|needed)", re.I)
+                            r"no sponsorship (is )?(required|needed)|"
+                            # First-person national-status options (Monzo's "🛂 Please confirm
+                            # your UK Right to Work status"): "I'm a UK or Irish National or
+                            # have Indefinite Leave to Remain." He is a British citizen, so
+                            # this is the one truthful option — and every other option on that
+                            # list names a visa or sponsorship, so _WORKAUTH_BAD excludes them.
+                            r"(uk|british) or irish national|indefinite leave to remain|"
+                            r"british citizen", re.I)
 
 
 def _pick_workauth(labels, want):
