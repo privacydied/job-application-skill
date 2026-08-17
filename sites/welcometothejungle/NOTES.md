@@ -142,3 +142,37 @@ this and returns **rc 3 (EXTERNAL_FALLBACK)**. Then:
    an acknowledgment page → "Back to Home" returns to the feed.
 Log the row from the **company ATS confirmation** (proof=the ATS success banner), Source
 "Welcome to the Jungle (Ashby)" — the WTTJ toast is tracking-only, not proof of submission.
+
+## ⚠️ `apply.py start` can report IN-PLATFORM while the tab is on the MARKETING host (2026-08-17)
+
+Verified live, twice in a row, on `app.welcometothejungle.com/jobs/Q0mJCW3d` (AIOS Product
+Designer) with a **confirmed logged-in session** (`/account/applications` rendered
+"Welcome back, <name>" and an "Apply with your profile — 5 jobs" bucket):
+
+```
+$ apply.py start "https://app.welcometothejungle.com/jobs/Q0mJCW3d"
+IN-PLATFORM apply open. Progress: ? | Send enabled: None
+$ apply.py status
+Progress: ? | Send now enabled: None
+$ cfx.current_url()
+https://uk.welcometothejungle.com/          ← the MARKETING site, not the app
+```
+
+The page body was the public homepage ("Your dream job is closer than you think", "Take the
+quiz"), so **no modal was open at all**. The driver printed its success line anyway, and
+`Progress: ?` / `Send enabled: None` — its own two unknown-signals — were not treated as a
+failure.
+
+**Consequences to watch for:** a run that trusts this line will "answer" questions into
+nothing and then report a stuck or externally-routed application that was never opened. This
+is the FALSE-VERDICT class SKILL.md warns about; it is also why `references/wttj-checklogin-false-negative.md`
+exists — do not conclude from this that the SESSION is dead (it demonstrably was not).
+
+**Before trusting `start`, assert the host:** `cfx.current_url()` must contain
+`app.welcometothejungle.com/jobs/`. If it shows `uk.welcometothejungle.com`, the navigation was
+bounced to the marketing host and the apply modal does not exist on that page — re-navigate
+with `cfx.goto` and retry, rather than proceeding.
+
+Fix to make in `apply.py start`: verify the post-navigation host and the presence of the modal
+before printing IN-PLATFORM, and return non-zero when `Progress` is `?` AND `Send enabled` is
+`None` (currently both-unknown is reported as success).
