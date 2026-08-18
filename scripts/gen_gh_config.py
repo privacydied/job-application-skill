@@ -234,8 +234,32 @@ def fetch(slug, jid, eu=False):
 # outright, so a mis-fire cannot produce a false eligibility claim; it just declines to
 # answer and the question stays a REVIEW item.
 _WORKAUTH_Q = re.compile(r"authoris|authoriz|right to work|work permit|sponsor", re.I)
-_WORKAUTH_BAD = re.compile(r"sponsor|renewal|unknown|not authoris|not authoriz|"
-                           r"do(es)? not have|require[sd]?\b.{0,20}(visa|permit|support)", re.I)
+# ⛔ POLARITY, NOT KEYWORDS (fixed 2026-08-18). This was a flat `sponsor|…` blocklist, so it
+# disqualified the CORRECT option whenever that option mentioned sponsorship in a NEGATED form.
+# Live on Baringa: the truthful choice is "I already have the right to work in this country /
+# I do not require sponsorship" — it contains "sponsor", so the blocklist killed it and the
+# question came back UNANSWERED_REQUIRED. The word is not the signal; the polarity is.
+_WORKAUTH_DISQUALIFY = re.compile(r"unknown|not authoris|not authoriz|do(es)? not have|"
+                                  r"i am not|no right to work", re.I)
+_WORKAUTH_NEEDS = re.compile(r"(requir|need)\w*\s+(a\s+)?(new\s+)?"
+                             r"(visa|sponsor\w*|permit|support|certificate)", re.I)
+_WORKAUTH_NEG = re.compile(r"(do not|don'?t|does not|doesn'?t|never|no)\s+(currently\s+)?"
+                           r"(requir|need)", re.I)
+# "I don't currently require sponsorship, BUT WILL DO IN THE FUTURE" is negated *now* and still
+# a sponsorship need — must stay disqualified.
+_WORKAUTH_FUTURE = re.compile(r"in the future|will (do|need|require)|but will|at some point", re.I)
+
+
+def _workauth_bad(label):
+    """True if this option asserts a sponsorship/visa NEED, or an unknown/negative status."""
+    s = str(label or "")
+    if _WORKAUTH_DISQUALIFY.search(s):
+        return True
+    if _WORKAUTH_FUTURE.search(s) and _WORKAUTH_NEEDS.search(s):
+        return True
+    if _WORKAUTH_NEEDS.search(s) and not _WORKAUTH_NEG.search(s):
+        return True
+    return False
 _WORKAUTH_GOOD = re.compile(r"^i am (authoris|authoriz)ed|"
                             r"(citizen|permanent resident)|"
                             r"do(es)? not (require|need).{0,25}(sponsor|visa|permit)|"
@@ -244,8 +268,9 @@ _WORKAUTH_GOOD = re.compile(r"^i am (authoris|authoriz)ed|"
                             # your UK Right to Work status"): "I'm a UK or Irish National or
                             # have Indefinite Leave to Remain." He is a British citizen, so
                             # this is the one truthful option — and every other option on that
-                            # list names a visa or sponsorship, so _WORKAUTH_BAD excludes them.
+                            # list names a visa or sponsorship need, so _workauth_bad excludes them.
                             r"(uk|british) or irish national|indefinite leave to remain|"
+                            r"already have the right to work|have the right to work|"
                             r"british citizen", re.I)
 
 
@@ -253,7 +278,7 @@ def _pick_workauth(labels, want):
     """Resolve a sentence-option work-authorisation select for an affirmative answer."""
     if str(want).strip().lower() not in {"yes", "no"}:
         return None
-    ok = [l for l in labels if _WORKAUTH_GOOD.search(l) and not _WORKAUTH_BAD.search(l)]
+    ok = [l for l in labels if _WORKAUTH_GOOD.search(l) and not _workauth_bad(l)]
     return ok[0] if len(ok) == 1 else None
 
 
