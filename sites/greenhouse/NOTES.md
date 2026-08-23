@@ -111,3 +111,20 @@ session. Leave the filled form staged and hand it to the user's **VNC** for the 
 click from done). There is no headless auto-solve for a behaviour score. Distinguish from (a) the
 checkbox/image-grid reCAPTCHA v2 which `recaptcha.py` DOES solve, and (b) a genuine required-field
 bounce which shows a visible `This field is required`.
+
+## combobox_pick can hang (not just fail) on an EEO field with no matching option — 2026-08-23
+Observed on dmg::media's Greenhouse remix form: `fill_eeo`/`fill_gaps_from_bank` retried
+"What is your sexual orientation?" with the literal profile string "Heterosexual" against a
+menu whose real option is phrased "Straight" only. The interaction ladder's retry loop did not
+terminate in a reasonable time (still running, near-zero CPU, after 5+ minutes) — this is a
+genuine HANG, not just a `NO_OPTION` failure, and blocked the whole gh_apply run (submit,
+security-code poll, everything downstream) until killed externally. Recovery: `cfx.press('Escape')`
+to close the stuck menu, then re-drive the specific field with the board's OWN option wording
+(inspect via a plain `.click()` open + read `[class*=select__option]` text) rather than the
+profile's canonical phrasing. Also found on the same form: "Are you authorised to work in the
+country to which you are applying?" renders as a **checkbox fieldset** (`fieldset.checkbox`,
+one `input[type=checkbox]` per option, NOT `input[type=radio]`) — `atsform.set_radio` correctly
+returns `NO_FIELD` for it and the generic "UK Right to Work" backstop never matches its exact
+wording, so it needs an explicit checkbox tick by the option's real value/label pair. Worth
+teaching `combobox_pick` a bounded retry count so a doomed literal-string search can't hang a
+whole apply run — filed as a follow-up, not fixed here (out of scope for a single drive).

@@ -159,6 +159,20 @@ def _extract(text, digits=None, strict=False):
     if strict:
         return ""
     span = ("{%d}" % digits) if digits else "{6,8}"
+    # ⛔ ALL-LETTER GREENHOUSE CODE MISSED (2026-08-23, NexGen Cloud). Greenhouse's own
+    # template reads "Copy and paste this code into the security code field on your
+    # application: <CODE>" — the code sits AFTER "on your application:", not within 15
+    # chars of the word "code" (that phrase is 60+ chars upstream). The generic near-match
+    # below missed it, and the loose fallback's `_plausible_code` REQUIRES a digit (added
+    # deliberately to reject brand words like "LinkedIn"/"GitHub") — but a real Greenhouse
+    # code can be pure letters ("crTHznhm", no digit at all), so the digit-requiring fallback
+    # rejected a verified-correct code and the CLI reported NO_CODE on a genuine application.
+    # This anchor is specific enough (Greenhouse's fixed template wording) to trust WITHOUT
+    # the digit check — it is not the loose "any 8-char word" scan the digit guard exists for.
+    anchor = re.search(r"on your application:[^A-Za-z0-9]{0,10}([A-Za-z0-9]" + span + r")",
+                        text, re.I)
+    if anchor:
+        return anchor.group(1)
     near = re.search(r"(?:verification code|security code|code is|your code|\bcode\b)"
                      r"[^A-Za-z0-9]{0,15}([A-Za-z0-9]" + span + r")", text, re.I)
     if near and _plausible_code(near.group(1)):

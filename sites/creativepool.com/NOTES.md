@@ -58,3 +58,26 @@ source — never grep env).
   `creativepool.com/jobs/`. The seen-pattern matches the id, not the host, so both are safe.
 - Clicking pagination in a browser triggers a "Want to see more great jobs?" signup overlay —
   that's client-side JS only; the server still serves `?action=front&page=N` to plain HTTP.
+
+## Account creation — VERIFIED 2026-08-23, no CAPTCHA, no unreadable OTP
+Self-registration (`/sign-up/?idtype=ind&step=2` — Email + "Choose password", one "Sign up"
+link, no CAPTCHA) works, BUT an account under `you@example.com` **already existed** (created in
+some earlier, undocumented run — sign-up bounced "The email address is already in use", and no
+row existed yet in `ats-credentials.csv`). Recovery used the sanctioned password-reset path
+instead of re-registering:
+1. `/login/` → "click here to reset it" → `/login/password_forgot.php`, enter the email, Send.
+   Response: "We have emailed you a link to reset your password" — no CAPTCHA on this step either.
+2. The reset email arrives from `support@creativepool.com`, subject "password reset request",
+   with a **one-time-use** link `/login/password_landing.php?username=<email>&verify=<token>`.
+   Read it via the real inbox over IMAP (`imap.example.com` row in `ats-credentials.csv` —
+   `scripts/email_ingest.py`'s `_connect()` gives a ready IMAP4_SSL session; a short ad-hoc
+   `imaplib` fetch-and-decode of the latest matching subject is enough, no new shared module
+   needed).
+3. Follow the link → "Update password details" form (Password + Password confirm + Submit) →
+   redirects straight to `/home/` **logged in** as the account holder. No email-verify-click
+   step, no CAPTCHA anywhere in this flow — outcome #1 (self-serve) end to end.
+4. Credential row added: `creativepool.com,you@example.com,<password>,<date>`.
+
+**Lesson for the next run:** if sign-up ever again says "already in use" for the applicant's
+own email and no `ats-credentials.csv` row exists, don't treat it as a wall — go straight to
+password-reset + IMAP read; it's the same one-shot self-serve outcome as a fresh registration.

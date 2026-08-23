@@ -96,3 +96,31 @@ let box=inp; for(let i=0;i<6;i++){box=box.parentElement; if(box&&/Yes/.test(box.
   `apply-defaults.json`, same mechanism as `atsform.apply`) and **auto-captures proof + logs**
   on a confirmed submit. Put `company`/`role`/`url` in the config so the row is logged
   identified; without them it prints NOT LOGGED instead of writing a half row.
+
+## ⚠️ Anti-spam flag on submit WIPES THE WHOLE FORM — retry is cheap, don't log Blocked on attempt 1
+Verified live 2026-08-23, Omnea `jobs.ashbyhq.com/omnea/…`. First `Submit Application` click can
+come back with a full-width red banner **"We couldn't submit your application — Your
+application submission was flagged as possible spam."** This is Ashby's own bot-heuristic, not a
+form-content problem. Clicking Submit again on the SAME (stale) render just re-shows the banner;
+the fix is the banner's own advice — **the form fully resets to blank on the next interaction**
+(resume/autofill section reappears, all radios/comboboxes cleared) — so you must **re-fill the
+whole form from scratch** (re-run `atsform.py apply <config>` + re-set any manual fields) before
+retrying Submit. Counts as attempt 2 of the 2-attempt cap; log `Blocked` only if the SECOND clean
+full re-fill + submit also gets flagged.
+
+## ⚠️ A radio can show DOM `checked=true` yet Ashby's submit validator still says "Missing entry"
+Verified live 2026-08-23, same Omnea run. After a from-scratch re-fill via `atsform.py apply`
+(which sets radios with `best.click()` — a JS-level `.click()`, not a CDP-trusted click), one
+required radio (`Do you require a visa or work permit…`) read `input.checked === true` in the DOM
+and `atsform` printed `OK`, but `Submit Application` still bounced with `Missing entry for
+required field: <that question>`. Re-driving the SAME field with a hand-rolled native-setter +
+`dispatchEvent('click'/'input'/'change')` did not fix it either, and once even appeared to
+UN-check a *different* already-set radio group as a side effect of DOM churn. **The fix that
+actually cleared the validator:** take a **live snapshot** (`cfx.sh snap`) right before submit,
+find the exact `radio "<option text>" [eN]` ref for the still-failing question, and issue a
+**trusted click via `cfx.sh click <ref>`** (real CDP mouse event) instead of any JS `.click()` /
+`dispatchEvent`. That one trusted click committed the field and the very next submit succeeded
+("Success — Your application was successfully submitted"). **Doctrine going forward:** if a
+submit reports "Missing entry" for a field that already reads `checked=true`/has a value in the
+DOM, don't trust the DOM read — re-click that exact option via a snapshot-ref trusted click, then
+retry submit, before concluding the form is broken.

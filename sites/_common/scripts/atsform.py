@@ -449,6 +449,21 @@ _COMBO_READ_OPTS = r"""
   let els = box ? [...box.querySelectorAll('[role=option],[class*="option"]')] : [];
   if (!els.length) { const m = inp.closest('[class*="control"]'); if (m) { const mm = m.querySelector('[class*="menu"]'); if (mm) els = [...mm.querySelectorAll('[class*="option"],[role=option]')]; } }
   if (!els.length) { const pm = inp.parentElement && inp.parentElement.querySelector('[class*="menu"]'); if (pm) els = [...pm.querySelectorAll('[class*="option"],[role=option]')]; }
+  // ⛔ JUNK FILTER (2026-08-23, IMC). Two page-level widgets poisoned these reads:
+  //   1. react-select renders a NO-OPTIONS notice whose OWN CLASS contains the substring
+  //      "option" ("select__menu-notice--no-options") — so `[class*="option"]` matched the
+  //      notice itself and its text "No options" came back as a FAKE option list of one.
+  //      The Python side then believed options existed, SKIPPED the type-to-filter /
+  //      distinct-token ladder (it only fires when opts is EMPTY), and reported NO_OPTION —
+  //      while the real cause was an async Greenhouse typeahead that simply hadn't been
+  //      typed into yet. This blocked REQUIRED School/Month fields on EU embed forms.
+  //   2. intl-tel-input keeps its country listbox (#iti-N__country-listbox, ~244
+  //      [role=option] dial-code <li>s) permanently in the DOM, so any read that reaches a
+  //      global pool drowns real matches in "Afghanistan+93 …".
+  els = els.filter(function(e){
+    if (e.closest && e.closest('.iti__country-listbox,[id^="iti-"]')) return false;
+    return !/(^|\s)(select__)?menu-notice|--no-options/.test(String(e.className));
+  });
   return JSON.stringify(els.map(e => (e.textContent||'').replace(/\s+/g,' ').trim()).filter(Boolean).slice(0,80));
 })()
 """
@@ -477,6 +492,15 @@ _COMBO_CLICK = r"""
   let els = box ? [...box.querySelectorAll('[role=option],[class*="option"]')] : [];
   if (!els.length) { const m = inp.closest('[class*="control"]'); if (m) { const mm = m.querySelector('[class*="menu"]'); if (mm) els = [...mm.querySelectorAll('[class*="option"],[role=option]')]; } }
   if (!els.length) { const pm = inp.parentElement && inp.parentElement.querySelector('[class*="menu"]'); if (pm) els = [...pm.querySelectorAll('[class*="option"],[role=option]')]; }
+  // ⛔ JUNK FILTER — same two poisons as _COMBO_READ_OPTS (2026-08-23, IMC): the
+  // no-options NOTICE's own class contains "option", and intl-tel-input's country
+  // listbox is always in the DOM. Without this, the failure diagnostic printed
+  // "No options" (the notice's text) as the option list, and a global-pool read could
+  // word-boundary-match dial-code countries instead of the field's real options.
+  els = els.filter(function(e){
+    if (e.closest && e.closest('.iti__country-listbox,[id^="iti-"]')) return false;
+    return !/(^|\s)(select__)?menu-notice|--no-options/.test(String(e.className));
+  });
   const norm = e => (e.textContent||'').replace(/\s+/g,' ').trim().toLowerCase();
   // exact first; else SCORE word-boundary matches (never mid-word, so "No" can't match
   // "Monaco") and pick the BEST: target at the start followed by a separator/end scores
@@ -629,6 +653,19 @@ def _combo_options():
         return []
 
 
+def _combo_prefix_of(requested: str, candidate: str) -> bool:
+    """True when `candidate` is a strict TOKEN-BOUNDARY PREFIX of `requested`.
+
+    "University of the Arts" is a prefix of "University of the Arts London" → True.
+    "University of the Arts Bournemouth" is NOT (diverges before the end of a token
+    boundary) → False. Case/space-insensitive; empty candidates never match."""
+    r = re.sub(r"\s+", " ", str(requested)).strip().lower()
+    c = re.sub(r"\s+", " ", str(candidate)).strip().lower()
+    if not c or len(c) >= len(r):
+        return False
+    return r.startswith(c) and (len(r) == len(c) or r[len(c)] in (" ", "-", ",", "&"))
+
+
 def _combo_clear_input():
     """Empty the focused combobox's search input before re-typing a shorter prefix.
     Without this the retry APPENDS to the existing text and filters even harder — the
@@ -717,7 +754,8 @@ def _combo_click_option(option):
     time.sleep(1.6)
     hit = cfx.evaluate("""(()=>{const want=%s.toLowerCase();
       const norm=x=>(x.innerText||'').replace(/\\s+/g,' ').trim().toLowerCase();
-      const os=[...document.querySelectorAll('[role=option]')];
+      const os=[...document.querySelectorAll('[role=option]')]
+        .filter(function(o){return !(o.closest && o.closest('.iti__country-listbox,[id^="iti-"]'));});
       if(!os.length) return '';
       let o=os.find(x=>norm(x)===want);
       if(!o){const esc=want.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&');
@@ -809,7 +847,27 @@ def _combo_open_and_pick(option, multi=False, strict=False, resolve_js=None):
         toks = [w.strip(",.;:()&") for w in str(option).split()]
         toks = [w for w in toks if len(w) >= 5 and w.lower() not in _STOP_TOK]
         probes += sorted(set(toks), key=len, reverse=True)[:3]
-        if not opts:
+        if opts:
+            # ⛔ POPULATED-BUT-UNMATCHED = A TAXONOMY-NARROWING MISS, NOT A WALL (2026-08-23,
+            # IMC). The `not opts` ladder below only runs when the list came back EMPTY. The
+            # junk-filter fix exposed the opposite case: the list is FULL of real options, none
+            # matches the full requested string, because the taxonomy stores a SHORTER form of
+            # it — Greenhouse's school list holds "University of the Arts" while the profile's
+            # value is "University of the Arts London". Every candidate is guarded by
+            # _combo_prefix_of(): an option qualifies only when the REQUESTED VALUE STARTS WITH
+            # it at a token boundary, so picking it is a narrowing to the employer's vocabulary
+            # of the SAME claim — never a different or broader answer.
+            for o in opts:
+                if _combo_prefix_of(str(option), o):
+                    clicked2 = cfx.evaluate(
+                        _COMBO_CLICK.replace("__OPT__", _js(o.strip()))
+                                    .replace("__STRICT__", "true"))
+                    if isinstance(clicked2, str) and clicked2.startswith("OK"):
+                        print(f"{clicked2} (taxonomy prefix of {str(option)[:40]!r})")
+                        _combo_clear_marker()
+                        return 0
+                    break
+        else:
             for probe in probes:
                 if not probe:
                     continue
@@ -845,10 +903,11 @@ def _combo_open_and_pick(option, multi=False, strict=False, resolve_js=None):
             time.sleep(1.6)
             hit = cfx.evaluate("""(()=>{const want=%s.toLowerCase();
               const norm=x=>(x.innerText||'').replace(/\\s+/g,' ').trim().toLowerCase();
-              const os=[...document.querySelectorAll('[role=option]')];
+              const os=[...document.querySelectorAll('[role=option]')]
+                .filter(function(o){return !(o.closest && o.closest('.iti__country-listbox,[id^="iti-"]'));});
               if(!os.length) return 'NO_OPTIONS';
               let o=os.find(x=>norm(x)===want);
-              if(!o){const esc=want.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&');
+              if(!o){const esc=want.replace(/[.*?^${}()|[\\]\\\\]/g,'\\\\$&');
                      const re=new RegExp('(^|[^a-z0-9])'+esc+'([^a-z0-9]|$)');
                      o=os.find(x=>re.test(norm(x)));}
               if(!o) return 'NO_MATCH:'+os.slice(0,6).map(x=>norm(x)).join(' | ');
