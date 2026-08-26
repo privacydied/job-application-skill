@@ -141,8 +141,11 @@ single posting or to park the tab on the page.
      screenshot shows a non-jane email, STOP: log out and re-authenticate with the
      email/password account (see the SSO override in Hard stops) BEFORE submitting.
    - **Solve reCAPTCHA v2 (AUTO, happy path, no halt):** unsolved checkbox → `recaptcha.py
-     click <job_ref>` → `PASSED` or `CHALLENGE`; `CHALLENGE` → `solve-grid`, read the crop
-     with vision, `solve-grid --tiles "<idx>"`. Invisible badge → trigger the real Submit,
+     click <job_ref>` → `PASSED` or `CHALLENGE`; `CHALLENGE` → `recaptcha.py solve-grid
+     --auto` OR `tilevision.py solve <job_ref>` (end-to-end: per-tile VLM read + trusted
+     click + Verify, bounded rounds). If the auto path fails: `solve-grid`, read the crop
+     yourself, `solve-grid --tiles "<idx>"`.
+     Invisible badge → trigger the real Submit,
      then `wait-token`. Verify the GREEN CHECKMARK via screenshot before Submit — the JS
      token alone is unreliable. (Turnstile/hCaptcha remain the full-halt case; CSJ's ALTCHA
      is the other sanctioned auto-solve.)

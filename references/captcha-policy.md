@@ -21,6 +21,13 @@ Checkbox / invisible badge / image-grid → `python3 sites/_common/scripts/recap
 - `solve-grid` covers the image grid: **Phase A** captures the crop + instruction and
   emits `NEED_TILES`; you pick the tile indices with vision; **Phase B** clicks them +
   Verify, looping multi-round up to `max_rounds`.
+- **`solve-grid --auto` closes the loop with no agent turn:** it DELEGATES to
+  `tilevision.py solve` — the end-to-end solver that captures, classifies each tile
+  YES/NO (provider chain NVIDIA→Nous→custom env), trusted-clicks the picks and
+  Verifies, looping bounded rounds. tilevision imports recaptcha's primitives
+  (frame reads / click-xy / Verify / audit) — one home for the clicking machinery.
+  Any tilevision failure falls back to the agent-read
+  NEED_TILES handoff below — never blind-click.
 - **Verify results via SCREENSHOT (the green checkmark), not the JS token** — a stale
   `api2/bframe` iframe makes `detect` report a phantom open challenge.
 - If a submit is rejected, screenshot first and look for a missed required field before

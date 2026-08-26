@@ -58,6 +58,7 @@ lists reappear outside `check_title.py`.
 | Log a tracker row (dedup-safe, in place) | `log-application.py` | `echo >>` / hand-append |
 | Any browser action (nav/click/type/eval/shot/upload) | `cfx.sh` / `cfx.py` (`import cfx`) | the host agent's native browser tools (Hermes `browser_*`, IDE/MCP); raw REST |
 | Region-crop screenshot for the vision gate | `cfx.py shot --selector <css>` | full-page screenshot |
+| Pick the matching tiles AND click them in an open reCAPTCHA grid | `recaptcha.py solve-grid --auto` (delegates to `tilevision.py solve`; vision-only: `tilevision.py solve-pending`) | hand-rolling a vision call, or guessing indices from a whole-grid glance |
 | Record/rank per-ATS apply success | `apply_stats.py` (drivers call it) | — |
 | Board+query cooldown | enforced INSIDE `feed.py`; inspect via `board_cooldown.py` | check/mark by hand |
 | Break cooldown w/ broad alternate queries | `scripts/gen_queries.py` (wider-vocab LI/Indeed URLs, new keys) | hand-build OR-bundle search URLs |

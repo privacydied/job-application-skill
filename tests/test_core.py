@@ -18,6 +18,7 @@ camofox; the pure modules (check_title/precheck/board_cooldown) don't import cfx
 import contextlib
 import csv
 import io
+import json
 import os
 import re
 import sys
@@ -4567,3 +4568,287 @@ class TestVerificationCodeFalsePositives(unittest.TestCase):
         import fetch_verification_code as v  # noqa: PLC0415
         text = "476379 User Researcher. Copy and paste the code below to continue."
         self.assertEqual(v._extract(text, strict=True), "")
+
+
+class TestTileVision(unittest.TestCase):
+    """tilevision.py — the vision half of the reCAPTCHA v2 grid auto-solve (the one
+    explicitly unbuilt step). The VLM only answers YES/NO per tile; EVERYTHING that
+    makes the answer trustworthy is deterministic code and is locked here:
+    task extraction from real instruction phrasing, YES/NO parsing (an unparseable
+    answer must be 'no answer', never silently NO), exact crop slicing, provider
+    fall-through, pick persistence into captcha-solve-pending.json, and the
+    one-home rule for the vision call."""
+
+    @classmethod
+    def setUpClass(cls):
+        if _SCRIPTS not in sys.path:
+            sys.path.insert(0, _SCRIPTS)
+        import tilevision as tv  # noqa: PLC0415
+        cls.tv = tv
+        try:
+            import PIL  # noqa: F401, PLC0415
+            cls.have_pil = True
+        except ImportError:
+            cls.have_pil = False  # uv test venv may lack Pillow; slicing tests skip
+
+    # --- task extraction ----------------------------------------------------
+
+    def test_task_extraction_from_real_instruction_shapes(self):
+        f = self.tv.extract_task
+        self.assertEqual(f("Select all squares with traffic lights"), "traffic lights")
+        self.assertEqual(f("Click each image containing a bus"), "bus")
+        self.assertEqual(f("Select all squares containing bicycles"), "bicycles")
+        self.assertEqual(f("Select all images showing a fire hydrant"), "fire hydrant")
+        self.assertEqual(f("select all squares with crosswalks"), "crosswalks")
+        self.assertEqual(f(""), self.tv._DEFAULT_TASK)
+
+    def test_bool_answer_parsing(self):
+        f = self.tv.parse_bool_answer
+        for yes in ("YES", "Yes.", "yes", " YES ", "The answer is YES"):
+            self.assertTrue(f(yes), repr(yes))
+        for no in ("NO", "No.", "no", " NO "):
+            self.assertFalse(f(no), repr(no))
+        # garbage / refusals / hedging are UNANSWERED — never silently NO
+        for junk in ("", None, "I'm not sure", "NO IDEA", "MAYBE", "I cannot solve CAPTCHAs",
+                     "yes but no"):
+            self.assertIsNone(f(junk), repr(junk))
+
+    # --- slicing --------------------------------------------------------------
+
+    def test_even_split_slicing(self):
+        if not self.have_pil:
+            self.skipTest("Pillow not available in this env")
+        from PIL import Image
+        # 300x150: two coloured halves -> even 2x1 split must separate them exactly.
+        img = Image.new("RGB", (300, 150))
+        img.paste((255, 0, 0), (0, 0, 150, 150))
+        img.paste((0, 0, 255), (150, 0, 300, 150))
+        p = os.path.join(tempfile.mkdtemp(), "crop.png")
+        img.save(p)
+        tiles = self.tv.slice_tiles(p, cols=2, rows=1)
+        self.assertEqual(len(tiles), 2)
+        left = Image.open(io.BytesIO(tiles[0]))
+        right = Image.open(io.BytesIO(tiles[1]))
+        self.assertEqual(left.size, (150, 150))
+        self.assertEqual(tuple(left.getpixel((10, 10))), (255, 0, 0))
+        self.assertEqual(tuple(right.getpixel((10, 10))), (0, 0, 255))
+
+    def test_tile_rect_slicing_uses_dom_geometry_not_an_even_split(self):
+        """A real bframe crop carries header/button chrome around the grid; an even
+        split would smear neighbours across tile boundaries. The persisted DOM rects
+        must be honoured verbatim (clamped only at the image edges)."""
+        if not self.have_pil:
+            self.skipTest("Pillow not available in this env")
+        from PIL import Image
+        img = Image.new("RGB", (100, 100), (30, 30, 30))          # dark chrome
+        img.paste((0, 200, 0), (30, 30, 70, 70))                  # bright centre, dark rim
+        p = os.path.join(tempfile.mkdtemp(), "crop.png")
+        img.save(p)
+        rects = [{"x": 20, "y": 20, "w": 60, "h": 60}]
+        tiles = self.tv.slice_tiles(p, tile_rects=rects)
+        self.assertEqual(len(tiles), 1)
+        t = Image.open(io.BytesIO(tiles[0]))
+        self.assertEqual(t.size, (60, 60))
+        # corners of this tile are chrome-dark, centre is bright — it did NOT get
+        # blended with anything outside the rect.
+        self.assertEqual(tuple(t.getpixel((2, 2))), (30, 30, 30))
+        self.assertEqual(tuple(t.getpixel((30, 30))), (0, 200, 0))
+
+    # --- orchestration over a stubbed provider ------------------------------
+
+    def _with_fake_provider(self, monkey_answers):
+        """Swap provider_chain + _chat_once for a deterministic stub keyed on tile-PNG
+        byte length; returns an undo callable."""
+        tv = self.tv
+
+        class FakeProvider(object):
+            name, base_url, api_key, model = "fake", "http://fake/v1", "k", "fake-vlm"
+
+            def describe(self):
+                return "fake:fake-vlm"
+
+        orig_chain = tv.provider_chain
+        orig_chat = getattr(tv, "_chat_once", None)
+
+        def fake_chain():
+            return [FakeProvider()]
+
+        import zlib
+        def fake_chat(prov, prompt, png):
+            k = zlib.crc32(png)
+            if k not in monkey_answers:
+                raise RuntimeError("unexpected tile content")
+            ans = monkey_answers[k]
+            if isinstance(ans, Exception):
+                raise ans
+            return ans
+
+        def undo():
+            tv.provider_chain = orig_chain
+            if orig_chat is not None:
+                tv._chat_once = orig_chat
+            else:
+                delattr(tv, "_chat_once")
+
+        tv.provider_chain = fake_chain
+        tv._chat_once = fake_chat
+        return undo
+
+    def test_classify_unions_yes_tiles_and_persists_pick(self):
+        if not self.have_pil:
+            self.skipTest("Pillow not available in this env")
+        from PIL import Image
+        tv = self.tv
+        # nine distinct-colour tiles so each PNG has a unique byte length.
+        img = Image.new("RGB", (90, 90))
+        for i in range(9):
+            img.paste(((17 * i + 5) % 256, (31 * i + 11) % 256, (53 * i + 23) % 256),
+                      ((i % 3) * 30, (i // 3) * 30, (i % 3) * 30 + 30, (i // 3) * 30 + 30))
+        d = tempfile.mkdtemp()
+        crop = os.path.join(d, "crop.png")
+        img.save(crop)
+        pending = os.path.join(d, "captcha-solve-pending.json")
+        with open(pending, "w") as f:
+            json.dump({"instruction": "Select all squares with traffic lights",
+                       "crop": crop,
+                       "geometry": {"count": 9}}, f)
+        import zlib
+        tiles_pngs = tv.slice_tiles(crop)
+        keys = [zlib.crc32(p) for p in tiles_pngs]
+        self.assertEqual(len(set(keys)), 9, "tile PNGs must be distinguishable by content")
+        answers = {k: (i in (1, 4, 7)) for i, k in enumerate(keys)}
+        undo = self._with_fake_provider(answers)
+        try:
+            rc = tv.cmd_solve_pending(pending)
+        finally:
+            undo()
+        self.assertEqual(rc, tv.EXIT_OK)
+        with open(pending) as f:
+            st = json.load(f)
+        self.assertEqual(st.get("picked"), "1 4 7")
+        self.assertIn("tilevision_detail", st)
+
+    def test_no_match_is_a_valid_answer_with_exit_5(self):
+        if not self.have_pil:
+            self.skipTest("Pillow not available in this env")
+        from PIL import Image
+        tv = self.tv
+        img = Image.new("RGB", (90, 90), (9, 9, 9))
+        d = tempfile.mkdtemp()
+        crop = os.path.join(d, "crop.png")
+        img.save(crop)
+        pending = os.path.join(d, "captcha-solve-pending.json")
+        with open(pending, "w") as f:
+            json.dump({"instruction": "", "crop": crop}, f)
+        import zlib
+        answers = {zlib.crc32(p): False for p in tv.slice_tiles(crop)}
+        self.assertEqual(len(answers), 1)  # uniform image -> every tile identical
+        undo = self._with_fake_provider(answers)
+        try:
+            rc = tv.cmd_solve_pending(pending)
+        finally:
+            undo()
+        self.assertEqual(rc, tv.EXIT_NONE_MATCHED)
+
+    def test_provider_fall_through_and_total_failure(self):
+        """A dead provider falls through per-tile to the next entry; if nobody can
+        answer ANY tile the run fails loudly instead of returning a fake empty pick."""
+        if not self.have_pil:
+            self.skipTest("Pillow not available in this env")
+        from PIL import Image
+        tv = self.tv
+        img = Image.new("RGB", (90, 90), (3, 3, 3))
+        d = tempfile.mkdtemp()
+        crop = os.path.join(d, "crop.png")
+        img.save(crop)
+
+        class Dead(object):
+            name, base_url, api_key, model = "dead", "http://dead/v1", "k", "m"
+
+            def describe(self):
+                return "dead:m"
+
+        class Alive(object):
+            name, base_url, api_key, model = "alive", "http://alive/v1", "k", "m"
+
+            def describe(self):
+                return "alive:m"
+
+        orig_chain = tv.provider_chain
+        orig_chat = getattr(tv, "_chat_once", None)
+
+        def restore():
+            tv.provider_chain = orig_chain
+            if orig_chat is not None:
+                tv._chat_once = orig_chat
+            else:
+                delattr(tv, "_chat_once")
+
+        def chain():
+            return [Dead(), Alive()]
+
+        calls = {"n": 0}
+
+        def chat(prov, prompt, png):
+            calls["n"] += 1                      # counts ATTEMPTS (incl. dead ones)
+            if prov.name == "dead":
+                raise RuntimeError("dead:m HTTP 503")
+            calls["ok"] = calls.get("ok", 0) + 1
+            return calls["ok"] % 2 == 1          # alternate YES/NO per SUCCESS
+
+        tv.provider_chain = chain
+        tv._chat_once = chat
+        try:
+            picks, ok, detail = tv.classify_tiles(tv.slice_tiles(crop), "traffic lights")
+        finally:
+            restore()
+        self.assertTrue(ok)
+        self.assertEqual(calls["n"], 18)   # every tile tried dead FIRST, then alive
+        self.assertEqual(calls["ok"], 9)   # exactly one success per tile
+        self.assertEqual(picks, [0, 2, 4, 6, 8])  # ok-counter starts at 1 -> tile0 YES
+
+        # total failure: both providers error on every tile -> ok=False, no picks
+        def all_dead():
+            return [Dead(), Dead()]
+
+        def err(prov, prompt, png):
+            raise RuntimeError("down")
+
+        tv.provider_chain = all_dead
+        tv._chat_once = err
+        try:
+            picks2, ok2, _ = tv.classify_tiles(tv.slice_tiles(crop), "traffic lights")
+        finally:
+            restore()
+        self.assertFalse(ok2)
+        self.assertEqual(picks2, [])
+
+    def test_solve_pending_without_state_fails_clean(self):
+        tv = self.tv
+        rc = tv.cmd_solve_pending(os.path.join(tempfile.mkdtemp(), "missing.json"))
+        self.assertEqual(rc, tv.EXIT_NO_CROP)
+
+    # --- one-home guard -------------------------------------------------------
+
+    def test_vision_call_has_one_home(self):
+        """The VLM request path lives ONLY in tilevision.py. A second script rolling
+        its own image-classification endpoint would fork provider handling + prompt
+        discipline exactly like the divergent title screen once did."""
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        offenders = []
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [x for x in dirnames if x not in
+                           (".git", "__pycache__", "node_modules", "applications", "tests")]
+            for fn in filenames:
+                if not fn.endswith(".py") or fn == "tilevision.py":
+                    continue
+                fp = os.path.join(dirpath, fn)
+                try:
+                    src = open(fp, encoding="utf-8", errors="ignore").read()
+                except OSError:
+                    continue
+                if "chat/completions" in src and "image_url" in src:
+                    offenders.append(os.path.relpath(fp, root))
+        self.assertEqual(offenders, [],
+                         "re-implemented vision caller outside tilevision.py -> "
+                         + " | ".join(offenders))

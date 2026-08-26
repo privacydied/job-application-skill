@@ -133,6 +133,19 @@ rewritten to use this as ground truth, keeping the token as a secondary signal o
     pixels. Every attempt is logged to `captcha-audit.csv` (`GRID_SOLVE_PASSED`,
     `GRID_SOLVE_FAILED_ROUNDS`, etc.). `challenge-snapshot` remains as a standalone if
     you ever want the crop without auto-solving.
+- **The VL read AND the clicking are now one shipped solver (2026-08-26): `tilevision.py solve`.**
+  The one explicitly unbuilt step — "the agent reads the crop" — is automated: it slices the
+  persisted crop by the Phase-A tile rects (`tile_rects` in captcha-solve-pending.json)
+  and classifies EACH TILE independently YES/NO. Whole-grid indexing ("reply with the
+  tile numbers") was validated to FAIL on small open VLMs; per-tile binary classification
+  was exact on a real grid including the sign-depicting-a-light trap case.
+  `tilevision.py solve` is the END-TO-END grid solver: capture → per-tile classify →
+  trusted click (recaptcha's `_click_xy`/`_click_verify`, imported — not re-rolled) →
+  Verify → bounded rounds; `recaptcha.py solve-grid --auto` is a thin delegation into it.
+  Provider chain NVIDIA→Nous→custom (`TILEVISION_*` env); no provider or all-fail ⇒
+  falls back to the agent's own vision read of the same crop. One-home guard:
+  `tests/test_core.py::TestTileVision::test_vision_call_has_one_home` fails any second
+  script that grows its own vision endpoint.
 - **Per-domain memory** — `captcha-type-memory.csv` (skill root, one row per domain,
   auto-updated by `detect`/`click`/`solve-grid`) records whether a domain has shown a
   v2-checkbox, invisible, or grid CAPTCHA — `check-type <domain>` lets a future run

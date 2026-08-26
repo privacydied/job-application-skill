@@ -43,6 +43,13 @@ clicking):
                                        total-capture runaway guard). Passed ->
                                        PASSED. The VL model decides WHICH tiles
                                        match; this code never guesses pixels.
+  `solve-grid --auto`   one-shot: Phase A capture + the tilevision VLM read +
+                                       the Phase-B clicking in THIS process,
+                                       looping rounds itself (still bounded).
+                                       Falls back to the NEED_TILES handoff
+                                       whenever tilevision has no provider or
+                                       fails — the agent-read path above stays
+                                       the fallback of record.
 
 Usage:
     CFX_KEY=... CFX_TAB=... python3 recaptcha.py <command> [args]
@@ -70,7 +77,8 @@ from urllib.parse import urlsplit
 
 _here = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, _here)
-import cfx  # noqa: E402
+import cfx          # noqa: E402
+import tilevision   # noqa: E402
 
 ANCHOR_FRAME = 'iframe[src*="api2/anchor"], iframe[src*="enterprise/anchor"]'
 BFRAME_FRAME = 'iframe[src*="api2/bframe"], iframe[src*="enterprise/bframe"]'
@@ -508,6 +516,44 @@ def _bframe_geometry():
     return {"tiles": tile_centres, "verify": verify_centre, "count": len(tile_centres)}
 
 
+def _tile_crops_relative():
+    """Each tile's rect in CROP coordinates (the bframe bounding box minus the
+    same 12px pad `_capture_challenge` applies), so tilevision can slice the
+    crop exactly where the DOM tiles are instead of assuming an even split of
+    an image that also carries the challenge's header/button chrome.
+    Returns [] when no challenge is open."""
+    if not _challenge_open():
+        return []
+    bbox_raw = cfx.evaluate(
+        "(() => { const el = document.querySelector("
+        "'iframe[src*=\"api2/bframe\"], iframe[src*=\"enterprise/bframe\"]'); "
+        "if (!el) return null; const r = el.getBoundingClientRect(); "
+        "return JSON.stringify({x:r.x,y:r.y,width:r.width,height:r.height}); })()"
+    )
+    if not bbox_raw:
+        return []
+    try:
+        bbox = json.loads(bbox_raw)
+    except ValueError:
+        return []
+    pad = 12  # MUST stay identical to the pad in _capture_challenge
+    tiles_raw = cfx.eval_frame(
+        BFRAME_FRAME,
+        "(() => { const t = Array.from(document.querySelectorAll("
+        "'.rc-imageselect-table-33 td, .rc-imageselect-table-44 td')); "
+        "return JSON.stringify(t.map(td => { const r = td.getBoundingClientRect(); "
+        "return {x:r.x, y:r.y, w:r.width, h:r.height}; })); })()"
+    )
+    out = []
+    for t in (json.loads(tiles_raw) if tiles_raw else []):
+        if t.get("w", 0) <= 0 or t.get("h", 0) <= 0:
+            continue  # mid-reload cell — dropped by _bframe_geometry too
+        out.append({"x": t["x"] - int(bbox["x"]) + pad,
+                    "y": t["y"] - int(bbox["y"]) + pad,
+                    "w": t["w"], "h": t["h"]})
+    return out
+
+
 def _click_xy(x: float, y: float) -> None:
     cfx_sh = os.path.join(_here, "cfx.sh")
     subprocess.run(["bash", cfx_sh, "click-xy", str(int(round(x))), str(int(round(y)))],
@@ -532,7 +578,8 @@ def _click_verify(geo) -> None:
 _MAX_CAPTURES = 12
 
 
-def solve_grid(job_ref: str = "", tiles_arg: "str | None" = None, max_rounds: int = 3):
+def solve_grid(job_ref: str = "", tiles_arg: "str | None" = None, max_rounds: int = 3,
+               auto: bool = False):
     domain = _domain()
     round_num = 1     # failed-Verify attempts, bounded by max_rounds
     captures = 1      # total Phase-A captures this solve, bounded by _MAX_CAPTURES
@@ -668,7 +715,8 @@ def solve_grid(job_ref: str = "", tiles_arg: "str | None" = None, max_rounds: in
             _clear_pending()
             return 3
 
-    # --- Phase A: capture the open challenge for the agent's VL read ---
+    # --- Phase A: capture the open challenge for the VL read (tilevision, or
+    # the agent's own vision when --auto isn't requested / tilevision fails) ---
     if not _challenge_open():
         print("no image-grid challenge currently open (checkbox already solved, or no CAPTCHA).")
         return 1
@@ -678,9 +726,11 @@ def solve_grid(job_ref: str = "", tiles_arg: "str | None" = None, max_rounds: in
     instruction = cap["instruction"] if cap else ""
     crop = cap["crop"] if cap else ""
     dynamic = _looks_dynamic(instruction)
+    tile_rects = _tile_crops_relative()
     state = {
         "domain": domain, "job_ref": job_ref, "round": round_num, "captures": captures,
         "instruction": instruction, "crop": crop, "geometry": geo, "dynamic": dynamic,
+        "tile_rects": tile_rects,
     }
     with open(SOLVE_PENDING, "w") as _sf:
         json.dump(state, _sf)
@@ -689,6 +739,23 @@ def solve_grid(job_ref: str = "", tiles_arg: "str | None" = None, max_rounds: in
           f"{' [DYNAMIC]' if dynamic else ''}.")
     print(f"INSTRUCTION: {instruction}")
     print(f"CROP: {crop}")
+
+    if auto:
+        # AUTO-SOLVE: delegated wholesale to tilevision.cmd_solve, which loops
+        # capture -> per-tile VLM classify -> trusted click -> Verify itself
+        # (reusing THIS module's primitives via import). Any failure returns
+        # non-zero and falls through to the NEED_TILES handoff below so the
+        # agent's own read still works. Never blind-retry.
+        if not tilevision.provider_chain():
+            print("TILEVISION: no vision provider credentials found — falling back to "
+                  "the agent-read flow.")
+        else:
+            rc = tilevision.cmd_solve(job_ref=job_ref, max_rounds=max_rounds)
+            if rc == 0:
+                return 0
+            print("TILEVISION failed — falling back to the agent-read flow "
+                  "(NEED_TILES below). Do NOT retry blindly.")
+
     if count == 0:
         print("WARNING: 0 tiles read from the grid geometry despite an open challenge — "
               "geometry capture likely failed. Re-run `solve-grid` before trusting this "
@@ -697,6 +764,7 @@ def solve_grid(job_ref: str = "", tiles_arg: "str | None" = None, max_rounds: in
         print("VL step: read the crop, decide which tile indices (0-based, row-major, "
               f"0..{count - 1}) match the instruction, then run:")
         print(f"  python3 {os.path.basename(__file__)} solve-grid --tiles '<indices>'")
+        print(f"  (or let tilevision decide: solve-grid --auto)")
         if dynamic:
             print("DYNAMIC challenge: after each pick the tiles reload and you'll be asked "
                   "again — when no tiles match anymore, finalize with --tiles '' to Verify.")
@@ -734,12 +802,16 @@ def main():
             # picked up job_ref at all from `solve-grid <job_ref>` (Phase A).
             rest = a[1:]
             tiles: "str | None" = None
+            auto = False
             if "--tiles" in rest:
                 i = rest.index("--tiles")
                 tiles = rest[i + 1] if i + 1 < len(rest) else ""
                 del rest[i:i + 2]
+            if "--auto" in rest:
+                rest.remove("--auto")
+                auto = True
             job_ref = rest[0] if rest else ""
-            return solve_grid(job_ref=job_ref, tiles_arg=tiles)
+            return solve_grid(job_ref=job_ref, tiles_arg=tiles, auto=auto)
         if a[0] == "check-type":
             if len(a) < 2:
                 print("Usage: recaptcha.py check-type <domain>")
