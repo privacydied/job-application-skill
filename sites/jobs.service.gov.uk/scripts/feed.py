@@ -68,10 +68,11 @@ Usage:
                     [--pages N] [--all] [--force]
   --what         search keyword (default: none — the board's whole-London feed; prefer a
                  keyword, the unfiltered feed is thousands of rows).
-  --where        the `location` query param text (default: "London, England" — a bare city
-                 name is enough, no postcode needed; pass a real postcode via --where for a
-                 tighter radius, sourced at call time, never hardcoded here — see the PII
-                 note by DEFAULT_LOCATION_TEXT below).
+  --where        the `location` query param text (default: "London" — a bare city name is
+                 enough, no postcode needed; "London, England" with the comma+country
+                 suffix returns ZERO results, verified live, don't use that form; pass a
+                 real postcode via --where for a tighter radius, sourced at call time,
+                 never hardcoded here — see the PII note by DEFAULT_LOCATION_TEXT below).
   --location-id  the `locationId` param (default: none — only needed for postcode-radius
                  search, see --where).
   --nav          a jobs.service.gov.uk search URL directly (overrides --what/--where).
@@ -155,6 +156,24 @@ def _id(url):
     return m.group(1) if m else ""
 
 
+def _nav_page_url(nav, page):
+    """Return nav's URL with pageNumber=<page> set (added or replaced), preserving
+    every other query param (e.g. jobBase=REMOTE). Page 1 = nav unchanged (no
+    pageNumber param, matching the site's own URL for page 1).
+    BUG FIX (2026-08-28): the old caller only ever used `nav` for page 1 and fell
+    back to the DEFAULT London-anchored _search_url() for every later page —
+    silently dropping jobBase=REMOTE (or any other --nav-only param) from pages
+    2+, so a "3-page REMOTE sweep" was actually 1 real remote page followed by 2
+    regular London pages for the same keyword. Always paginate the NAV url when
+    one was given."""
+    from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+    parts = urlsplit(nav)
+    q = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True) if k != "pageNumber"]
+    if page > 1:
+        q.append(("pageNumber", str(page)))
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(q), parts.fragment))
+
+
 def _search_url(keywords, where, location_id, page):
     q = "keywords=%s&location=%s" % (quote(keywords or ""), quote(where or DEFAULT_LOCATION_TEXT))
     loc_id = location_id or DEFAULT_LOCATION_ID
@@ -219,7 +238,7 @@ def main():
     pool = {}
     try:
         for p in range(1, max(1, pages) + 1):
-            url = nav if (nav and p == 1) else _search_url(what, where, location_id, p)
+            url = _nav_page_url(nav, p) if nav else _search_url(what, where, location_id, p)
             _nav_ready(url)
             before = len(pool)
             _enum_page(pool)

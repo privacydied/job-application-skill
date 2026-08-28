@@ -263,4 +263,43 @@ just filled reads empty, a button search fails that should obviously exist, a ti
 recognise), check `location.href`/`document.title` FIRST before assuming a form-widget bug —
 a same-tab hijack by the other agent is a real, live possibility, not a hypothetical.**
 
+## Upload endpoint can't reach a file input nested two iframes deep (2026-08-28, Hippo Digital registration on careers.hippodigital.co.uk)
+
+`POST /tabs/<tab>/upload` (wrapped by `atsform.upload()`) only resolves its `selector`
+against the TOP-LEVEL document. `cfx.eval_frame()` can read/write text fields inside a
+cross-origin iframe fine (and even inside an iframe nested a further level deep, e.g.
+`iframe[src*='UploadFile.aspx']` reachable straight from the top level via `eval-frame`
+without chaining), but the SAME reach does not extend to `/upload` — every variant tried
+(a bare selector, a Playwright `>>>` piercing chain, and payload params `frameSelector`/
+`frame`/`iframeSelector`/`frameUrl` alongside `selector`) returned `HTTP 500 Internal
+server error`. Concretely: Hippo Digital's candidate registration is an ASP.NET WebForms
+iframe (`registration.aspx`) whose "Upload CV" button calls `OpenBox()` to open a SECOND,
+nested iframe (`/Popups/UploadFile.aspx?...`) containing the real `<input type=file>`
+(`class="ruFileInput"`, a Telerik RadUpload control). Every other field on the outer
+registration iframe (name/email/password/address/radios/consent) filled correctly via
+`cfx.py eval-frame` + native-setter value/checked assignment — only the doubly-nested
+file input was unreachable. Not yet fixed (no server-side support found for nested-frame
+uploads); logged the posting `Blocked` rather than spend a 3rd attempt. If this pattern
+recurs (any GDS/Telerik RadUpload-style "click to open an upload popup" ATS), the fix
+would need to live in the camofox server's `/upload` handler (frame-tree traversal by
+selector, matching what `/eval-frame` already does) — a client-side workaround was not
+found this session.
+
+## `uploadViaChooser` endpoint returns HTTP 500 (confirmed broken, 2026-08-28)
+
+`atsform.upload_chooser()` / the raw `POST /tabs/<tab>/uploadViaChooser` endpoint is
+documented as the fix for exactly the "no `<input type=file>` exists until a button
+click opens a native OS file-chooser" pattern (CVLibrary-class widgets) — but tested
+live against a genuinely chooser-gated Airtable form field (Compucorp's DevOps
+Engineer application, "Drop files here or click to browse", which uses the File
+System Access API with zero DOM fallback — confirmed no `<input type=file>` anywhere,
+including inside the page's one shadow root, checked immediately post-click with no
+delay) and it returned `HTTP 500 Internal server error` every time, regardless of the
+`trigger` selector syntax tried (`text=...`, a plain CSS class). Matches the
+docstring's own caveat ("Requires the server.js route (deployed via a camofox
+container restart)") — the route is very likely just not deployed on this camofox
+instance. Net effect: any form whose file input is TRULY chooser-gated (no DOM
+fallback, not even a transiently-mounted one) is currently unfillable by this
+toolkit — log `Blocked`, don't keep retrying the same 500 across sites.
+
 ## (add further gaps here as they're discovered)
