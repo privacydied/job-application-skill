@@ -44,10 +44,11 @@ Two shapes, and you don't know which until you open `/jobs/<id>/apply`:
      jobs.service.gov.uk itself (Your details -> Upload a CV -> Cover message -> ...).
      Submitting past the cover-message step requires **GOV.UK One Login**
      (`/auth/sign-in`), which mandates a **mobile phone number for SMS/call
-     verification** — this is a genuine HARD STOP per SKILL.md's account-creation policy
-     ("ask only if signup demands more than name/email/password"). Do NOT attempt to
-     create a One Login account unaided; log it as `Blocked` with this reason and move
-     on, or surface it to the user if they want to complete it via their own phone.
+     verification** on top of email+password. Credentials exist (ats-credentials.csv row
+     `jobs.service.gov.uk (GOV.UK One Login)`), so this is a standard SKILL.md LOGIN-WALL
+     hard stop (stop at the OTP prompt, message the user, wait for the code), NOT an
+     account-creation hard stop — see sites/jobs.service.gov.uk/NOTES.md for the full
+     recipe (the session persists across postings once established).
 
 DEDUP WARNING — Civil Service overlap. Some Work Hub postings ARE Civil Service vacancies
 (verified live: "No10 Digital Business Analyst", Cabinet Office, Company="Government

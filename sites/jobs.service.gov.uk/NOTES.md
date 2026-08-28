@@ -72,7 +72,7 @@ submit button text is **"Save & Proceed"**. Drives cleanly through the generic
 `atsform.py apply` engine with `"defaults": true` — see "Verified end-to-end test
 applications" below for the exact run and the real bug it surfaced.
 
-### Shape B — "Continue" (in-platform GOV.UK Design System wizard) — HARD STOP at submit
+### Shape B — "Continue" (in-platform GOV.UK Design System wizard) — LOGIN WALL at submit
 No visible redirect; the button just says "Continue" (not "...to the employer's
 website"). This is a native multi-step wizard hosted on jobs.service.gov.uk itself:
 `Your details` (Full name) → `Upload CV` → `Include a message or covering letter` → ...
@@ -83,15 +83,22 @@ submitting past the cover-message step requires being signed in to GOV.UK One Lo
 non-empty payload (the UI just shows a generic "Something went wrong. Please try again."
 banner, which is misleading — it is NOT a form-validation error, it's the 401 masked).
 
-**GOV.UK One Login requires a mobile phone number for SMS/call verification** — the
-sign-in page says outright "You can do it with a mobile phone number and email address."
-That crosses SKILL.md's account-creation line ("ask only if signup demands more than
-name/email/password") — **this is a genuine HARD STOP**, not a driver gap. Log `Blocked`
-with reason "GOV.UK One Login required — needs a real mobile number for SMS
-verification, cannot create unaided" and move to the next candidate. Do not attempt to
-work around it. If the user wants these specific postings, they'd need to complete the
-One Login signup themselves (their own phone) and hand back a session, or apply on their
-own device via the "For employers"-style noVNC pattern.
+**GOV.UK One Login requires a mobile phone number for SMS/call verification** on top of
+email+password. Credentials row `jobs.service.gov.uk (GOV.UK One Login)` now exists in
+`ats-credentials.csv` (added 2026-08-28 — the user already holds this account), so
+email+password sign-in itself is NOT a hard stop — but the SMS/call code that follows
+is a **per-session OTP the agent cannot receive**. Treat this exactly like SKILL.md's
+standard **login-wall hard stop**: navigate to `/auth/sign-in`, enter the credentials,
+and when the OTP prompt appears, STOP and message the user (site, that it's a GOV.UK
+One Login SMS/call code, the noVNC link) and WAIT — do not guess, do not retry, do not
+skip past it. Once the user relays the code (or completes it themselves in noVNC), enter
+it, confirm the session (account/"Sign out" visible), and resume the SAME in-progress
+application from where the wizard left off — the form state on jobs.service.gov.uk
+survives a same-tab sign-in redirect since `returnTo` brings you back to the exact
+posting's cover-message step. Log `Blocked` (retryable, not permanent) if the user isn't
+available to supply the code right then; re-attempt once a session is confirmed live
+rather than re-asking for a fresh code every posting — the One Login session, once
+established, should persist across multiple Shape B applications in the same run.
 
 ## Form mechanics that matter
 

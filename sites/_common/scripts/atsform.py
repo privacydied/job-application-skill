@@ -214,8 +214,16 @@ _RESOLVE = r"""
 """.strip()
 
 
-def _resolve(label, kinds="input[type=text],input[type=email],input[type=tel],input[type=number],input[type=url],textarea",
+def _resolve(label, kinds="input[type=text],input[type=email],input[type=tel],input[type=number],input[type=url],"
+                          "input[type=password],textarea",
              max_tier=3):
+    # `input[type=password]` added 2026-08-28 (GOV.UK One Login sign-in) — the default
+    # kinds list never included it, so `fill("Enter your password", ...)` FAILed with
+    # "no text field for label" on every login form even though the label matched fine;
+    # the only workaround was a hand-rolled CSS-id selector per site. Password labels are
+    # unambiguous (no risk of accidentally binding a DIFFERENT field's value here), so
+    # there's no reason to keep excluding the type — this should fix `fill()` for login
+    # flows generally, not just this one board.
     # max_tier caps how loose a match is accepted: 0 = exact only, 1 = +starts-with,
     # 2 = +word-boundary-anywhere, 3 (default) = +bare-substring — the historical behaviour.
     # See _STRICT_ALIASES for why a caller would ever want to tighten this.
