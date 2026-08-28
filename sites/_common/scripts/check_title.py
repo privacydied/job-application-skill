@@ -89,7 +89,8 @@ _DESIGN_ENG_INDUSTRIAL = (
     # power-engineering role. Power/voltage grades are the most common UK "<X> Design
     # Engineer" family that wasn't represented here.
     "hv", "lv", "ehv", "high voltage", "low voltage", "power", "substation",
-    "transmission", "distribution", "overhead line", "cable",
+    "transmission", "distribution", "overhead line", "cable", "cabling",
+    "structured cabling",
     # --- civil/infrastructure + heavy-industry modifiers in the same family ---
     "rail", "railway", "highway", "bridge", "tunnel", "drainage", "water",
     "marine", "offshore", "subsea", "nuclear", "mining", "pipeline",

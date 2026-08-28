@@ -5,5 +5,7 @@
   "url": "https://jobs.ashbyhq.com/freetrade/0498b194-3208-42b3-8480-bb35ebe86084",
   "source": "Ashby",
   "defaults": true,
-  "fill": {}
+  "fill": {
+    "Why are you interested in working at Freetrade": "Freetrade's mission to make investing accessible and affordable is exactly the kind of product problem I want to work on - I've spent my career building and supporting reliable platforms, and I'm drawn to the challenge of keeping a regulated, high-trust fintech product fast and dependable for everyday investors. London-based and ready to contribute from day one."
+  }
 }

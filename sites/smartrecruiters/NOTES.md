@@ -1,267 +1,130 @@
-# jobs.smartrecruiters.com ("oneclick-ui" apply flow) — site notes
+# SmartRecruiters (jobs.smartrecruiters.com) — verified apply flow (2026-08-28)
 
-## Shadow DOM: `evaluate`/`querySelectorAll` are blind here — use Playwright `role=` selectors instead
+No shipped driver existed before this. First real submission: Legal & General, "Product
+Analyst (Funds Oversight)", 744000145913189 — verified end-to-end via camofox.
 
-SmartRecruiters' "oneclick-ui" apply form is built from ~68 shadow-DOM
-web-component hosts. Plain `document.querySelectorAll('input')` (or anything
-run through the REST API's `evaluate` endpoint) returns **empty**, even
-though the fields are real, interactive, and rendered on screen. Recursive
-shadow-root traversal (`el.shadowRoot` walking) *can* read state back out
-(e.g. checking `input.checked` — see the checkbox-verification section below)
-but is too slow/fragile to use for blind click/select.
+## Structural gotcha: everything is inside NESTED SHADOW DOM (SPL web components)
 
-**Fix: use the REST API's `selector` param (on `/click` and `/type`), not
-`ref` and not `evaluate`.** It runs through Playwright's own selector engine,
-which pierces shadow DOM (and same-origin iframes) natively. The
-`role=<role>[name="<accessible name>"]` syntax works reliably for comboboxes,
-options, and buttons on this page:
+SmartRecruiters' apply form ("Easy apply" / oneclick-ui) is built entirely from `spl-*`
+custom elements (Smart Recruiters' own design system) with **open shadow roots several
+levels deep**. Plain `document.querySelectorAll` from the top level finds almost nothing —
+you must recursively walk `el.shadowRoot` for every element. `atsform.py`'s label-substring
+matchers do NOT work here (no plain `<label>`/`<input>` pairing at the top level).
 
-```
-POST /tabs/{tabId}/click
-{"userId": "...", "selector": "role=combobox[name=\"Title\"]"}
-...
-{"userId": "...", "selector": "role=option[name=\"Frontend Developer & DevOps\"]"}
-```
+### Finding the Apply CTA
+The posting page (`jobs.smartrecruiters.com/<Company>/<jobId>`) has an `<a>` with text
+**"I'm interested"** (appears multiple times on the page — click the first). It navigates to
+`jobs.smartrecruiters.com/oneclick-ui/company/<Company>/publication/<uuid>?dcr_ci=<Company>`
+— this is the actual apply widget, "Easy apply".
 
-`ref`-based clicks (from the a11y snapshot) still work fine for plain
-buttons/checkboxes/textboxes — the shadow-DOM problem is specifically an
-`evaluate`/raw-DOM-query problem, not a Playwright-selector-engine problem.
-
-**Watch out for shell quoting.** The `role=combobox[name="..."]` selector
-contains double quotes, which breaks naive `-d "{...\"selector\":\"$2\"}"`
-bash interpolation (caused `cfx.sh click-selector` to fail with `400 Bad
-Request` on this site) — build the JSON via
-`python3 -c "import json; print(json.dumps({...}))"` or equivalent instead of
-hand-splicing a quoted selector into a bash JSON literal.
-
-## Combobox/autocomplete fields (Title, Company, City) — type-to-match pattern
-
-Several fields (Title, Company on each Experience entry; City in Personal
-Information) are free-text-with-suggestions comboboxes, not plain selects.
-Reliable fill pattern:
-1. `click` on `role=combobox[name="<Field>"]` to focus/open it.
-2. Type the value one keypress at a time via `/press` (`key` = each
-   character) — the component only expands its own current-input-as-an-
-   option (or real geo suggestions for City) once it sees real keystrokes;
-   an instant `type`/value-set does not reliably trigger the listbox.
-3. Re-snapshot and confirm the option text appears in the `listbox`, then
-   `click` on `role=option[name="<exact text>"]` to confirm the selection.
-   For City, real suggestions appear (e.g. "London, England, United
-   Kingdom" vs "London, Ontario, Canada" — pick the right country).
-   For Title/Company after resume-autofill leaves them blank, the box may
-   only ever show your own typed text back as the sole option — select it
-   anyway, this is what "confirms" the field internally (leaving it as a
-   focused-but-unselected raw string fails validation).
-
-## Resume upload triggers autofill, but inconsistently
-
-Uploading a PDF via the `/upload` endpoint (see
-`sites/_common/CAPABILITY-GAPS.md` for the endpoint itself) parses the resume
-and auto-fills Personal Information + all Experience/Education entries. This
-is NOT reliable field-by-field — on one attempt Last Name/Confirm Email/City
-came through blank and needed manual fill; on the very next attempt (fresh
-tab, same PDF) they were all pre-filled fine. Always re-snapshot after
-upload + a few seconds' wait and check every field individually rather than
-assuming parse success; don't rely on the same fields being blank/filled
-across repeat runs.
-
-## Experience-entry date fields: raw text alone leaves stale validation state
-
-Typing a value directly into the "From"/"To" date textboxes (even via a
-proper native-setter + `input`/`change` event dispatch) can leave the page
-showing the correct string ("2025-07-01") while an internal validation error
-("Please provide end date") persists indefinitely — Save does nothing,
-looping silently. The shadow-DOM-recursive checkbox read (below) confirmed
-the underlying `<input type=checkbox>` (e.g. "I currently work here") really
-was unchecked and the date input really held the right string — the
-validator's internal state was simply desynced from the DOM.
-
-**Fix:** open the date's calendar picker (`click` the textbox itself opens
-a `dialog` with a month/year grid — day-level granularity isn't exposed,
-only month), and actually **click a `gridcell`** via
-`role=gridcell[name="July 1, 2025"]` even if that month is already visually
-`[selected]` — reselecting through the real UI control is what clears the
-stale error, a plain textbox edit does not. If the target month is already
-selected, click a neighboring month first, then click back to the desired
-one, to force a real change event.
-
-## The first (top) Experience entry never visually collapses after Save
-
-Every experience entry BELOW the first one collapses into a read-only
-summary (title/company/dates + Edit/Delete buttons) once saved. The first
-entry — the one auto-expanded by the resume parser — stays visually "open"
-(still showing Title/Company comboboxes, date fields, Cancel/Save buttons)
-even after a successful Save click with no validation errors. **This is
-cosmetic, not a stuck state** — confirmed twice by clicking "Next" anyway:
-the page advances normally to the screening questions, and the values
-entered are retained. Don't loop on this waiting for it to collapse; if
-there's no error text/alert visible near the fields, it's safe to move on.
-
-## Screening page (after "Next"): salary, right-to-work, EEO diversity dropdowns
-
-A second page ("Preliminary questions") follows Experience/Education/
-Profiles/Resume/Message — typically: free-text desired salary, a right-to-
-work-restrictions radio group, then several EEO/diversity comboboxes
-(gender, religion, disability [+ a conditional "select all that apply" if
-disability=Yes], ethnicity, sexual orientation), a privacy-notice checkbox,
-then Submit. All EEO comboboxes reliably include a "Prefer not to say"
-option — use the skill's default demographic-answer policy (see
-`references/applicant-profile.md`) unless told otherwise for a specific
-application. The final privacy checkbox starts unchecked (its a11y label
-shows `"on"` as the HTML `value` attribute, NOT its checked state — verify
-via the shadow-DOM-recursive `evaluate` checked-state read below, not by
-eyeballing the snapshot line).
-
-## Verifying real checkbox state (shadow DOM makes the snapshot's own tags unreliable)
-
-The a11y snapshot sometimes shows a checkbox as `[checked]: "on"` and
-sometimes as bare `: "on"` (no `[checked]` tag) for the SAME logical state —
-the tag isn't reliable evidence either way on this page. To get ground
-truth, run (via `evaluate`):
-
+### The walk-shadow-DOM helper (reuse this JS snippet in every eval)
 ```js
-(function(){
-  function all(root, sel, out){
-    out = out || [];
-    root.querySelectorAll(sel).forEach(e => out.push(e));
-    root.querySelectorAll('*').forEach(e => { if (e.shadowRoot) all(e.shadowRoot, sel, out); });
-    return out;
+const walk = (root, id) => {
+  for (const el of root.querySelectorAll('*')) {
+    if (el.id === id) return el;
+    if (el.shadowRoot) { const f = walk(el.shadowRoot, id); if (f) return f; }
   }
-  return all(document, 'input[type=checkbox]').map(b => b.checked);
-})()
+  return null;
+};
 ```
+Two gotchas this exposed:
+1. **Duplicate ids across nesting levels.** e.g. an `SPL-AUTOCOMPLETE` wrapper and an inner
+   `SPL-INPUT` can share the SAME id. If you need the real `<input>`, filter by
+   `el.tagName==='SPL-INPUT'` (or whatever the leaf custom element is) before walking further
+   — `walk()` above returns the FIRST match in document order, which is usually the outer
+   wrapper, not the leaf.
+2. **The id you can query is on the CUSTOM ELEMENT HOST, not the native input** for text
+   fields. `host.value = 'x'` (a form-associated custom element's own value setter) can
+   report success on read-back (`el.value` returns what you set) **without ever updating the
+   visibly-rendered native `<input>` inside `host.shadowRoot`** — the on-screen field stays
+   empty and validation still fails. **Always drill one more level**:
+   `const realInput = host.shadowRoot.querySelector('input')` (or `textarea`) and set THAT
+   element's `.value`, then dispatch `input`+`change` with `{bubbles:true}`. Verify by
+   re-reading `realInput.value`, not the outer host's `.value`.
 
-This recursively walks every shadow root reachable from the top document and
-reads the real `.checked` property. (Note: this only works if the checkbox
-lives in the top-level document's shadow tree, not inside a cross-origin
-iframe — SmartRecruiters' form is same-origin shadow DOM, not an iframe, so
-this works here specifically.)
+### Field-by-field recipe (Personal information page)
+- Text fields (`first-name-input`, `last-name-input`, `email-input`,
+  `confirm-email-input`, phone's national-number input): plain
+  `el.value = '...'; el.dispatchEvent(new Event('input',{bubbles:true})); el.dispatchEvent(new Event('change',{bubbles:true}))`
+  works directly on the elements found by id (no extra un-wrap needed for these — they ARE
+  the real `<input>`s already, verified live).
+- **City / location autocomplete**: typing into its input opens a suggestion list of
+  `LI`/`DIV` nodes with plain text country/city names (e.g. "London, England, United
+  Kingdom") — click the exact-text match. A synthetic `.click()` on the matched node DID
+  commit correctly here (unlike the dropdown-select case below) — this may depend on whether
+  it's a native autocomplete list vs. a `SPL-DROPDOWN`.
+- **Resume upload**: the real `<input type=file>` (`id=file-input`) is ONE level down inside
+  an `SPL-DROPZONE`'s shadow root. The camofox `/upload` endpoint's `selector` param, given
+  the plain id selector (`#file-input`), DOES pierce the shadow DOM successfully (Playwright's
+  built-in shadow-piercing CSS engine) — verified: file chip "base-resume.pdf" rendered and
+  stuck. If a first attempt reports `ok:true` but `el.files.length` still reads `0` on
+  verification, don't trust the read — re-screenshot; the DOM read-back path used in one
+  probe here was itself unreliable (found a *different*, stale element). The **more robust
+  path when the plain upload doesn't visibly attach**: `/uploadViaChooser` with `trigger`
+  = the same id selector — arms Playwright's real filechooser listener and worked
+  immediately when plain `/upload` was ambiguous.
+- **"Message to the Hiring Team" textarea**: same host-vs-inner-input trap likely applies;
+  in this run the direct `findDeep` match on `hiring-manager-message-input` WAS the real
+  `<textarea>` (verified via screenshot) — no extra unwrap needed for textareas encountered
+  so far.
+- **"Next" button**: it's an `SPL-BUTTON` custom element, not a plain `<button>` — match by
+  `el.tagName==='SPL-BUTTON' && el.textContent.trim()==='Next'`, then `.click()` on the
+  SPL-BUTTON host itself (not a nested button) — this worked directly.
 
-## Tab can silently die mid-form — no error, just vanishes
+### Preliminary questions page (dynamically generated per posting)
+Each question's full definition (`type`, `label`, `required`, options) is embedded as JSON in
+a `definition` attribute on the outer `SPL-FORM`-ish host — grep/read that attribute
+(`[...host.attributes].map(a=>a.name+'='+a.value)`) rather than trying to reverse-engineer
+labels from rendered text; the rendered text does NOT reliably associate to hidden ids via
+`innerText` (shadow DOM again) and `SPL-TYPOGRAPHY-BODY`/`-LABEL` elements are inconsistently
+used for question vs. option text. The `definition` JSON gives you the ground truth: which
+questions exist, their `id`, `type` (`text`/`radio`/`autocomplete`/etc.), `required`, and
+(for select-like ones) the exact option `label`/`fieldValue` pairs.
 
-Once during a long form-fill session, the managed camofox tab simply stopped
-responding (`snapshot`/`click` calls timed out, then `GET /tabs` came back
-with an empty `tabs: []` list — the tab was gone, not just slow). No crash
-log or error was surfaced to the REST client. Recovery: just open a fresh
-tab (`POST /tabs` with `sessionKey`+`url`) and redo the flow from the
-beginning — as long as nothing had been Submitted yet, there's no data-loss
-risk, just repeated typing. Re-upload the resume PDF again to re-trigger
-autofill; don't assume the new tab inherits any state from the old one.
+- **Radio questions** (e.g. "Have you previously been employed by X?", "Do you currently
+  have the right to legally reside and work in the UK?"): rendered as `SPL-RADIO` custom
+  elements — **no native `<input type=radio>` exists at all**, it's a fully custom
+  ring/dot widget. Just `.click()` the `SPL-RADIO` host with the matching id
+  (`spl-form-element_<N>`) directly — this DOES toggle its internal `--checked` CSS class
+  correctly (verified via `shadowRoot.innerHTML` showing `c-spl-radio--checked`). No native
+  setter needed, unlike the checkbox case elsewhere in this skill's other ATS notes.
+- **Checkbox questions** (privacy declaration, talent-community consent): the checkbox
+  custom element (`SPL-CHECKBOX`) DOES have a nested native `<input type=checkbox>` sharing
+  the SAME id as the outer host — find it with `el.tagName==='INPUT'` filter, then
+  `.click()` that inner input directly (`.checked` reads back correctly afterward).
+- **⛔ Dropdown/autocomplete questions (salary expectations, "how do you identify",
+  ethnicity, etc.) — THE #1 SILENT-FAIL TRAP.** These are `SPL-AUTOCOMPLETE` (outer) wrapping
+  an inner `SPL-INPUT` (same id) wrapping the real `<input>`. Setting the inner input's
+  `.value` directly and firing `input`/`change` DOES filter the dropdown list (you can read
+  back the matching `SPL-DROPDOWN-ITEM` option texts), but **clicking the option node — via
+  plain `.click()`, or via a manually dispatched pointerdown/mousedown/pointerup/mouseup/click
+  sequence with computed coordinates — did NOT commit the selection** in this session
+  (verified: the field went back to empty with a "Value is required" error after the
+  dropdown visually closed). **The fix that worked reliably: after typing to filter, drive
+  it via KEYBOARD — `cfx.press('Enter')`** (no `ArrowDown` needed when the filtered list has
+  exactly one match; **first press `ArrowDown` once if you need to disambiguate multiple
+  matches, but verify which option ends up highlighted before pressing Enter** — one probe
+  here typed "Male" and a stray extra `ArrowDown` moved the highlight onto the WRONG option
+  ("Female") one row down; the fix was to re-type and press Enter with NO ArrowDown at all
+  since the top/first match was already highlighted by default). **Always re-read the real
+  inner `<input>`'s `.value` after pressing Enter to confirm the committed text, never trust
+  the mid-flight typed/filter value.**
+- A required "please specify" free-text sibling appears after selecting an "Any other ..."
+  option — same real-input-vs-host-value rule as other text fields; fill genuinely (never a
+  placeholder) and dispatch `input`+`change`.
+- Non-required diversity/social-mobility questions (parental job/school/education) can be
+  left blank; the marketing-consent checkbox should stay unchecked (declined) per the
+  applicant's standing "receive similar jobs = No" rule.
+- **Submit button**: another `SPL-BUTTON` (text `Submit`), same click pattern as `Next`.
+  A successful submit replaces the whole page with "Application submitted!" — screenshot
+  that as proof (`applications/<slug>/confirmation.png`), there is no separate confirmation
+  page/URL to capture.
 
-## VERIFIED 2026-07-16 (Experian User Researcher) — full driving recipe + the CV blocker
-
-Drove the whole Easy-Apply form headlessly. Confirmed method:
-- **Text fields:** `POST /tabs/{tab}/type` with `selector: role=textbox[name="<label>"]`,
-  `mode: fill`. Works for First/Last name, Email, Confirm email, Phone number, LinkedIn,
-  Website. ⛔ **CSS selectors (`#first-name-input`) 500** — the input handlers hang the
-  server-side op on this shadow-DOM page; role= selectors go through Playwright's engine and
-  succeed. (Reads via `evaluate document.querySelector('#id')` DO work — it's only *mutations*
-  through CSS that 500. Isolation-verified: same mutation succeeds on a non-SR tab.)
-- **City autocomplete:** `type` "London" (role=combobox[name="City"]) → the option list is
-  shadow-DOM (role=option clicks time out) → **`press ArrowDown` then `press Enter`** selects
-  the first suggestion ("London, England, United Kingdom"). Keyboard beats option-clicking.
-- ⛔ **Resume upload is the blocker.** `#file-input` is shadow-DOM. `POST /upload` with a CSS
-  selector → 500 (can't pierce). `POST /uploadViaChooser` → **404 (route not deployed)**. The
-  fix is the chooser-gated upload route in `server.js` (`references/camofox-file-upload-endpoint.md`)
-  — it needs the **camofox-browser container restarted** to deploy (docker is permission-denied
-  for <your-user>; ask the user/admin). Same restart also unblocks CVLibrary. Until then, a required
-  Resume field on SmartRecruiters can be reached + the rest of the form filled, but NOT submitted.
-- Experience/Education sections ("+ Add") had no `*` → optional (the CV covers work history).
-- Multi-step: a **Next** button advances past Personal-info/Resume to later pages (screening/
-  review). Don't expect a single-page submit.
-
----
-
-## 2026-08-17 — entry route re-verified, and a CORRECTION to a wrong conclusion
-
-**Entry route (verified live, Entain "Motion Designer - Ladbrokes & Coral" 744000142593084):**
-the apply control is labelled **"I'm interested"** (not "Apply"), appears several times on the
-page, and any copy works. It navigates to
-`jobs.smartrecruiters.com/oneclick-ui/company/<Company>/publication/<uuid>`, titled
-**"Easy apply - <role> - <company>"**.
-
-**That "Easy Apply" branding is NOT the forbidden class.** SKILL.md's ban targets LinkedIn
-Easy Apply and reed-easyapply — aggregator one-clicks that fire a stored profile with no
-tailoring. This is the employer's own ATS form and asks for real content (Personal
-information · Experience · Education · required Resume · Message to the Hiring Team), i.e.
-the same substance as a Greenhouse application. Judge by the form, not the branding — but
-say so explicitly when reporting, because the page does say "Easy Apply".
-
-### ⛔ CORRECTION — "shadow DOM is a structural atsform gap" was WRONG
-
-On 2026-08-17 I observed `document.querySelectorAll('input')` → **0** with **33 shadow roots**,
-and concluded this was an unfixable capability gap requiring `atsform`'s resolver to be
-rewritten to address controls through shadow-piercing. **That conclusion was wrong, and the
-answer was already in this file** (everything above): the REST `/click` and `/type` endpoints
-take a **`selector` param that runs through Playwright's own engine, which pierces shadow DOM
-natively**. Only `evaluate`/`querySelectorAll` are blind. Nothing in `atsform` needs rewriting.
-
-Worse, I recorded that wrong conclusion by **overwriting this file** with `Write` instead of
-appending, destroying the verified recipe above for ~14 hours until `git show` recovered it.
-**Read a site NOTES.md before writing one, and never `Write` over an existing one — append.**
-
-**The real blocker is unchanged and is named above:** the resume upload. `#file-input` is
-shadow-DOM, `POST /upload` with a CSS selector 500s, and `POST /uploadViaChooser` 404s because
-the chooser-gated route in `server.js` is **not deployed**. Spec:
-`references/camofox-file-upload-endpoint.md`. Deploying it unblocks SmartRecruiters *and*
-CVLibrary. That — not a HAR-derived API client, and not an `atsform` rewrite — is the one
-change that opens this channel.
-
-### On-lane UK inventory at this pass (all London, all untracked)
-
-| company | role | url |
-|---|---|---|
-| Entain | Motion Designer - Ladbrokes & Coral | `/entain/744000142593084` |
-| Entain | Motion Designer | `/entain/744000142594832` |
-| ASOS | Platform Engineer – Data Science & AI Platform | `/asos/744000143391739` |
-
-## ✅ CHANNEL PROVEN 2026-08-17 — three submissions, two employers, no server/atsform change
-
-Entain "Motion Designer - Ladbrokes & Coral", Entain "Motion Designer", ASOS "Platform Engineer
-– Data Science & AI Platform" all reached **"Application submitted!"**. Corrections and
-additions to the recipe above, all learned the hard way in this run:
-
-**`/uploadViaChooser` IS DEPLOYED.** The July note calling it a 404 blocker is stale — it lives
-at `server.js:3747`. Use `{"userId":…, "triggerRef":"<eN>", "path":"<file in uploads/>"}`;
-it returns `{"ok":true,"via":"filechooser"}`. **Target the resume dropzone by REF, not by
-role=**: the page has TWO `textbox "Choose a file or drop it here"` (the top autocomplete one
-and the Resume one) — the Resume one is the **LAST** match in the snapshot.
-
-**`/type` modes are `fill` or `keyboard` ONLY.** `mode: "type"` 400s with
-`mode must be 'fill' or 'keyboard'`. Autocomplete comboboxes need `keyboard` (real keystrokes)
-then `ArrowDown` + `Enter`; plain textboxes take `fill`.
-
-**Read the a11y snapshot — it pierces shadow DOM.** `GET /tabs/<tab>/snapshot` returns the full
-control list with `[eN]` refs even though `evaluate`/`querySelectorAll` see nothing. This is the
-fastest way to enumerate a page here, and the only reliable way to find conditional fields.
-
-**⛔ REFS GO STALE ACROSS A RE-RENDER — re-snapshot before every step.** On ASOS a submit
-bounced with six `Value is required` alerts on questions that had been answered: the earlier
-ref-targeted clicks had landed on elements that no longer existed after the page re-rendered.
-Answers set by `role=` selector survived; answers set by stale `[eN]` ref did not. Rule: take a
-fresh snapshot immediately before each interaction, and **verify by re-reading the snapshot**
-rather than trusting a 200 response.
-
-**⛔ A LABEL CAN CONTAIN A FAKE REF.** ASOS's flexibility question renders as
-`textbox "If you selected \" [e14]I need work pattern or location flexibility\" above, …"` —
-the `[e14]` is *inside the accessible name*, not the element's ref. A regex scraping `\[(e\d+)\]`
-from the line picks up the wrong element and `/type` then 500s. Match refs only at END of line,
-or target by **`role=textbox[name=/regex/]`**, which worked here.
-
-**Conditional questions appear only after their parent is answered** — Entain's "Have you
-previously worked for Entain in the last 2 years?" renders after "currently employed?" is set.
-Re-snapshot before submitting or it silently stays required-empty.
-
-**Per-employer screener shape differs.** Entain: postal code, over-18, self-exclusion (gambling),
-non-compete, background-check consent. ASOS: City autocomplete, eligibility BASIS, salary as a
-**band combobox**, on-site-2-days commitment, convictions, and a full EEO block (age / race /
-religion / orientation / gender identity / disability). Do not assume one form generalises.
-
-**Consent checkboxes: tick the recruitment one, never the talent-community one.** Both employers
-present two near-identical "privacy notice" checkboxes; the second adds "…and agree to be part
-of communities for future career opportunities" (Entain) / "…future career opportunities and
-talent communities" (ASOS). That is a marketing opt-in — leave it unticked per SKILL.md, and
-never use the "Select all" shortcut, which ticks it.
-
-**Verify checkbox truth via the shadow-recursive read** (block above), not the snapshot's
-`[checked]` tag: `false,true,false` was the correct end state on Entain.
+## Net takeaway for a future driver
+A proper `sites/smartrecruiters/scripts/apply.py` should: (1) walk-shadow-DOM to enumerate
+every `SPL-INPUT`/`SPL-RADIO`/`SPL-CHECKBOX`/`SPL-AUTOCOMPLETE` on the page by id, (2) read
+the `definition` JSON attribute for question metadata instead of parsing rendered text,
+(3) route radios and checkboxes through the native-input-inside-shadow-root click path, and
+(4) route every autocomplete/dropdown through type-then-`Enter` (never a synthetic click on
+the option node). This recipe converted the first-ever SmartRecruiters submission for this
+skill; reuse it rather than re-discovering the shadow-DOM traps from scratch.

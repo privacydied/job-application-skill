@@ -22,6 +22,9 @@ sites/_common/family-bases.json
 applications/*
 !applications/.gitkeep
 
+# --- Personal application-history summaries (company/role/date PII) --------
+docs/job-application-summary.md
+
 # --- Resumes / any document with your name ---------------------------------
 # (patterns only — never hard-code your real filename here; this file is public)
 uploads/*
@@ -184,4 +187,5 @@ runcfg_gh/
 # untracked file passes right up until the moment it is added.
 runcfg/answers/
 .cfx-active-tabs.json
+.cfx-active-tabs.json.*.tmp
 .vcode-consumed.json

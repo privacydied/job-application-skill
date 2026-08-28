@@ -62,7 +62,8 @@ APPS = os.path.join(_ROOT, "applications")
 _SUCCESS_RE = re.compile(
     r"successfully submitted|application (?:was|has been)\s+(?:successfully\s+)?(?:submitted|received|sent)"
     r"|thank you for (?:your interest|applying)|we(?:'| wi)ll (?:be in touch|contact you|review your application)"
-    r"|rooting for you|application (?:complete|received)|we have received your application", re.I)
+    r"|rooting for you|application (?:complete|received|sent)|we have received your application"
+    r"|confirmation/success|you're officially in the running", re.I)
 # Text that means the submit FAILED even though an artifact exists (Lendable's red banner).
 _FAILURE_RE = re.compile(
     r"couldn'?t submit|could not submit|unable to submit|failed to submit|not (?:been )?submitted"

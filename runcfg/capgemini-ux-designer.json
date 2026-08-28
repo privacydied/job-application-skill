@@ -1,0 +1,18 @@
+{
+  "url": "https://career5.successfactors.eu/career?career_ns=job_listing&company=capgemitecP3&career_job_req_id=189453",
+  "company": "Capgemini Invent",
+  "role": "User Experience Designer",
+  "location": "London",
+  "credential_site": "career5.successfactors.eu",
+  "cv": "/uploads/capgemini-ux-designer-resume.pdf",
+  "slug": "capgemini-ux-designer",
+  "fill_from_defaults": {
+    "First Name": "First name",
+    "Last Name": "Last name",
+    "Email": "Email",
+    "Phone": "Phone",
+    "LinkedIn": "LinkedIn",
+    "City": "City"
+  },
+  "eeo": true
+}

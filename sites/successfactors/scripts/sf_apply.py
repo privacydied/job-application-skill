@@ -169,8 +169,20 @@ def main():
         return 2
     if not cfg.get("already_on_form"):
         time.sleep(3)
-        _ev("(()=>{const a=[...document.querySelectorAll('a,button')]"
-            ".find(e=>/apply now/i.test(e.innerText||'')); if(a) a.click(); return 1;})()")
+        # ⚠️ 2026-08-26 (Capgemini UX Designer req 189453): the button text on this posting is
+        # plain "Apply" (id=fbqa_apply), NOT "Apply now" — the old /apply now/i-only regex found
+        # nothing, silently no-op'd (bare `if(a) a.click()` swallows a miss), and the script fell
+        # through straight to fill/upload against the still-collapsed job-listing page (Email
+        # landed on some unrelated field, CV upload then failed with "no attach icon" because the
+        # guest-apply section was never revealed). Match #fbqa_apply directly first (the real SF
+        # apply-button id, confirmed live), falling back to a broadened text match.
+        clicked = _ev("(()=>{const b=document.querySelector('#fbqa_apply,[id$=\":_apply\"]');"
+                      "if(b){b.click();return 'id';}"
+                      "const a=[...document.querySelectorAll('a,button')]"
+                      ".find(e=>/^apply( now)?$|apply now/i.test((e.innerText||'').trim()));"
+                      "if(a){a.click();return 'text';} return '';})()")
+        if not clicked:
+            print("  WARN: apply button not found by id or text — form may already be open")
         time.sleep(8)
 
     # ⛔ CREDENTIALS ARE READ AT RUNTIME, NEVER STORED IN THE CONFIG (config-routing model,

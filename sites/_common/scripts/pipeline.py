@@ -109,6 +109,15 @@ FEEDS = {
     "nhs":      ("jobs.nhs.uk",          lambda nav: ["--nav", nav] if nav else []),
     "mi5":      ("applicationtrack.com", lambda nav: ["--nav", nav] if nav else ["--tenant", "mi5"]),  # apply account-gated (noVNC oversight)
     "mi6":      ("applicationtrack.com", lambda nav: ["--nav", nav] if nav else ["--tenant", "mi6"]),  # apply account-gated (noVNC oversight)
+    # GOV.UK's new "Work Hub / Find a job" aggregator (jobs.service.gov.uk) — added
+    # 2026-08-28. NOT the same site as Civil Service Jobs (`csj`), though it DOES also
+    # surface some CS vacancies as a subset (cross-check Company+Role before driving one
+    # that smells like Civil Service — see sites/jobs.service.gov.uk/NOTES.md). Two apply
+    # shapes per posting (external redirect vs a GOV.UK One Login in-platform wall that
+    # needs a mobile number) — the feed can't tell which from the search card, that's a
+    # per-posting /apply check.
+    "govukjobs": ("jobs.service.gov.uk", lambda nav, query: (["--nav", nav] if nav
+                                                              else (["--what", query] if query else []))),
     # ── IT / security / finance lanes ────────────────────────────────────────
     "jobserve": ("jobserve.com",         lambda nav: (["--nav", nav, "--pages", "3"] if nav else ["--pages", "3"])),  # huge UK IT inventory, contract-skewed
     "cybersecjobsite": ("cybersecurityjobsite.com", lambda nav: ["--nav", nav] if nav else []),  # niche cyber board (~87 live) — apply needs camofox

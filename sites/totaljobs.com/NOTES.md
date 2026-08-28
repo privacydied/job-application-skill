@@ -29,3 +29,26 @@ the apply is: email → password → "Continue application" → on-site form + C
 ## CAPTCHA
 ⛔ Per `references/captcha-policy.md`: full halt for any CAPTCHA except the two sanctioned
 reCAPTCHA-v2 auto-solves. Not observed on the search/sourcing path.
+
+## ⛔ STALE ABOVE — Smart Apply works fine with stored creds (verified 2026-08-23/24)
+The "account-gated login wall" section above is stale: with the `totaljobs.com (StepStone)`
+row in `ats-credentials.csv`, clicking a listing's "Apply" button routes straight into an
+already-authenticated **Smart Apply** flow (`/job/<uuid>/application/smart-apply`) —
+name/email/phone/CV pre-filled from the account, occasional single-radio screener, "Send
+application" → `/application/confirmation/success`. Verified working end-to-end on 6+
+postings same session (Sterling Bridge x2, Robert Half, TechNest Talent, Keystream,
+Interec/Antal). Treat as a normal ATS form, not a login wall, when creds are on file.
+
+## ⚠️ Reproducible tab-kill on ONE specific posting (Interact Consulting, UX Researcher –
+UK Government – Remote, job107861185) — 2026-08-24
+Clicking "Apply"/"Continue application" on this exact listing killed the camofox tab
+(`HTTP 404 Tab not found` on the very next call) **every time**, reproduced 3+ times with
+independently fresh, verified-healthy tabs (confirmed alive via `document.title` immediately
+before the click). One attempt's `click-follow` even reported `new_tab` opening a second
+`about:blank` tab that ALSO died instantly alongside the original. This is narrower than the
+general session-wide camofox instability seen the same run (which self-resolved) — it
+reproduced only on this posting's apply click, not on the sibling Interact Consulting
+"Service Designer" listing (`job107861179`) or any other totaljobs posting driven the same
+session. Root cause not identified (possibly a heavy/broken embed on this specific listing's
+smart-apply page). Logged `Blocked` after exceeding the 2-attempt cap; do not keep retrying
+this exact posting id — if re-encountered, treat as a genuine block and move on.

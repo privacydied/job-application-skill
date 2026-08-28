@@ -242,4 +242,25 @@ form and confirm its required react-selects actually populate options. If a fres
 the 12h cooldown) still shows empty options, it's a genuinely broken posting → `Blocked`, move on.
 Do not burn the 2-attempt budget re-trying the same empty-option field.
 
+## Claude Code and Hermes sharing the SAME persisted `.jobenv.run`/`.jobenv.persist` tab pointer causes silent cross-agent tab hijacking (observed live 2026-08-26)
+Both agents write the same `CFX_TAB` into the same skill-directory env files. Mid-session,
+while actively driving a SuccessFactors application on the pointer's tab, the tab's title/URL
+was found to have changed out from under the running script to an unrelated WTTJ posting, and
+later to a Canonical Greenhouse posting — with no error from the driver, just a page that was
+no longer the one it thought it was on (this produced a real, confusing `NO_APPLY_BUTTON`
+failure that looked like a form-driver bug but was actually the OTHER agent navigating the
+shared tab away mid-run). `cfx.active_tabs()`/`claim_tab()` (the parallel-lanes registry) did
+**not** protect against this — the registry was empty even while the hijack was happening,
+meaning the other process either isn't calling `claim_tab` at all, or its claim had already
+expired (`TAB_CLAIM_TTL`). **Practical fix that worked:** stop touching the shared pointer,
+mint a genuinely fresh tab via `cfx.open_tab('about:blank', guard=True)` (NOT `ensure_tab`,
+which just returns the current tab if it's still alive/in `list_tabs()` — it will happily hand
+you back the SAME contested tab), `claim_tab()` it, and drive it via a PRIVATE env file/shell
+export that is never written to `.jobenv.run`/`.jobenv.persist` — so the other agent keeps its
+pointer and never gets its tab stolen either. Close and `release_tab()` your private tab the
+moment your task resolves. **If a running driver's page state looks impossible (a field you
+just filled reads empty, a button search fails that should obviously exist, a title you don't
+recognise), check `location.href`/`document.title` FIRST before assuming a form-widget bug —
+a same-tab hijack by the other agent is a real, live possibility, not a hypothetical.**
+
 ## (add further gaps here as they're discovered)

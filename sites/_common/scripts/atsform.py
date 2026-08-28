@@ -132,6 +132,7 @@ _RESOLVE = r"""
 (() => {
   const want = %s.toLowerCase().trim();
   const kinds = %s;  // e.g. 'input,textarea' or 'select'
+  const maxTier = %s;  // inclusive cutoff into the tiers[] below (0-3); 3 = old behaviour
   const labelText = el => {
     if (el.labels && el.labels[0]) return el.labels[0].innerText;
     if (el.getAttribute('aria-label')) return el.getAttribute('aria-label');
@@ -207,14 +208,18 @@ _RESOLVE = r"""
     else if (wordRe.test(lab)) tiers[2].push(el);
     else if (lab.includes(want)) tiers[3].push(el);
   }
-  for (const tier of tiers) if (tier.length) return sel(tier[0]);
+  for (let t = 0; t <= maxTier && t < tiers.length; t++) if (tiers[t].length) return sel(tiers[t][0]);
   return '';
 })()
 """.strip()
 
 
-def _resolve(label, kinds="input[type=text],input[type=email],input[type=tel],input[type=number],input[type=url],textarea"):
-    return cfx.evaluate(_RESOLVE % (_js(label), _js(kinds)))
+def _resolve(label, kinds="input[type=text],input[type=email],input[type=tel],input[type=number],input[type=url],textarea",
+             max_tier=3):
+    # max_tier caps how loose a match is accepted: 0 = exact only, 1 = +starts-with,
+    # 2 = +word-boundary-anywhere, 3 (default) = +bare-substring — the historical behaviour.
+    # See _STRICT_ALIASES for why a caller would ever want to tighten this.
+    return cfx.evaluate(_RESOLVE % (_js(label), _js(kinds), max_tier))
 
 
 # E.2: sentinel a primitive returns (only when asked via quiet_notfound) so the
@@ -264,7 +269,7 @@ _REACT_SET = r"""
 """
 
 
-def fill(label, value, quiet_notfound=False):
+def fill(label, value, quiet_notfound=False, max_tier=3):
     # A non-str config value (e.g. a JSON number like a notice period) would crash the
     # `.startswith("@")` check below with an AttributeError — and _run/main() only catch
     # cfx.CfxError, so it would escape as a raw traceback and abort the whole batch fill.
@@ -294,7 +299,7 @@ def fill(label, value, quiet_notfound=False):
         except cfx.CfxError:
             return NOTFOUND if quiet_notfound else 1
     else:
-        sel = _resolve(label)
+        sel = _resolve(label, max_tier=max_tier)
     if not sel:
         if quiet_notfound:      # E.2: defaults path skips a missing field silently
             return NOTFOUND
@@ -1242,9 +1247,17 @@ _OPTION_SYNONYMS = {
     # Any other Mixed/Multiple ethnic background"; the census wording in apply-defaults is
     # "Mixed or Multiple ethnic groups". Without this pair fill_eeo fell back to committing
     # free text, which is not a selectable option and never persists (2026-08-16).
+    # Standard US EEOC race categories phrase the same census-mixed bucket "Two or More
+    # Races" (2026-08-28 — this is the OPTION synonym; the LABEL match that routes a bare
+    # "race" field here at all is the separate fix in fill_eeo's ethnicity plan). Only helps
+    # when the form's option list actually offers this literal category — the closed-set rule
+    # in combobox_pick still refuses when it doesn't (verified live: Hudl's own race list has
+    # no combined/mixed category at all, so this synonym correctly does NOT fire there and the
+    # field stays honestly unanswered rather than being forced to a wrong single category).
     "mixed or multiple ethnic groups": [
         "Mixed/Multiple ethnic groups - Any other Mixed/Multiple ethnic background",
-        "Mixed/Multiple ethnic groups", "Any other Mixed/Multiple ethnic background"],
+        "Mixed/Multiple ethnic groups", "Any other Mixed/Multiple ethnic background",
+        "Two or More Races", "Two or more races"],
 
     # A country select spells the applicant's country any of ~six ways. Verified live
     # 2026-08-17 on Stripe's "Please select the country you are currently located in."
@@ -2348,8 +2361,22 @@ def fill_eeo(config=None):
         # "I identify my ethnicity group as*" stayed empty and bounced the submit. Putting the
         # exact phrasing ahead of the generic ones makes the group bind its own field, and the
         # generic entries are then never reached on such a form.
+        # ⛔ "RACE" IS THE US-EEO SYNONYM FOR "ETHNICITY" (2026-08-28, Hudl Product Designer —
+        # Core UX). This list matched every "ethnicity"-worded label but not a bare
+        # "Please indicate your race*" (Hudl's literal Greenhouse label), so the field never
+        # reached the closed-set combobox_pick/set_radio path here at all. It fell through to
+        # fill_gaps_from_bank's free-text screener-bank guess ("Two or More Races", banked from
+        # a DIFFERENT employer's form that happened to offer that literal option), which typed
+        # it into Hudl's combobox where no such option exists ("0 results available for search
+        # term Two or More Races") — a silent non-match that left the REQUIRED field empty and
+        # bounced the submit. Routing "race" through the vetted ethnicity plan (exact match,
+        # then the parenthetical-stripped/leading-token fallbacks already proven for
+        # "ethnicity") is strictly safer: combobox_pick's closed-set rule still refuses to
+        # invent an option, so a form with no matching race/ethnicity category correctly stays
+        # unanswered rather than being filled with a free-text guess.
         (["i identify my ethnicity group", "what is your ethnicity", "your ethnicity",
-          "ethnic group", "ethnic origin", "ethnicity"],
+          "ethnic group", "ethnic origin", "ethnicity", "please indicate your race",
+          "your race", "race/ethnicity", "please select your race"],
          a.get("ethnicity"), True),
         # The SUB-group question is a separate, narrower field — answer it from the profile's
         # own sub-category (`ethnicity_sub`) rather than letting the broad group value bind to
@@ -2456,6 +2483,22 @@ _LABEL_ALIASES = {
     "postal": ["postcode", "postal code", "zip code", "zip code/postal code", "zip"],
 }
 
+# ⛔ BARE-WORD ALIASES NEED A TIGHTER MATCH (2026-08-28, GOV.UK Work Hub "Junior IT Support
+# Engineer" live drive). "full name" -> "name" and "address line 1" -> "address" are single
+# dictionary words, so _RESOLVE's normal tier-2 "word-boundary anywhere in the label" match
+# (the same tier that correctly binds "Phone" -> alias "mobile" -> field "Mobile Number") ALSO
+# cross-matches any OTHER field whose label merely contains that word: "name" tier-2-matched
+# "First Name" (already correctly filled with "Jane" by the "First name" default moments
+# earlier) and silently overwrote it with "Jane Doe"; "address" tier-2-matched "Email
+# Address" and overwrote the email with the street address. Both are real, wrong answers sent
+# to a live form. A bare single-word alias is only safe at tier 0 (exact, e.g. a field
+# literally labelled "Name") or tier 1 (starts-with, e.g. "Name *"/"Name (as on passport)") —
+# never tier 2/3, which is what let it match a DIFFERENT field's label that merely contains
+# the word. Multi-word aliases ("legal address", "phone number", ...) aren't in this set: a
+# 2+ word phrase matching tier 2/3 inside an unrelated label is far less likely and hasn't
+# been observed to misfire, so they keep the looser match that fixed the drain23 blockers.
+_STRICT_TIER_ALIASES = {"name", "address"}
+
 
 def _fill_with_aliases(label, value, quiet_notfound=True):
     """fill() the default `label`, falling back to its known aliases on NOTFOUND.
@@ -2469,7 +2512,8 @@ def _fill_with_aliases(label, value, quiet_notfound=True):
     if rc != NOTFOUND:
         return rc
     for alt in _LABEL_ALIASES.get(label.strip().lower(), []):
-        rc = fill(alt, value, quiet_notfound=True)
+        mt = 1 if alt in _STRICT_TIER_ALIASES else 3
+        rc = fill(alt, value, quiet_notfound=True, max_tier=mt)
         if rc != NOTFOUND:
             print(f"  (matched {label!r} via alias {alt!r})")
             return rc

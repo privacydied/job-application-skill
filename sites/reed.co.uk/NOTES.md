@@ -1,5 +1,18 @@
 # Reed.co.uk — board notes (apply-path quirks)
 
+## ⚠️ EMAIL/PASSWORD LOGIN NOW WORKS (verified live 2026-08-28) — the "magic-link-only"
+## claim elsewhere in this repo (SKILL.md, several references/) is STALE.
+Reed's `/account/SignIn` page currently renders a combined form with BOTH `input#signin_email`
+and `input#signin_password` (plus "Sign in without a password" as a separate, optional link) —
+this is NOT magic-link-only. Fill both fields (`atsform.fill('#signin_email', ...)` /
+`atsform.fill('#signin_password', ...)`, creds in `ats-credentials.csv` row `reed.co.uk`) and
+click the button whose exact text is `Continue` (found via a text-match scan, not a CSS
+selector — there are multiple buttons on the page). This lands on the account page fully
+logged in (name appears in nav, `/account/jobs/applications` populates) — verified end-to-end,
+including a working `reed_apply.py` submit right after, with the target posting appearing in
+the live Applications list. If this stops working, re-check the actual DOM before falling
+back to the magic-link recovery flow below — don't assume the old blocker is still true.
+
 ## Login check — DO NOT use the homepage "Sign out" link
 Reed caches the homepage nav unreliably; a logged-in session may NOT render the
 "Sign out" link on `reed.co.uk/` even when the account is live. The RELIABLE login
