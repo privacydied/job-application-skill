@@ -84,6 +84,29 @@ def queue_depth(path=None):
         pass
     return n
 
+
+def _load_existing_queue(path):
+    """Read queue.jsonl's current rows (id -> row), tolerating a missing/corrupt file.
+    Used to MERGE a run's fresh survivors into the single canonical queue instead of
+    clobbering it — see the merge note above `run()`'s write step."""
+    rows = {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except (ValueError, TypeError):
+                    continue  # one bad line must not sink the whole merge
+                rid = row.get("id")
+                if rid:
+                    rows[rid] = row
+    except (FileNotFoundError, OSError):
+        pass
+    return rows
+
 # board token (searches.csv) -> (feed dir under sites/, nav-arg builder)
 FEEDS = {
     "linkedin": ("linkedin",           lambda nav: ["--nav", nav] if nav else []),
@@ -606,6 +629,23 @@ def _run_funnel(target=None, no_screen=False, screen_limit=40, force=False,
         }
         row["fit_score"] = fit_score.fit_row(row)   # M.1
         queue.append(row)
+
+    # ── ONE-FILE MERGE (not overwrite): queue.jsonl is the single canonical queue for
+    # every board. A run — whole-target or --boards-scoped — must never clobber rows
+    # another board already queued; that's how queue_linkedin.jsonl / queue_ats.jsonl /
+    # etc. scratch-file fragmentation happened (a per-board `-o` workaround for exactly
+    # this overwrite). Instead: keep existing rows EXCEPT ones this run just resourced
+    # (by id) or that belong to a board this run scoped to (only_boards) — those are
+    # superseded by this run's fresh verdict, everyone else's rows are carried forward.
+    new_ids = {r["id"] for r in queue if r["id"]}
+    existing = _load_existing_queue(out_path)
+    for rid, row in existing.items():
+        if rid in new_ids:
+            continue  # superseded by this run's fresh screen of the same posting
+        if only and bc.norm(row.get("board", "")) in only:
+            continue  # this board was just resourced; a missing row here means it dropped
+        queue.append(row)
+
     # apply-VALUE order (M.1): a composite of ATS ease (apply_rank, lower=better) and JD fit
     # (fit_score, higher=better). A great fit can float a row up to ~2 apply_rank steps, so a
     # time-boxed run spends its budget on best-fit-reachable roles, not merely easiest-ATS.
