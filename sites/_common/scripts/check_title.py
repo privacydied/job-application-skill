@@ -97,6 +97,11 @@ _DESIGN_ENG_INDUSTRIAL = (
     "wind", "solar", "battery", "automation", "robotics", "facade", "façade",
     "steel", "concrete", "tooling", "injection", "sheet metal", "packaging",
     "valve", "pump", "plant",
+    # --- construction/temporary-works modifiers (added 2026-09-04 after a live leak) ---
+    # "Design Engineer - Scaffolding" scored Tier A (eligible) off the bare "design
+    # engineer" phrase — a scaffolding/temporary-works structural design role, not a
+    # UX/product design role. Same family as the civil/structural modifiers above.
+    "scaffolding", "scaffold", "temporary works", "formwork", "falsework",
 )
 
 
