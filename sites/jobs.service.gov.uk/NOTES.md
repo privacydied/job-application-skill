@@ -102,6 +102,90 @@ available to supply the code right then; re-attempt once a session is confirmed 
 rather than re-asking for a fresh code every posting — the One Login session, once
 established, should persist across multiple Shape B applications in the same run.
 
+## ⛔ Employer-site apply forms can RESET ON RE-NAVIGATION — never `cfx.goto` the apply URL twice mid-fill (2026-09-04)
+Verified on HCPC's own careers portal (`careers.hcpc-uk.org`, a Shape A destination reached
+via "Continue to the employer's website"): navigating to the SAME apply URL a second time
+(e.g. to re-check page state after preparing an upload file elsewhere) wiped every field
+already filled — no session/draft persistence across a fresh page load on this employer
+site, unlike Greenhouse/Ashby which at least error loudly. This is a generic risk for ANY
+plain-HTML employer-site form reached via a jobs.service.gov.uk Shape A redirect, not
+specific to HCPC. **Prepare every upload file (PDF render, cover/statement doc, etc.)
+BEFORE first navigating to the apply page — fill and submit in ONE continuous session,
+never re-`cfx.goto` the same apply URL mid-fill.** If you must leave the page (e.g. to
+generate an asset), some employer portals expose a "Save your progress" link (seen on
+HCPC's form) — use that rather than trusting the browser back button or a re-nav.
+
+## Hays "aplitrak.com" apply flow (2026-09-04) — mode=fill silently doesn't bind React state
+A Shape A "Continue to the employer's website" link can route through `aplitrak.com`
+(Hays's redirect layer) to `hays.co.uk/job-detail/.../apply?...` — a plain-looking
+first-name/last-name/email/CV-upload form that is actually React-controlled. Filling the
+three text inputs via the camofox `/type` endpoint's `mode=fill` (a Playwright
+`locator.fill()`, which sets the DOM value + dispatches native `input`/`change` events)
+LOOKED successful — `{ok:true}`, and re-reading `.value` afterward showed the typed text —
+but clicking the real in-form Apply button re-rendered the SAME page with client-side
+validation errors ("Please enter your first name" / "Please enter your last name" /
+"Please enter a valid email address") even though every field visibly held a value. React
+controlled-input components track their own internal state via the synthetic event system;
+a native `input`/`change` dispatch that bypasses React's actual keystroke handler doesn't
+always update that internal state, so the DOM shows the text but React's validator still
+sees the field as empty. **Fix: use `mode=keyboard` (real Playwright `page.focus()` +
+per-character `keyboard.press()`) instead of `mode=fill` for this form** — verified live,
+first submission (Hays "IT Support", London) went through cleanly once switched. If a
+`mode=fill`-filled field visibly shows the right text but a subsequent submit reports it
+as empty/invalid, suspect a React-controlled input and retry with `mode=keyboard` before
+assuming a validation/business-logic block. (Remember to clear the field first — a second
+`mode=keyboard` call APPENDS rather than replacing, unlike `mode=fill`.) The submit button
+itself lives inside the same `<form>` as the file input — find it via
+`document.querySelector('input#uploadInput').closest('form').querySelector('button')`
+rather than guessing a page-level "Apply" text match (the page also has unrelated Apply
+buttons for other job cards). A `click_selector` on a marked `[data-cfx-apply-btn]` element
+works even when the button sits off-screen in what renders as a fixed/sticky panel that
+plain `window.scrollTo`/`scrollIntoView` can't bring into the visible screenshot viewport.
+
+## First successful submission: HCPC "Digital Communications Officer" (2026-09-04)
+London, £35,203–£37,000. Reached via `www.jobs.service.gov.uk/jobs/<id>/apply` → Shape A
+"Continue to the employer's website" → `careers.hcpc-uk.org`. Required self-registering a
+new account (`careers.hcpc-uk.org` — no prior row in `ats-credentials.csv`); the register
+form's password policy needs 10+ chars with upper/lower/digit/special — a plain generated
+password without a special char 400s silently (re-renders the form with a `.error` div
+naming the exact requirement, read it rather than guessing).
+
+**Form is a genuine multi-section plain-HTML form (no shadow DOM/react), driven by
+`atsform.py apply` with `"defaults": true` for the easy 80% and a handful of hand-set
+selects/dates for the diversity section** (see below). Two real gotchas hit while driving it:
+1. **Ambiguous free-text fill selector cross-wrote two different fields.** Filling "Line 3"
+   of the address by a loose CSS `~` sibling selector actually landed on the UK Phone
+   Number field (both are plain `<input type=text>` with generated numeric-id names, no
+   stable selector to disambiguate by proximity). Symptom: the visible Phone field showed
+   the Line-3 value ("Islington") and Line 3 itself stayed empty — caught by re-reading
+   EVERY `input[type=text]` name→value pair after filling
+   (`[...document.querySelectorAll('input[type=text]')].map(i=>i.name+'='+i.value)`), not
+   by trusting the `type` REST call's `{ok:true}`. **Always verify free-text fields on a
+   form with non-descriptive `name`s by re-reading ALL of them together, not just the one
+   you intended to touch** — a same-shaped sibling field silently absorbing the wrong value
+   is invisible from the single-field return value alone.
+2. **The diversity/EEO section is 6 NATIVE `<select>` elements** (Biological Sex, Gender
+   Identity, Ethnic Origin, Nationality, Religion (optional), Civil Status (optional)) —
+   `atsform.combobox_pick`'s react-select ladder correctly reports `NO_OPTION`/`NO_INPUT`
+   for these (they are not react-selects, no async fetch, nothing to type-filter), so they
+   must be set directly: `s.value = [...s.options].find(o=>o.text.trim()===want).value` +
+   dispatch `change`. This is expected `atsform` behavior for a plain native select with a
+   non-matching label substring, not a bug to fix in the shared engine — just know to
+   finish native selects by hand when the label match doesn't bind. The exact option-text
+   strings for a UK-context diversity form (verified live, reusable for the NEXT plain-HTML
+   UK employer form): Biological Sex = `Female|Male|Prefer not to say`; Gender Identity =
+   `Same As The Sex Assigned At Birth|Different From The Sex Assigned At Birth|Non-Binary|
+   Prefer To Self-Describe|Prefer Not To Say`; Ethnic Origin has both broad + "Other X
+   Background" sub-options (use `Other Mixed/Multiple Ethnic Background` for the profile's
+   `Mixed or Multiple ethnic groups`); Nationality = plain demonym strings (`British`).
+3. **A `click_selector` submit that TIMES OUT is not necessarily a failed submit** — both
+   the account-registration submit and the final application submit on this site returned
+   a REST timeout (`click -> timed out after 30s`) while the underlying page navigation had
+   already completed successfully server-side. Always re-check `location.href` /
+   `document.body.innerText` after a timeout before treating it as a failure; a genuine
+   confirmation page (`/apply/completed`, "Your application has been sent! Submitted") can
+   sit behind a click call that the REST wrapper gave up waiting on.
+
 ## Form mechanics that matter
 
 **GOV.UK Design System file-upload widget produces a FALSE NEGATIVE in `atsform.upload()`
