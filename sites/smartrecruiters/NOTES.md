@@ -3,6 +3,65 @@
 No shipped driver existed before this. First real submission: Legal & General, "Product
 Analyst (Funds Oversight)", 744000145913189 — verified end-to-end via camofox.
 
+**Driver shipped 2026-09-04: `sites/smartrecruiters/scripts/apply.py`.** Encapsulates the
+recipe below into `start`/`fields`/`fill-text`/`pick`/`radio`/`checkbox`/`upload`/`next`/
+`submit`/`apply <config.json> [--submit]`. Two real bugs found and fixed while building it
+(verified live, Mirantis 744000132893057):
+1. **The `walk()` "first match" helper silently binds the WRONG element.** Both the outer
+   `SPL-AUTOCOMPLETE` wrapper AND its inner `SPL-INPUT` share the SAME id
+   (`spl-form-element_N`) — walking for that id and taking the first hit returns the
+   OUTER wrapper. Writing `.value` + dispatching `input`/`change` on the wrapper reports
+   `committed='London'` on read-back (the wrapper's own value setter reflects it) but the
+   VISIBLE `City` field stays empty and the "Please provide your place of residence"
+   validation error stays lit. Fix: collect ALL elements sharing the id, prefer a real
+   `INPUT`/`TEXTAREA` tag among them (`_FIND_REAL_INPUT_JS` in `apply.py`), never the
+   first-in-document-order hit. This generalizes the NOTES-documented `SPL-AUTOCOMPLETE`/
+   `SPL-INPUT` case to every id-duplicated field, not just city.
+2. **The file input's `id="file-input"` is DUPLICATED across a hidden mobile/desktop DOM
+   copy** (verified: 2 elements, both `visible:true`, both correctly sized — not a
+   display:none dupe). Playwright's `/upload`/`/uploadViaChooser` REST endpoints call
+   `page.locator(selector)` in STRICT mode, so `input[id="file-input"]` 500s
+   ("strict mode violation" — logged server-side, not surfaced in the REST error body).
+   Fix: `input[id="file-input"] >> nth=0` pins the first match; Playwright's locator
+   engine supports `>> nth=N` chaining directly in the selector string, no extra param
+   needed. **This nth-duplicate pattern likely affects other SmartRecruiters ids too —
+   if a future field intermittently 500s where NOTES/apply.py's `walk()` reports exactly
+   one hit, suspect a duplicate id first before assuming a different failure mode.**
+3. **⛔ THE CITY/LOCATION AUTOCOMPLETE DOES NOT COMMIT VIA JS `.value=`/dispatchEvent, NOR
+   VIA REAL-TYPE-THEN-ENTER — ONLY A REAL PLAYWRIGHT CLICK ON THE SUGGESTION NODE WORKS**
+   (verified 2026-09-04, Mirantis 744000132893057; supersedes the "drive it via KEYBOARD
+   — cfx.press('Enter')" claim in the field-by-field recipe above for THIS field type —
+   that claim was verified on a different posting/field and may have been a different
+   autocomplete variant). Two approaches both LOOK like they worked — the input visibly
+   shows the typed text and reads back correctly — but the "Please provide your place of
+   residence" validation error stays lit and clicking Next silently no-ops (page doesn't
+   advance, no visible error toast):
+     a. JS `.focus()` + `.value=` + `dispatchEvent('input'/'change')` on the real `<input>`
+        (found via the id-duplicate-safe walk) — `document.activeElement !== input`
+        afterward, i.e. the JS `.focus()` never actually took real browser focus on this
+        shadow-nested element, so a following `cfx.press('Enter')` had nothing to commit.
+     b. Real focus+typing via the camofox `/type` endpoint's `mode=keyboard` (which does
+        `page.focus(selector)` + real `keyboard.press` per character — genuine browser
+        focus, genuine keydown events) followed by `cfx.press('Enter')` — text updates
+        correctly and reads back correctly, but the error still does not clear and Next
+        still doesn't advance. Enter alone does not select the highlighted suggestion on
+        THIS component (unlike other ATS autocompletes documented elsewhere in the
+        skill — do not assume the Enter-after-type pattern transfers here).
+   **The fix that actually cleared the error and advanced the form:** `/type
+   mode=keyboard` to filter the suggestion list (as in (b)), THEN
+   `cfx.click_selector('spl-select-option[value="<value>"] >> nth=0')` — a REAL
+   Playwright mouse click via the REST endpoint, NOT a JS `.click()` on the same node
+   (a JS `.click()` on an `spl-select-option` was already documented above as unreliable
+   for the salary/EEO autocompletes; it is unreliable here too — always use
+   `click_selector`, never `evaluate(...click()...)`, for committing an SPL
+   autocomplete option). After the click: input shows "London, England, United Kingdom"
+   with a clear-✕ affordance (visual proof of a bound selection, not just typed text),
+   error gone, Next advances. City options follow the value scheme
+   `GB_<REGION>_CITY_<lowercase_slug>` (observed: `GB_ENG_CITY_london`) — confirm the
+   exact value via `spl-select-option[value^="GB_"]` enumeration if a city other than
+   London 404s the guessed value. **Folded into `sites/smartrecruiters/scripts/apply.py`'s
+   `pick()` — use that, not a hand-rolled sequence.**
+
 ## Structural gotcha: everything is inside NESTED SHADOW DOM (SPL web components)
 
 SmartRecruiters' apply form ("Easy apply" / oneclick-ui) is built entirely from `spl-*`
@@ -119,6 +178,20 @@ questions exist, their `id`, `type` (`text`/`radio`/`autocomplete`/etc.), `requi
   A successful submit replaces the whole page with "Application submitted!" — screenshot
   that as proof (`applications/<slug>/confirmation.png`), there is no separate confirmation
   page/URL to capture.
+
+## Cheap location pre-screen: the public postings API (no auth, no browser)
+Before opening a posting in camofox to screen it, hit
+`https://api.smartrecruiters.com/v1/companies/<company-slug>/postings/<jobId>` (plain
+`curl`, no auth/CFX needed — verified live 2026-09-04, Playtech 744000146694014). Returns
+JSON including `location: {city, country, remote, hybrid, fullLocation}` — the posting
+PAGE itself can render this section as an image/map widget with NO extractable text
+(verified: Playtech's "Job Location" section had zero matching text under
+`[class*=location]`/`address` and no `application/ld+json`, but the API answered
+instantly: `city:"Kyiv", country:"ua", remote:true`). `remote:true` alone does NOT mean
+UK/EMEA-remote-acceptable — always check `country` too (a `remote:true` Ukraine/US/etc.
+posting is still off-lane per the applicant's London/remote-UK screen). Use this to
+pre-filter a whole `ats_hint=smartrecruiters` batch from the queue in one HTTP round-trip
+each, before spending a camofox nav+eval cycle on postings that are off-location anyway.
 
 ## Net takeaway for a future driver
 A proper `sites/smartrecruiters/scripts/apply.py` should: (1) walk-shadow-DOM to enumerate
