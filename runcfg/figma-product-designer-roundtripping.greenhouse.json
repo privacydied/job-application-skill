@@ -1,0 +1,15 @@
+{
+  "company": "Figma",
+  "role": "Product Designer, Roundtripping (London, United Kingdom)",
+  "url": "https://job-boards.greenhouse.io/embed/job_app?for=figma&token=6193686004",
+  "cv": "base-resume.pdf",
+  "eeo": true,
+  "fill": {
+    "Why do you want to join Figma?": "I've used Figma daily throughout my design career and admire how the product removes friction between design, engineering, and product work. My background spans UX/UI design, front-end development, and infrastructure (I run my own homelab and have shipped code as well as designs), so I'm genuinely excited about a role focused on the design-to-code roundtrip and developer-facing workflows -- it sits right at the intersection of what I already do day to day.",
+    "From where do you intend to work?": "London, United Kingdom"
+  },
+  "combo": {
+    "Are you authorized to work in the country for which you appl": "Yes",
+    "Have you ever worked for Figma before, as an employee or a c": "No"
+  }
+}

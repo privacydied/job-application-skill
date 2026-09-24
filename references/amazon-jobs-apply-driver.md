@@ -88,3 +88,26 @@ Heavy Job-specific screening (UX Researcher had 8 required radiogroups + 7 selec
 - **Adzuna "Apply" ≠ amazon.jobs.** Adzuna's apply is a walled redirect loop; only WTTJ/Dots `Apply` (which open a new tab to the real ATS) reach amazon.jobs.
 - **Form auto-saves** — a timed-out run resumes; don't assume a re-run re-applies.
 - **On-profile only.** Sourced amazon.jobs roles that are off-profile for Jane (e.g. `10472108` Music Licensing Manager) must be SKIPPED, never applied to pad the count.
+
+## ⚠️ SMS Notifications step can wedge the whole wizard (verified 2026-09-24, job 10528781)
+
+The "SMS Notifications" step is labelled **Optional** but sometimes never transitions from
+`active` to `finished` in the sidebar (`li.form-list-item` classes), and every later section
+(`Job-specific questions`, `Work Eligibility`, `Review & submit`) stays rendered as a
+non-clickable `<span class="form-link nav-link">` (not an `<a>`) until it does. Its own
+"Skip & continue" `<button>` did NOT respond to: plain JS `.click()`, a full
+`mousedown/mouseup/click` `MouseEvent` dispatch sequence, OR `atsform.rclick()`'s real
+Playwright-click-via-marked-element (returned `False` — couldn't locate/mark it). This is a
+genuine site-side automation resistance on this one step, not a script bug — the other
+sections (`General questions`, `Education`, EEO gender/military-status) filled and saved fine
+via native-setter + `input`/`change` events, confirmed `finished` in the sidebar.
+
+**Also fixed 2026-09-24**: `amazon_apply.py run()` used to call `cfx.navigate(url)`
+UNCONDITIONALLY before checking `on_wizard`, discarding in-progress wizard state on every
+invocation — even mid-application. Fixed to check `cfx.current_url()` against the wizard
+regex FIRST, and only navigate if not already on it.
+
+**If re-encountered**: try a real mouse click at the button's on-screen coordinates
+(`page.mouse.click(x, y)` if the REST surface exposes it) rather than any DOM-dispatch
+method — none of the DOM-level approaches worked. Log `Blocked` and move on if it doesn't
+clear in 2 attempts; don't burn further time on this one step.

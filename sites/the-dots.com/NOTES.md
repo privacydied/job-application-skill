@@ -32,3 +32,20 @@ without a browser (like Adzuna). Verified live 2026-07-15.
 Off-site: each posting's `apply_url` (`applicationWebsite`) hops to the real ATS (Workday,
 Greenhouse, company careers, …) — tailor + drive that ATS as usual; The Dots itself isn't
 the apply surface.
+
+**⚠️ SOME postings apply IN-PLATFORM instead** (`.../jobs/<slug>/apply`, no `apply_url` hop) —
+verified live 2026-09-24, Fever Design/Graphic Designer. Login persists in the browser profile
+(creds: `the-dots.com` row in `ats-credentials.csv`). Form fields: `input[type=email]`,
+`input[type=url]` (portfolio link), `#input-resume` (file input, `id` not `name` — upload via
+`cfx.post('/tabs/<tab>/upload', {selector:'#input-resume', path:'base-resume.pdf'})`), plus a
+`[contenteditable=true]` cover-letter div.
+
+**⛔ DO NOT type into the cover-letter `[contenteditable]` div — it reliably crashes the page
+to an "Oops! Something went wrong..." error screen** (verified 2× — `document.execCommand
+('insertText', …)` on it, even after a clean reload with no other DOM edits, triggers the
+crash every time). Cover letter is optional (form submits fine without it) — skip it, fill
+email + portfolio URL + CV upload only, then click the `Apply` button. A dismissed Seers CMP
+cookie banner renders as an `<iframe>` — hide it with `iframe.style.display='none'`, do NOT
+mass-hide "cookie"-named elements or remove the iframe node itself (this also crashed the
+page once — collateral damage from a too-broad `[class*=cookie]` sweep). Success text:
+"Great that you're interested in this role!" / "Connect with people at &lt;company&gt;".

@@ -188,16 +188,21 @@ def run(job, resume="am-uxd.pdf", no_submit=False):
     if precheck.guard(url=url, label="amazon"):
         return 0
     tab = cfx.ensure_tab(persist=True); cfx.set_tab(tab)
-    cfx.navigate(url); time.sleep(11)   # amazon.jobs SPA is slow to paint the Apply CTA
+    # RESUME (fixed 2026-09-24): check the ALREADY-OPEN tab's URL BEFORE navigating anywhere.
+    # A live drive proved the old order (always navigate to the job page first, check after)
+    # threw away in-progress wizard state on every invocation, even mid-application — the job
+    # URL does NOT reliably redirect to the wizard, it can repaint the plain job listing.
+    wizard_re = re.compile(rf"/applicant/jobs/{jid}/apply\b")
+    cur_url = cfx.current_url() or ""
+    on_wizard = bool(wizard_re.search(cur_url))
+    if not on_wizard:
+        cfx.navigate(url); time.sleep(11)   # amazon.jobs SPA is slow to paint the Apply CTA
+        cur_url = cfx.current_url() or ""
+        on_wizard = bool(wizard_re.search(cur_url))
     try:
         role_title = cfx.evaluate("((document.querySelector('h1')||{}).innerText||'').trim()") or ""
     except Exception:  # noqa: BLE001
         role_title = ""
-    # RESUME: a logged-in + already-started application redirects the job URL straight to
-    # `/applicant/jobs/<id>/apply` (the wizard). In that case there's no "Apply now" CTA to
-    # click — we're already on the form. Only click Apply when NOT already on the wizard.
-    cur_url = cfx.current_url() or ""
-    on_wizard = bool(re.search(r"/applicant/jobs/\d+/apply|/apply(\b|/)", cur_url))
     if not on_wizard:
         if not (atsform.rclick("Apply now") or atsform.rclick("Apply")
                 or atsform.rclick("Continue application") or atsform.rclick("Continue")):
