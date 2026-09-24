@@ -69,3 +69,39 @@ lands in an agency ATS after a JobServe interstitial.
 **robots.txt:** `/gb/en/JobListing.aspx` and `/gb/en/mob/jobsearch` are both **allowed**. The
 per-job apply link `/gb/en/W<ID>.jsap` is **disallowed** (`Disallow: /*.jsap`) — the feed
 never emits it; `.url` is the crawlable canonical listing URL instead.
+
+## ⛔ Apply is GUEST — do NOT register a JobServe account first (verified live 2026-09-24)
+
+Clicking the JD page's "Apply" button while NOT signed in does **not** actually require an
+account, even though the page header always shows "Sign In/Register" as if it does. The
+real flow:
+
+1. From the JD, click **"Apply"**. This opens `FastTrackJobApplication.aspx?jobid=<ID>&ACN=…`
+   — a plain guest form, no login/session needed.
+2. Fill directly by field `name` (ASP.NET WebForms, native-setter + `input`/`change` events —
+   no react-select/combobox tricks needed): email (`…rptAppMand$ctl00$Ques$Q0006_ans`),
+   first/last name, address (a `<textarea>`), phone, notice period (select, e.g. "Immediate"),
+   desired rate band (select), travel-distance band (select), a UK-work-status select
+   ("UK Citizen" / "Indefinite Leave to Remain" / "EU Citizen" / …). Field IDs (`Q0001_ans`
+   etc.) are stable Q-numbers, not per-posting random ids — reusable across postings on this
+   board once mapped once.
+3. Upload the CV to `input[name="ctl00$main$filCV"]` (the shared `/tabs/<tab>/upload` REST
+   call with `selector`, not a snapshot `ref` — both work, `selector` is simpler here since
+   the field name is stable).
+4. Submit via `input[name="ctl00$main$btn2NoJS"]` (the bottom "Apply" button; there's a
+   duplicate top one too, `btn1NoJS` — either fires the same submit).
+5. Success text: **"Your application has been submitted."**, followed by an OPTIONAL
+   "would you like to register a Job Seeker account" upsell — decline it (or ignore; it
+   doesn't gate the already-submitted application).
+
+**Do NOT waste time pre-registering a `Job Seeker` account via `/Candidate/Registration.aspx`
+first** — two attempts (2026-09-24) filled the form cleanly (all fields verified via readback,
+including the two required "communications preference" selects easy to miss —
+`sel3RD`/`selMKT`, "Send me job opportunities on behalf of recruiters" / "…marketing emails")
+and got no error banner, yet `/Candidate/Login.aspx` with the same credentials immediately
+after returned "Either the email address or password is invalid" both times — the
+registration silently doesn't create a working login (no confirmation email arrived via IMAP
+either, ruling out an unconfirmed-account explanation the agent could self-serve). This is a
+genuine, unresolved wall in the ACCOUNT path — but it is irrelevant, because the apply path
+never needed the account in the first place. Treat "Sign In/Register" in the header as
+decorative on this board; go straight for the JD's "Apply" button.
