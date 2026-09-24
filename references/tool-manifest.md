@@ -56,6 +56,7 @@ lists reappear outside `check_title.py`.
 | Answer a gating screener (RTW/sponsorship/notice/…) | `screener.py ask "<q>"` (+`learn`) | re-derive per posting |
 | Reuse a company research hook | `company_cache.py get/put "<Company>"` | re-research each time |
 | Log a tracker row (dedup-safe, in place) | `log-application.py` | `echo >>` / hand-append |
+| Self-serve an emailed OTP/verification code/link (Greenhouse code gate, Trac login OTP, a password-reset email, …) | `scripts/fetch_verification_code.py` — `get_code(sender="<substr>", wait_s=90)` (or CLI `--sender <substr> --wait 90`); reads IMAP creds from `ats-credentials.csv`'s `imap...` row, never env/hardcoded | a new `imap_otp.py` / bespoke IMAP poller (forbidden fork — this is already generic: any sender, `code`/`token`/`link` modes) |
 | Any browser action (nav/click/type/eval/shot/upload) | `cfx.sh` / `cfx.py` (`import cfx`) | the host agent's native browser tools (Hermes `browser_*`, IDE/MCP); raw REST |
 | Region-crop screenshot for the vision gate | `cfx.py shot --selector <css>` | full-page screenshot |
 | Pick the matching tiles AND click them in an open reCAPTCHA grid | `recaptcha.py solve-grid --auto` (delegates to `tilevision.py solve`; vision-only: `tilevision.py solve-pending`) | hand-rolling a vision call, or guessing indices from a whole-grid glance |

@@ -45,6 +45,16 @@ When any doc references a script, it MUST use that script's **canonical path** (
 - **Integrity is the hard rule** (see SKILL.md): every field must be true to the applicant's
   real profile (`references/applicant-profile.md`); personal declarations and final submits
   are the user's. Never fabricate experience, grades, or answers to eligibility gates.
+- **⛔ NEVER WITHDRAW A SUBMITTED APPLICATION (user directive, 2026-09-05, non-negotiable).**
+  If a genuine mismatch is discovered mid-form or after submission (e.g. essential criteria
+  the applicant doesn't meet), **stop and flag it to the user — do not withdraw it yourself.**
+  A withdrawal on a board like CSJ is **permanent** ("you cannot re-apply for this job") and
+  removes the applicant's own option to decide. This applies even when withdrawing feels like
+  the "safe"/honest move — it is not the agent's call to make. Real incident: an agent
+  withdrew a CSJ application (Dept for Business and Trade, Digital Learning Designer, ref
+  478114) mid-flow on discovering an essential-criteria mismatch; the user could not get it
+  back and was rightly furious. Log the mismatch (`Skipped`/note in the tracker) and move on
+  — leave the live application exactly as submitted.
 - **Run `bash scripts/check-no-pii.sh` before EVERY push** — the push is not done until it
   prints ✓. Details and the config-routing model: §PII below.
 

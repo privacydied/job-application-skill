@@ -23,3 +23,20 @@ Treat as a login+chooser gate; source freely, apply with the user's authenticate
 ## CAPTCHA
 ⛔ Per `references/captcha-policy.md`: full halt for any CAPTCHA except the two sanctioned
 reCAPTCHA-v2 auto-solves.
+
+## ⛔ STALE ABOVE (partially) — 1-Click Apply works with a logged-in account (verified 2026-09-04, Hays Technology "IT Support")
+With `ats-credentials.csv` creds and a fresh `cfx.goto()` nav (Jane Doe visible in the
+header = logged in), the "1-Click Apply" button on a with-CV-on-file posting submits
+immediately — no modal, no upload step, page flips straight to "Applied" / "Apply Again".
+**But `cfx.click_selector()` on that button reliably TIMES OUT (30s, "action timed out",
+confirmed via camofox-browser's own server log — not a strict-mode violation this time,
+element is visible/unobstructed/`elementFromPoint` resolves to the exact button).** Fix:
+skip the Playwright click endpoint entirely and fire a plain JS `.click()` via
+`cfx.sh eval "document.querySelector('.JobViewOneClickButton_oneClickApplyButton__<hash>').click()"`
+(grab the exact class name for the live page — it's CSS-modules-hashed and changes per
+build) — this worked on the first try where 3+ Playwright-click attempts across 2 postings
+all timed out identically. Also remove the OneTrust cookie-consent overlay first if present
+(`document.querySelector('#onetrust-consent-sdk')?.remove()`) — it can eat the first
+real-mouse click attempt even when off in the viewport. Not yet root-caused why the native
+click endpoint specifically hangs here (works fine on totaljobs/other boards) — treat as a
+board-specific quirk, use the JS-click fallback first rather than retrying the native click.

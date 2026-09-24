@@ -52,3 +52,14 @@ reproduced only on this posting's apply click, not on the sibling Interact Consu
 session. Root cause not identified (possibly a heavy/broken embed on this specific listing's
 smart-apply page). Logged `Blocked` after exceeding the 2-attempt cap; do not keep retrying
 this exact posting id — if re-encountered, treat as a genuine block and move on.
+
+## ⚠️ Apply button click 500s with a Playwright strict-mode violation — use `>> nth=0` (verified 2026-09-04, CMC Markets Business Analyst)
+`cfx.click_selector('[data-testid="harmonised-apply-button"]')` reliably 500s on the current
+totaljobs template — camofox-browser's own log shows the real cause is NOT a backend/tab
+problem but a Playwright **strict-mode violation**: the selector resolves to **3 elements**
+on the page (duplicated apply buttons — likely one visible + hidden/sticky variants sharing
+the same `data-testid`). Fix: append `>> nth=0` to the selector —
+`cfx.click_selector('[data-testid="harmonised-apply-button"] >> nth=0')` — which clicked
+through straight to `/application/confirmation/success` on the first try. This is the same
+"duplicate id/testid → pick nth=0" pattern already documented for SmartRecruiters file
+inputs; apply it here too instead of retrying the bare selector or assuming a wedge.

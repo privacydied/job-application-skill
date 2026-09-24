@@ -96,6 +96,33 @@ quirks (reveal button, success signal); everything below is delegated, never re-
 - `file_lock(path)` (RMW advisory lock), `atomic_write(...)`, `locked_append(...)`. Use these for
   any shared-state CSV/JSONL write — never a bare open-write on a file another process touches.
 
+## Email OTP / verification codes — `scripts/fetch_verification_code.py`
+The ONE primitive for pulling an emailed verification code/token/link out of the applicant's
+mailbox — used by `gh_apply.py`, the applicationtrack drivers, and (2026-09-02) Trac. Reads IMAP
+creds at runtime from the `ats-credentials.csv` row whose `site` starts with `imap` — never
+hardcode an address/password. Reuses `scripts/email_ingest.py`'s `_connect()`.
+- `get_code(sender="greenhouse", minutes=20, digits=None, company=None, wait_s=0, poll_s=6,
+  want="code")` — `sender` is a substring match on the From header (`"any"` = no filter);
+  `wait_s>0` POLLS until a matching email lands (use this — the email always lags the trigger
+  by several seconds). `want="code"` (default 6-8 char code) / `"token"` (magic-link token,
+  URL-decoded) / `"link"` (the whole URL) — Applied/beapplied-style ATSes verify by link, not
+  code, so ask for `"token"`.
+- CLI: `python3 scripts/fetch_verification_code.py --sender <substr> [--company X] [--digits N]
+  [--wait 90] [--token|--link]` — prints the code or exits 1 (NO_CODE) / 2 (no IMAP creds).
+- **Verified working `--sender` substrings so far:** `greenhouse` (Greenhouse security-code
+  emails), `trac` (Trac/HealthJobsUK OTP emails, `noreply@recruit.trac.jobs` — the 6-digit
+  passcode, verified live 2026-09-02, arrived and was extracted within ~15s of `wait_s=90`
+  polling). For a NEW ATS, check one of its emails' From header for the right substring before
+  guessing.
+- **Extend `_extract`/`_plausible_code`/`_VERIFY_LINK` in this file** if a new ATS's email
+  shape isn't matched (a new anchor phrase, an all-letter code, a different magic-link param
+  name) — never fork a second `get_code`-shaped function. See the module's own docstring for
+  the false-positive history (`"applying"`, `"Ethical"`, a job reference number) that shaped
+  `_plausible_code`'s digit-required shape test.
+- Single-use ledger (`.vcode-consumed.json`, 2h TTL): a code handed out once is never handed out
+  again, so two concurrent drives to the same employer each wait for their OWN email instead of
+  racing for the first one's code.
+
 ## Misc shared engines (grep before re-rolling)
 `recaptcha.py`, `accounts.py`, `company_cache.py`, `statedb.py` / `state_view.py`, `journal.py`,
 `warm.py`, `ats_router.py`, `quirks.py`, `blockers.py`, `verdicts.py`, `outcomes.py`,

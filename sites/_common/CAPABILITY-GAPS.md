@@ -1,3 +1,37 @@
+## ⚠️ Jobtrain's "register-as-you-apply" chat widget is unbindable — Next button stays disabled regardless of fill method (2026-09-05)
+Confirmed across TWO separate Jobtrain tenants (National Housing Federation's `jobs.nhf` and
+MoJ's `jobtrain.co.uk/justicedigital`): the `DecideInternalExternal` → "I don't work here" flow
+lands on a chat-style RegisterNoPassword widget ("Hi there! Let's get your application started" /
+"What's your first name?"). Filling the first-name `<input type=text>` via EVERY method tried —
+`atsform.fill` (evaluate + native value-setter + input/change events), a manual IIFE using the
+`HTMLInputElement.prototype.value` setter + per-character `KeyboardEvent('keydown'/'keyup')`, and
+even real OS-level `cfx.press()` keystrokes into the focused field — all show the correct value
+in `.value`, but the **Next button stays `disabled=true`** in every case. This contradicts the
+board's own NOTES.md ("✅ Inputs/selects/textareas ALL bind via the native value-setter" — verified
+for the MAIN application form's later sections, NOT this specific first-step widget). Root cause
+not fully diagnosed (likely a React-internal validity flag keyed off a synthetic event this
+build's camofox REST `/press` doesn't dispatch identically to a real hardware key), but the
+practical upshot: **this specific widget cannot currently be driven autonomously** — no
+`mode=keyboard` typing primitive exists in this cfx.py build to try next. Treat any Jobtrain
+posting reached via "I don't work here" as Blocked (retryable pending a keyboard-mode fix or
+VNC), not a re-triable fill bug — don't re-attempt the same fill tactics a third time.
+
+## ⚠️ Native-memory-pressure self-heal is broken — `docker restart` (not `cfx.py restart-engine`) is the real fix (2026-09-04)
+Verified live: after ~32h uptime the backend hit its own native-memory watchdog
+(`"native memory pressure, restarting browser", growthMb:336, thresholdMb:300`), tried to
+close the browser, and the close itself threw (`"reporter.resetNativeMemBaseline is not a
+function"`) — leaving the server up (`/health` returns `ok:true`) but
+`browserConnected:false`/`activeTabs:0` and **every** `open_tab`/`ensure_tab` call failing
+with `open_tab: tab not created (last response {})`, even after `cfx.py restart-engine`
+(`sudo docker start camofox-browser`) reported `restarted_and_healthy:true` — that command
+only ensures the container is *running*, not that the wedged in-process browser recovered.
+**Fix: `sudo -n docker restart camofox-browser`** (a real stop+start of the container, not
+`docker start` on an already-running one) — after ~10-15s the server comes back with
+`nativeMemMb` reset to baseline (~90MB) and tab creation works again. Symptom checklist
+before reaching for this: `/health` says `ok:true` but `browserConnected:false`, and
+`cfx.py restart-engine`/`ensure_tab` both fail or hang. Login persists in the profile across
+this restart the same as any other engine restart.
+
 # Known capability gaps in the camofox REST backend
 
 Cross-cutting limitations of the camofox REST API (`sites/_common/scripts/cfx.sh`)
@@ -154,6 +188,28 @@ rewritten to use this as ground truth, keeping the token as a secondary signal o
   to `captcha-audit.csv` (skill root): timestamp, domain, job ref, screenshot path,
   result — so every automated action this script takes is reviewable afterward.
 
+## ⚠️ PIL missing for the default `python3` (3.13) breaks tilevision — use `/usr/bin/python3.8` instead (2026-09-04)
+`tilevision.py`'s per-tile classify step imports PIL (`from PIL import Image`), which is NOT
+installed for the active `/opt/bin/python3` (3.13, no working pip either — `pip3`/`pip3.11`
+both report `ModuleNotFoundError: No module named 'pip'`). **Fix found: `/usr/bin/python3.8`
+DOES have PIL 10.4.0 installed**, and `cfx.py`/`recaptcha.py`/`tilevision.py` all import
+cleanly under it. Run CAPTCHA-solving scripts as `/usr/bin/python3.8 -u sites/_common/scripts/recaptcha.py
+...` instead of the default `python3` when PIL-dependent auto-solve is needed.
+⚠️ **This alone does NOT fully fix the auto-solver** — verified 2026-09-04 on a live grid
+(The Brand Power Company Campaign Coordinator, "stairs" challenge): under python3.8 the crop
+step still fails (`Coordinate 'lower' is less than 'upper'` — a geometry bug independent of
+PIL, likely because this specific modal renders partially below the viewport so the computed
+crop box is inverted) AND the vision-model provider chain 403'd (`nous:deepseek/deepseek-v4-flash-vision-exp
+HTTP Error 403: Forbidden`). So on THIS host, right now: PIL is fixable via python3.8, but the
+crop-geometry bug and the vision-provider 403 remain separate unresolved gaps — a challenge
+whose modal sits below the fold cannot yet be reliably auto-solved even with the interpreter
+fix. The manual agent-vision fallback (read the raw fallback screenshot the script saves, pick
+tile indices by eye) still works for tiles inside the viewport, but a challenge whose bottom
+row is permanently below the fold is not solvable this way either — genuine tool gap, not a
+site- or CAPTCHA-difficulty issue. Log `Blocked` after 3 rounds; do not keep retrying the same
+stuck challenge (verified: retrying returns the IDENTICAL image every time, confirming the
+skip-link click itself isn't registering, not that the challenge is regenerating).
+
 ## ALL mouse endpoints (click/click-xy/hover/scroll) 500 across every tab — a real, self-healing server fault (2026-07-13)
 
 Confirmed live: `click`/`click-xy`/`hover`/`scroll` 500 on **every** element, **every**
@@ -301,5 +357,114 @@ container restart)") — the route is very likely just not deployed on this camo
 instance. Net effect: any form whose file input is TRULY chooser-gated (no DOM
 fallback, not even a transiently-mounted one) is currently unfillable by this
 toolkit — log `Blocked`, don't keep retrying the same 500 across sites.
+
+## Teamtailor phone widget defaults to the WRONG country and silently blocks submit
+## (verified 2026-09-01, Henry Schein One / henryscheinone.teamtailor.com)
+
+Teamtailor's phone field is a react intl-tel-input widget with its own separate country
+picker (`button.iti__selected-country`, search box `id^="iti-"`), decoupled from any
+"Country of Residence" screener select elsewhere on the form. On this posting it defaulted
+to **Jersey (+44)**, not United Kingdom — same +44 dialling code, so typing a normal UK
+mobile number LOOKS right (`+44 7700 900000` renders fine) but Teamtailor's own validator
+rejects it as `Phone is invalid` on submit, and the error is easy to miss because the field
+still displays the number correctly and the page just silently re-renders the same form
+with no navigation and no visible toast — the only tell is a `.field-with-errors` wrapper
+around the Phone `<label>` (grep `[class*=error]` after ANY Teamtailor submit before
+concluding the form vanished/reset). **Fix:** open the country picker
+(`document.querySelector('button.iti__selected-country').click()`), type "United Kingdom"
+into its search input, click the matching `<li>` (verify via
+`button.iti__selected-country`'s `aria-label`, which reads `"Change country, selected
+<Name> (+44)"` — check the NAME, not just the dial code, since multiple territories share
++44), THEN re-submit. Also: Teamtailor's file-upload input has no stable `id`/`name`
+attribute — give it one via `document.querySelectorAll('input[type=file]')[0].id =
+'<anything>'` before calling `cfx.post(.../upload, {selector:'#<anything>'})`, since
+`atsform.upload()`'s own id-based selector-finder can't bind an id-less input.
+
+## Teamtailor consent checkbox — bare `.click()` / native-setter didn't register; SOLVED
+## (verified fixed 2026-09-02, Henry Schein One / henryscheinone.teamtailor.com)
+
+**RESOLVED — this was previously logged as a Blocked capability gap on the same posting
+(2026-09-01/02 sessions); it is now diagnosed and fixed.** The required consent checkbox
+(`#candidate_consent_given`, `name="candidate[consent_given]"`) is a completely ordinary
+native `<input type=checkbox>` with a standard `label[for=]` association — NOT a custom
+div/svg widget, NOT in a shadow root, NOT behind an overlay (confirmed:
+`document.elementFromPoint()` at the checkbox's own screen coordinates returns the
+checkbox itself), and NOT disabled/gated by another field. There IS a Rails-standard
+hidden fallback sibling (`<input type=hidden name="candidate[consent_given]" value="0">`
+immediately before the visible checkbox in the DOM) — that is normal Rails
+`check_box_tag` boilerplate (submits "0" only when the checkbox is unchecked; a checked
+box's own value "1" is what actually gets submitted) and is NOT the bug.
+
+**Root cause:** a bare `el.click()` and a native-setter `.checked = true` + dispatched
+`input`/`change`/`click` events both leave `el.checked` reading `true` on inspection, but
+the page's own (Turbo/React-ish) internal state never picks it up, so the server-side
+validator on submit reports the consent field unchecked. Separately, the camofox REST
+`/click` endpoint (`cfx.click_selector`) TIMED OUT (30s) or 500'd on this page for
+**any** selector, not just the checkbox (confirmed by clicking an unrelated `<h1>` too) —
+so that endpoint could not even be used to test a real trusted click here; this looks
+like a page-specific REST-click stall, separate from the checkbox binding issue.
+
+**Fix (verified live, screenshot-confirmed checked state, and confirmed the field
+validates — submit succeeded, "Thanks for applying" page reached):** dispatch the FULL
+mouse event sequence a real click produces, at the element's own bounding-rect
+coordinates, via `cfx.evaluate` (not the REST `/click` endpoint):
+```js
+var cb = document.getElementById('candidate_consent_given');
+var r = cb.getBoundingClientRect();
+var cx = r.x + r.width/2, cy = r.y + r.height/2;
+['pointerdown','mousedown','pointerup','mouseup','click'].forEach(function(type){
+  cb.dispatchEvent(new MouseEvent(type, {bubbles:true, cancelable:true, view:window, clientX:cx, clientY:cy}));
+});
+```
+A single `click` event (what bare `.click()` synthesizes) was NOT enough; the full
+pointerdown→mousedown→pointerup→mouseup→click sequence was needed for the framework to
+treat it as a real interaction. **This is a general pattern, not just this posting** —
+likely applies to any React/Turbo-hydrated checkbox that listens for pointer/mouse events
+rather than trusting the native `change` event alone. **Folded into the shared engine:**
+`sites/_common/scripts/atsform.py`'s `set_checkbox()` now tries the cheap `best.click()`
+first (fine for plain checkboxes) and falls back to this full event sequence only if
+`el.checked` didn't flip — so every board using `atsform.apply`'s `checkboxes` config
+gets this fix automatically, no board-local fork needed.
+
+## A native-setter `value` fill can pass DOM reads but still fail a form's OWN validator
+## (verified 2026-09-02, Hays anonymous-apply form)
+
+`atsform`'s usual fill pattern — `Object.getOwnPropertyDescriptor(...).set.call(el,val)` +
+dispatch `input`/`change` — sets the DOM `.value` correctly (later `el.value` reads back
+right, and even a fresh page load shows the text in the box) but on this Hays form the
+**site's own client-side validator still fired "Please enter your first name" / "...last
+name" / "...valid email address" in red on submit**, despite every field visibly holding
+the correct text and no `aria-invalid` attribute set. `el._valueTracker` was absent (so this
+wasn't the classic React `_valueTracker` desync some sites use), yet the framework's internal
+form state still didn't register the native-setter write as "wasat some point require the
+same. **Fix: use real keyboard-mode typing instead of a value-set** —
+`cfx.sh click <ref>` (to focus) → clear via
+`document.activeElement.value=''; dispatchEvent(new Event('input',{bubbles:true}))` →
+`cfx.sh type <ref> "<text>"` (camofox's per-character keyboard-event mode, not the instant
+`mode=fill` default). That cleared all three red errors on a fresh screenshot and the
+submit went through cleanly. **Lesson: when a form shows a validation error for a field
+whose DOM `.value` genuinely holds the right text, don't assume the fill silently failed —
+suspect the framework's OWN internal state tracking and redo the fill via real keystroke
+events (`cfx.sh type`) rather than retrying the same native-setter approach a second time.**
+
+## CGI njoyn.com — DUPLICATE hidden field with the SAME `name` breaks a naive `querySelector`
+## fill, and it's the real root cause behind the earlier "postal code" block (solved 2026-09-02)
+
+The CGI candidate-profile "Personal information" page renders a `<input type=hidden
+name=Inp_Cand_Zip>` AND a separate VISIBLE `<input type=text name=Inp_Cand_Zip>` — two
+elements, same `name`. `document.querySelector('input[name=Inp_Cand_Zip]')` always grabs the
+FIRST DOM match (the hidden one), so a native-setter fill through that selector silently
+writes to a field the form never reads, while the real (visible, validated) field stays
+empty — exactly the earlier "Please select Postal Code/Zip Code" block from the prior
+session, which was never actually a select-widget issue. **Fix: disambiguate by visibility**
+— `Array.from(document.querySelectorAll('input[name=X]')).find(e => e.offsetParent !== null)`
+— or better, target by the a11y-snapshot ref (`cfx.sh snap` + `cfx.sh click <ref>` +
+`cfx.sh type <ref> "..."`), which is guaranteed to hit the actual on-screen control the way a
+human would. The later screener-questions page on the same site has a parallel trap: several
+`<textarea>` fields are addressable both by their raw `name` (`Q19845` etc.) AND by a
+composite id-like string, and retrying a fill after a spurious `click` 500 (see the Hays/React
+note above) without re-reading current state first can literally CONCATENATE new text onto
+old ("LinkedInLinkedIn", "N/AN/A") rather than overwrite it — always re-`snap`/read the live
+value before a second fill attempt, never blind-retry the same type call.
 
 ## (add further gaps here as they're discovered)

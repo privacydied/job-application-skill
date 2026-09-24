@@ -204,3 +204,80 @@ to the department's own ATS — needs an account"*, and the drivable count as `0
 is now stale for Trac specifically: the account exists, so a Trac-backed CSJ advert **is**
 drivable. UKHSA alone had three on-lane SEO-grade roles in a single sourcing pass (Interaction
 Designer, User Researcher, Cyber Security Operations Support Analyst), all £41,983–£52,113.
+
+## ✅ RESOLVED 2026-09-02 — the login OTP is self-serve, no user relay needed
+
+Trac's sign-in step (after email+password) sends a 6-digit one-time passcode by email
+(`FrmOTP.otp` input, `id=FrmOTP.otp` / `FrmOTP.submit`) — **not** an authenticator-app TOTP, so
+it does NOT need the user live in noVNC. It is genuinely single-attempt/short-lived regardless
+of the "15 minutes" the email states — a prior session lost one to a delay while switching
+tabs. The fix is to not switch away: trigger the code, poll IMAP from the SAME shell call, and
+type it in the instant it returns.
+
+**Working sequence (verified live 2026-09-02, UKHSA User Researcher, vacancy 8210381):**
+1. Fill `#FrmCoreLogin-CandidateSignIn\.Email` / `\.Password` (native-setter + input/change),
+   click `#FrmCoreLogin-CandidateSignIn\.Login`. Page re-renders in place with
+   "We have sent a one time passcode to you..." and a `FrmOTP.otp` text input.
+2. **Immediately**, in the same terminal session (do not navigate the tab away):
+   ```python
+   import sys; sys.path.insert(0,'scripts'); sys.path.insert(0,'sites/_common/scripts')
+   import fetch_verification_code as vcode
+   code = vcode.get_code(sender='trac', minutes=5, digits=6, wait_s=90, poll_s=4)
+   ```
+   `--sender trac` matches Trac's OTP mail (`noreply@recruit.trac.jobs`). Returned in well under
+   90s in the live test.
+3. Fill `#FrmOTP\.otp` with the code (native-setter + input/change), click `#FrmOTP\.submit`.
+   Page re-renders logged in ("Dashboard / Applications / Find a job" nav + the account name).
+
+Use `scripts/fetch_verification_code.py`'s shared `get_code()` for this — do NOT write a
+Trac-specific IMAP poller; it is already generic over `sender`/`company`/`digits`/`want`. See
+`references/shared-primitives.md`.
+
+## Application form structure (verified live 2026-09-02, User Researcher 8210381)
+
+The post-login apply flow is: pre-application questions (internal/external employee select,
+immigration-status radio, privacy-policy checkbox, `#PreAppQuestions.Continue`) → a draft
+application (`apps.trac.jobs/application/<APPID>`) with an option to **clone a previous Trac
+application** (`#SelectStartingSource.SelectSource_AppForm`, auto-populates
+`#SelectStartingSource.PreviousAppID` when there's exactly one prior app) or start blank.
+
+**⚠️ Cloning a prior application does NOT actually copy field values into several sections —
+it only marks them "Filled from past application" in the UI, which is misleading.** Opening
+one of these sections (`#blk_<id>_ApplicationForm.Edit_Fieldset_<key>`) and clicking its
+`#EditAppFieldset.Submit` with the form actually empty surfaces the REAL state: several
+sections silently reverted to blank and have required fields. Verified empty despite the
+"Filled from past application" label:
+- **Personal details** — `Preferred employment type` (a required checkbox group,
+  `#EditAppFieldset.personal-preferredemployment_Fulltime` etc.) was unchecked; mobile phone
+  also blank.
+- **Education & professional qualifications** — the whole row-based table
+  (`#EditAppFieldset.education.gmrow_0.*`) was empty, not carried over.
+- **Employer/activity history** — REQUIRED (`Other employers *`), and the row-based table
+  (`#EditAppFieldset.otheremp.grrow_N.employment-*`, N=0..5, most-recent-first) was completely
+  empty. This is the one that would silently block submit if you trusted the "Filled from past
+  application" label and never opened it.
+- **Equality and Diversity Monitoring** — DOB + gender/marital/ethnicity/sexual-orientation/
+  religion selects (`#EditAppFieldset.equalops-*`, `#EditAppFieldset.personal-dob.*`) all blank
+  and all required.
+- **Disability**, **Care Leavers** — required selects, blank.
+
+**Rule: open and resubmit EVERY "Filled from past application" section before trusting the
+form is complete — don't just check for the "Not started" label.** The row status only flips
+from `assignment_returned Filled from past application` to `assignment_turned_in OK` once you
+open it, fill any genuinely-empty required fields, and click that section's own
+`#EditAppFieldset.Submit`. All selects/checkboxes here are ordinary native form widgets — a
+native-setter `.value`/`.checked` + `input`/`change` dispatch commits cleanly (this is a
+server-rendered Trac form, not React — no desync issue seen).
+
+## ⛔ Genuine hard stop found this session: References section needs real referee identity
+
+The **References** fieldset requires `Referee's first name / surname / how do they know you /
+period covered (from-to) / can they be approached before interview` for **all activity over the
+past 3 years** — this is real third-party personal data (a specific person's name and contact
+details who has agreed to vouch for the applicant) that does not exist in
+`applicant-profile.md` or `ats-credentials.csv`, and fabricating a referee's identity would be
+a straightforward integrity violation, not a gap to paper over. **Correctly a hard stop** — left
+the section open/incomplete, application stays in Draft, logged `Blocked` with the concrete
+missing-data reason rather than inventing a referee or leaving the row silently un-submitted
+with no explanation. The unblock is the user supplying real referee details (name, relationship,
+org, contact, and the period each referee covers, with no gaps across the last 3 years).

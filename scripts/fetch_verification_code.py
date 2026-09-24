@@ -254,7 +254,8 @@ def _plausible_code(tok):
 # English word. Pull the URL itself.
 _VERIFY_LINK = re.compile(
     r"https?://[^\s\"'<>]*(?:verificationCode|verify_token|magic|confirm(?:ation)?_token|"
-    r"login_token|auth_token)=[^\s\"'<>&]+", re.I)
+    r"login_token|auth_token|UsersPasswordQueueID|CandidateGUID|reset[_-]?token|"
+    r"resetpassword)=[^\s\"'<>&]+", re.I)
 
 
 def _extract_link(text):

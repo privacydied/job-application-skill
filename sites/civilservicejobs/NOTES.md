@@ -309,3 +309,54 @@ Continue still POSTs, so the walk advances, but the Declaration page keeps listi
 under "problems that need to be fixed" and **Submit never renders**. Everything else on those
 forms persisted normally. CPS (2009637) and FCDO (2007055) submitted cleanly through the same
 driver on the same day, so the driver is fine. Hand HMRC vacancies to the user in noVNC.
+
+---
+
+## ⛔ MANY "regional hub" CSJ postings have NO real London option — check the FULL location
+## list before starting the eform, not just whether the search-result card mentions "London"
+## (2026-09-01)
+
+`tal_eform.py` drove `2011062` (HMRC Business Analyst) all the way through Section 1
+(submitted for real) before the location list was re-read closely: the JD lists Birmingham /
+Bristol / Cardiff / Edinburgh / Glasgow / Leeds / Manchester / Newcastle (staff-only) /
+Portsmouth / Stratford (staff-only) / Telford / Worthing — i.e. **no genuinely open London
+office for an external applicant**. That fails the applicant's London-or-remote screen and
+should have been a `Skipped`/`Blocked` at step-1 screening, not driven at all. **Lesson: on any
+CSJ vacancy whose search-result card location string is long/multi-city (a "regional hub"
+role), read the FULL job-detail location list BEFORE clicking Apply — a card that happens to
+include the word "London" among many regional hubs is not the same as a role with real London
+access; watch for "Newcastle and Stratford only available to existing HMRC staff" -style
+carve-outs on the exact offices that would otherwise satisfy the screen.** Section 1 was
+genuinely submitted on 2011062 before this was caught; Section 2 (desirable
+skills/CV/personal-statement/behaviours) was deliberately left incomplete rather than force
+through a location-ineligible role — logged `Blocked`, not `Applied`.
+
+## `tal_eform.py` field-ID reuse across DIFFERENT campaigns/departments (verified 2026-09-01)
+
+The bundled `templates/csj_s1_spec.json` field IDs (`datafield_87767_1_1`,
+`datafield_44636_1_1`, `datafield_44639_1_1`, `datafield_177937_1_1`, `datafield_11625_1_1`
+first-name, `datafield_11628_1_1` last-name, `datafield_11631_1_1` email, `datafield_98109_1_1`,
+`datafield_138183_1_1`, `datafield_138179_1_1`, `datafield_36491_1_1`, `datafield_12784_1_1`
+gender-identity radio, `datafield_35296_1_1` sexual-orientation, `datafield_54157_1_1`
+national-identity, `datafield_178072_1_1`/`178075_1_1`/`178114_1_1` disability/caring/
+self-employment, `datafield_53438_1_1` age-band select, `datafield_53446_1_1`/`35302_1_1`
+ethnicity selects, `datafield_53463_1_1` religion select, `datafield_22499_1_1` declaration
+checkbox) matched EXACTLY on a fresh HMRC Business Analyst eform never seen before — these are
+CSJ-platform-wide Section-1 field IDs, not per-campaign. Reuse the template as-is for Section 1
+on any new CSJ vacancy; only `datafield_177937_1_1` (department select) needs the target
+department name. One value mismatch found: `datafield_12784_1_1` (gender identity) wants
+**"Man"**, not "Male" (the template's placeholder era didn't catch this because it used a
+bracket placeholder there) — use "Man"/"Woman"/"Prefer to self-describe"/"Prefer not to
+disclose", matching `apply-defaults.json`'s `gender_identity` key, not `gender`.
+
+## Section 2 is real work per posting, not a template fill
+
+Section 2 (Desirable experience and skills / Your CV / Personal statement / Behaviours /
+Preferences) requires genuine JD-specific content — a 250-word desirable-criteria answer, CV
+upload, a personal statement, and Civil-Service-behaviours-framework answers (e.g.
+"Communicating and Influencing", "Making Effective Decisions", "Delivering at Pace" — each
+posting lists its own 3). This is NOT a reusable spec fill; budget real per-posting time for it,
+same as a cover letter. `tal_eform.py`'s auto-walk will click through Section 2 pages with an
+empty spec and land on a Declaration page listing every unfilled page under "problems that need
+to be fixed" with no Submit control rendered — that is NOT a bug, it is working as designed
+(the final submit is correctly gated on real content).

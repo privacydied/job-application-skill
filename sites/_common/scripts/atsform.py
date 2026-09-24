@@ -1463,7 +1463,25 @@ def set_checkbox(label, state="on", quiet_notfound=False):
         if (rank < bestRank) {{ bestRank = rank; best = c; if (rank === 0) break; }}
       }}
       if (!best) return 'NOT_FOUND';
-      if (best.checked !== {str(want).lower()}) best.click();
+      if (best.checked !== {str(want).lower()}) {{
+        // ⛔ TEAMTAILOR REACT-CONTROLLED CHECKBOX (2026-09-02, Henry Schein One) — a bare
+        // best.click() (and native-setter .checked= + dispatch) silently fails to register
+        // with some React-bound checkboxes: el.checked reads back correctly right after the
+        // call, but the framework's own internal state never updates, so a later form
+        // submit still reports the field unchecked. The fix verified live: dispatch the FULL
+        // trusted-style pointer/mouse event sequence a real click produces
+        // (pointerdown->mousedown->pointerup->mouseup->click) at the element's own
+        // coordinates, instead of a single synthetic .click(). Try the cheap .click() first
+        // (works on plain checkboxes); only fall back to the full sequence if it didn't take.
+        best.click();
+        if (best.checked !== {str(want).lower()}) {{
+          const r = best.getBoundingClientRect();
+          const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+          for (const t of ['pointerdown','mousedown','pointerup','mouseup','click']) {{
+            best.dispatchEvent(new MouseEvent(t, {{bubbles:true, cancelable:true, view:window, clientX:cx, clientY:cy}}));
+          }}
+        }}
+      }}
       return best.checked === {str(want).lower()} ? ('OK checked='+best.checked) : 'CLICK_FAILED';
     }})()
     """)
