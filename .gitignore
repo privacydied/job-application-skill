@@ -189,3 +189,5 @@ runcfg/answers/
 .cfx-active-tabs.json
 .cfx-active-tabs.json.*.tmp
 .vcode-consumed.json
+.worktrees/
+.runtime_specs/
