@@ -123,6 +123,22 @@ hardcode an address/password. Reuses `scripts/email_ingest.py`'s `_connect()`.
   again, so two concurrent drives to the same employer each wait for their OWN email instead of
   racing for the first one's code.
 
+## Mailbox filing — `scripts/email_ingest.py file`
+Moves genuine "thank you for applying" / "we have received your application" RECEIPT emails
+out of the inbox into a dedicated mailbox folder over IMAP (default `INBOX.Job Applications`,
+already exists on `imap.example.com`). Uses IMAP MOVE where the server supports it (RFC 6851),
+else COPY + STORE `\Deleted` + EXPUNGE. Pure classifier: `is_application_confirmation(subject,
+body)` — deliberately narrower than `classify_response()` (a decision email is excluded even if
+it opens with a "thank you" pleasantry, so a single email is never double-handled by both).
+- CLI: `python3 scripts/email_ingest.py file [--src INBOX] [--dest "INBOX.Job Applications"]
+  [--days 14] [--dry-run]` — always `--dry-run` first when tuning the classifier against a live
+  mailbox; live-probing 2026-09-25 found "thank you for your <patience/time/interest>" generic
+  pleasantries inside status-update/withdrawal/reschedule emails false-positiving until the
+  regex was anchored to "applying"/"your application" specifically and `_OUTCOME_OVERRIDE_RE`
+  gained sift-progression/withdrawn/missed-interview/reschedule exclusions.
+- **Extend `_CONFIRMATION_RE`/`_OUTCOME_OVERRIDE_RE` in this file** for a new false positive —
+  never fork a second mover/classifier.
+
 ## Misc shared engines (grep before re-rolling)
 `recaptcha.py`, `accounts.py`, `company_cache.py`, `statedb.py` / `state_view.py`, `journal.py`,
 `warm.py`, `ats_router.py`, `quirks.py`, `blockers.py`, `verdicts.py`, `outcomes.py`,

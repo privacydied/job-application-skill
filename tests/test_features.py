@@ -328,6 +328,38 @@ class TestEmailIngest(unittest.TestCase):
             "Thank you for taking the time to interview with us. "
             "Unfortunately, we have decided not to proceed with your application."), "Rejected")
 
+    def test_is_application_confirmation(self):
+        # Genuine receipts — the class of email that should be filed.
+        self.assertTrue(email_ingest.is_application_confirmation(
+            "Thank you for your application to Figma", "We have received your application"))
+        self.assertTrue(email_ingest.is_application_confirmation(
+            "We have completed your application for IT Support Analyst", ""))
+        self.assertTrue(email_ingest.is_application_confirmation(
+            "We've received your application", ""))
+        # A decision email must never be treated as a plain receipt, even if it opens with a
+        # "thank you" pleasantry — classify_response owns these, so is_application_confirmation
+        # defers to it and returns False.
+        self.assertFalse(email_ingest.is_application_confirmation(
+            "Update on your application",
+            "Thank you for taking the time to interview with us. "
+            "Unfortunately, we have decided not to proceed with your application."))
+        self.assertFalse(email_ingest.is_application_confirmation(
+            "Invitation to interview for UX", ""))
+        # Regression (live-mailbox false positives, 2026-09-25): a generic "thank you for your
+        # <patience/time/interest>" pleasantry inside a status update, withdrawal notice, or
+        # reschedule request must NOT be mistaken for a receipt.
+        self.assertFalse(email_ingest.is_application_confirmation(
+            "Government Recruitment Service: Sift Progression Update",
+            "Thank you for your patience during the sift process."))
+        self.assertFalse(email_ingest.is_application_confirmation(
+            "Application withdrawn - Digital Learning Designer - 478114",
+            "Thank you for your interest in this role."))
+        self.assertFalse(email_ingest.is_application_confirmation(
+            "RE: Missed Interview - Reschedule Request",
+            "Thank you for your time earlier."))
+        self.assertFalse(email_ingest.is_application_confirmation(
+            "Your weekly newsletter", "Thank you for your continued support."))
+
     def test_audit_proofs_scopes_cited_proof_to_own_folder(self):
         # A cited proof must resolve inside the ROW'S OWN applications/<slug>/ folder — matching
         # the basename anywhere under applications/ let a fabricated/mislocated row pass just
