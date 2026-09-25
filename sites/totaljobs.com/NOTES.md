@@ -105,3 +105,28 @@ against the applicant's truthful skills, so `_screening_questions_text()` detect
 "Additional questions" block and `apply()` refuses — returns `BLOCKED — role-specific
 screening question(s)` — instead of guessing. This is a STOP-and-flag, not an auto-No; a
 human or a future skills-aware check should read the actual question text before deciding.
+
+## ⛔ UPDATE 2026-09-25 (same session, later): "one-click variant" confirmation is UNRELIABLE
+The "one-click variant" described above was initially trusted as a real submit signal
+(`Application summary` / `Did all go well with your application?` / bare
+`confirmation/success` URL). Live cross-checking against the account's own "N
+applications" -> "Applied Today" list (https://www.totaljobs.com/ homepage) found this is
+WRONG for several postings: Hackajob Ltd "Technical Business Analyst" and "Technical
+Support Specialist I", Arup CWS "Technical Business Analyst", Southern Housing
+"Transformation Service Designer", and Rocket "Kitchen Systems Administrator" ALL showed
+one of these confirmation-shaped pages, yet the job listing still read plain "Apply" (never
+flipped to "Already applied") and NONE of them appeared in the account's Applied history.
+
+**Root cause (working theory):** these are external-ATS-redirect postings where TotalJobs
+shows its own "we sent your info along" confirmation UI regardless of whether the
+downstream employer/agency ATS actually received the application — the same class of
+unreliable signal as an external redirect on other boards.
+
+**Fix:** `tj_apply.py`'s final verdict now trusts ONLY the literal "Application sent!"
+banner (the Smart Apply review-form flow's real terminal state) as SUBMITTED. Everything
+else — bare `confirmation/success`, "Application summary", "Did all go well" — returns
+`UNVERIFIED`, never auto-logs `Applied?`, and the caller must cross-check the account's
+Applications list before counting it. **When re-driving a one-click-flow posting, ALWAYS
+verify against the account's own "N applications" list (or check the job listing itself
+for "Already applied" vs plain "Apply") before trusting a confirmation page — this applies
+whether the driver or a human eyeballed it.**

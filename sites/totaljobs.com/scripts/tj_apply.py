@@ -201,24 +201,27 @@ def apply(url, dry=False):
             break
         if "Sending your application" not in str(final):
             break  # settled on something else — stop polling, report what we see
-    # ⛔ "Did all go well with your application? ... you can still submit on the company
-    # website" is NOT a reliable submit confirmation (found live 2026-09-25, Hackajob Ltd /
-    # Arup CWS) — this page can render even when the posting is an EXTERNAL-ATS redirect
-    # that never actually completed: the job listing still showed plain "Apply" (not
-    # "Already applied") afterward and the posting never appeared in the account's Applied
-    # history. Only "Application sent!" / confirmation/success with NO "Did all go well"
-    # fallback banner, or "Application summary" alone (no "Did all go well" text), count as
-    # a real terminal SUBMIT here — "Did all go well" always needs a live account-history
-    # cross-check before trusting it, so this driver reports it as UNVERIFIED, not SUBMITTED.
-    if "Did all go well" in str(final):
-        return (f"[{job_id}] UNVERIFIED — external-ATS-redirect confirmation shown "
-                f"('Did all go well with your application?'); cross-check the job listing "
-                f"('Already applied'?) and account Applied history before logging Applied "
-                f"(url={href})")
-    if ("Application sent" in str(final) or "confirmation/success" in str(href)
-            or "Application summary" in str(final)):
+    # ⛔ NEITHER "Did all go well with your application?" NOR a bare confirmation/success
+    # URL / "Application summary" page is a reliable submit signal on its own (found live
+    # 2026-09-25, multiple postings incl. Hackajob Ltd x2, Arup CWS, Southern Housing,
+    # Rocket): all of these can render even when the posting is an EXTERNAL-ATS redirect
+    # that never actually completed — the job listing still showed plain "Apply" (never
+    # flipped to "Already applied") and the posting never appeared in the account's
+    # "Applications" Today list, in every case checked. Only the literal "Application
+    # sent!" banner (the Smart Apply review-form flow's real terminal state) is trusted as
+    # SUBMITTED here. Everything else — bare confirmation/success, "Application summary",
+    # "Did all go well" — is reported UNVERIFIED so a human/later pass cross-checks the
+    # account's Applications list (https://www.totaljobs.com/ -> "N applications" link)
+    # before counting it as a real Applied. Do not loosen this without re-verifying live.
+    if "Application sent" in str(final):
         _log_applied(url, job_id, role, company, status="Applied?")
         return f"[{job_id}] SUBMITTED (url={href})"
+    if ("Did all go well" in str(final) or "Application summary" in str(final)
+            or "confirmation/success" in str(href)):
+        return (f"[{job_id}] UNVERIFIED — confirmation-shaped page reached but no "
+                f"'Application sent!' banner; cross-check the job listing ('Already "
+                f"applied'?) and account Applications list before logging Applied "
+                f"(url={href})")
     return f"[{job_id}] STUCK (href={href} body={str(final)[:150]})"
 
 
