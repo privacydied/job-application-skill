@@ -261,7 +261,8 @@ _FIELD_SERVICE_MODIFIER = (
     "medical", "catering", "electrical", "hvac", "hydraulic", "plant", "valve",
     "access control", "cctv", "security system", "audio visual", "audio-visual", "av",
     "fire alarm", "fire safety", "lift", "elevator", "refriger", "boiler", "weighbridge",
-    "forklift", "vending", "coffee machine",
+    "forklift", "vending", "coffee machine", "water purification", "laboratory",
+    "lab equipment", "scientific instrument", "analytical instrument", "weighing",
 )
 _FIELD_SERVICE_RE = re.compile(r"\bfield service\b")
 _FIELD_SERVICE_MOD_RE = re.compile(
