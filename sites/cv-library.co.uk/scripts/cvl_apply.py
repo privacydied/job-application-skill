@@ -80,10 +80,16 @@ def _job_url(arg):
 
 
 def _scrape_meta():
+    """Role = the h1. Company: CV-Library renders it as 'Posted <date> by <Company>' —
+    NOT a dedicated .company-class element (a naive `[class*=company]` selector matched a
+    byline wrapper and returned the WHOLE 'Posted DD/MM/YYYY by X' string as the company
+    name, found live 2026-09-25 — corrupted 6 tracker rows). Parse the 'by <Company>' text
+    out of the page body instead."""
     r = ev("""(function(){
       var h=document.querySelector('h1');
-      var c=document.querySelector('[class*=company],[class*=recruiter]');
-      return JSON.stringify({role:(h?h.innerText:'').trim(),company:(c?c.innerText:'').trim()});
+      var body = document.body.innerText;
+      var m = body.match(/Posted[^\\n]*?\\bby\\s+([^\\n]+)/);
+      return JSON.stringify({role:(h?h.innerText:'').trim(), company:(m?m[1]:'').trim()});
     })()""")
     try:
         import json as _json
