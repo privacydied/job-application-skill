@@ -617,6 +617,17 @@ def main():
         # Confirmed if the page is on the /confirmation route OR the body shows the success
         # text. Greenhouse redirects to .../confirmation on a successful (code-gated) submit,
         # and that redirect can LAG the submit by several seconds — so treat the URL as proof.
+        #
+        # ⛔ FALSE POSITIVE FOUND LIVE (2026-09-25, LTK Digital Marketing Executive): _CONF's
+        # "thank you for applying" / "application received" phrases are NOT unique to a real
+        # confirmation screen — some employers embed identical boilerplate in their GDPR
+        # privacy-notice text, which renders INSIDE the still-unsubmitted form (right next to
+        # "This field is required." errors). A bare regex-anywhere-on-the-page match logged
+        # "Applied" with proof=confirmation.png while the page genuinely showed ~12 unfilled
+        # required fields — a real count-integrity failure (the exact class SKILL.md step 11
+        # warns about). Fix: OFF the /confirmation route, the confirm text must NOT co-occur
+        # with a live validation error ("This field is required" / "needs corrections") on the
+        # same page — a real success screen never shows both at once.
         try:
             url = cfx.current_url()
         except Exception:  # noqa: BLE001
@@ -625,8 +636,13 @@ def main():
             t = cfx.evaluate("document.body?document.body.innerText:''") or ""
         except Exception:  # noqa: BLE001
             t = ""
-        if "/confirmation" in url or re.search(_CONF, t, re.I):
+        if "/confirmation" in url:
             return t or url
+        if re.search(_CONF, t, re.I):
+            if re.search(r"this field is required|needs corrections|missing entry for required",
+                         t, re.I):
+                return ""  # boilerplate text co-occurring with a live validation error — not a real confirm
+            return t
         return ""
 
     def _confirm_poll(seconds=45):

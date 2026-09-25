@@ -128,3 +128,27 @@ returns `NO_FIELD` for it and the generic "UK Right to Work" backstop never matc
 wording, so it needs an explicit checkbox tick by the option's real value/label pair. Worth
 teaching `combobox_pick` a bounded retry count so a doomed literal-string search can't hang a
 whole apply run — filed as a follow-up, not fixed here (out of scope for a single drive).
+
+## ⛔ CRITICAL FIX 2026-09-25: false "Applied" from privacy-notice boilerplate text
+`gh_apply.py`'s `_confirm_text()` matched its `_CONF` regex
+(`thank you for applying|application (received|sent)|...`) ANYWHERE on the page body — but
+that phrasing is not unique to a real confirmation screen. LTK's Greenhouse form embeds
+identical wording ("Thank you for applying to LTK. When you apply for a position with us,
+we will process your personal data...") in its GDPR privacy-notice paragraph, which renders
+INSIDE the still-unsubmitted form, right next to live "This field is required." validation
+errors on ~12 empty fields (including 4 free-text essay questions). The driver logged
+`Applied` with a captured `confirmation.png` — the proof screenshot itself showed the
+unsubmitted form full of red validation errors, a real count-integrity failure of exactly
+the class SKILL.md step 11 warns about (`close_out.py` catches an artifact/tracker mismatch,
+but this was self-consistent: the tracker AND the artifact both said "success").
+
+**Fix:** `_confirm_text()` now requires that a confirm-phrase match NOT co-occur with a live
+validation-error phrase ("this field is required" / "needs corrections" / "missing entry for
+required") on the same page read — a genuine success screen never shows both at once. The
+`/confirmation` URL route (Greenhouse's actual post-submit redirect) is still trusted
+unconditionally, since that route never renders the unsubmitted form.
+
+**Lesson:** a confirmation-text regex match is only safe when checked against a page that is
+ALSO free of live validation-error text, or gated behind a URL-route check — never trust
+"the phrase appears somewhere on the page" alone, especially on an employer's own privacy
+boilerplate (any phrasing overlap risk applies to every ATS, not just Greenhouse).
