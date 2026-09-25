@@ -44,6 +44,24 @@ Modal: Yes/No screening radios + "Continue", then "About you" + "Submit applicat
 Answer screening "Yes" (truthful), Continue to Submit, verify on the Applications list
 (badge/cards) — the post-submit redirect 404s but the app REGISTERS.
 
+## ⚠️ INTEGRITY BUG, fixed 2026-09-25: blanket "click Yes" screener answering is unsafe
+`answer_yes_and_advance()` used to click whichever radio label read "Yes" with **zero
+visibility into the actual question text** — it cannot tell a benign "2+ years' UX
+experience?" from a hard eligibility gate. Live incident: Robert Half "QA Analyst (German
+Speaking)" (57244348) — the JD required German + French language capability the applicant
+does not have, and the screener (same Yes/No shape) auto-answered Yes and submitted.
+Logged `Applied` with an INTEGRITY FLAG note per the never-withdraw rule (the submission
+itself was left standing; withdrawal is never the agent's call — see AGENTS.md), but the
+answer given was untruthful and must not recur.
+**Fix:** `_screening_question_text()` reads the current step's visible question text;
+`_UNVERIFIABLE_GATE_RE` matches language-fluency / right-to-work / visa-sponsorship /
+security-clearance / driving-licence / professional-qualification phrasing. A match makes
+`answer_yes_and_advance()` return `UNVERIFIABLE_GATE:<question text>` instead of clicking
+anything, and `apply()` reports `BLOCKED — unverifiable eligibility-gate question, never
+blind-answered` for that posting rather than submitting. **Extend `_UNVERIFIABLE_GATE_RE`
+in `reed_apply.py`** for any new gate-shaped question found live — never re-add a blind
+"click Yes" anywhere else.
+
 ## Wall state (2026-07-18)
 At depth, the apply modal returns "Session expired" under camofox automation even
 solo with a valid account-page session. Treated as an automation-block wall; the

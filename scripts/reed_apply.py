@@ -27,6 +27,7 @@ CRITICAL Reed wedge (cost real time this session):
 Usage: python3 reed_apply.py <job_id> [<job_id> ...] [--dry]
   (job_id = the trailing digits in the Reed URL, e.g. 57108922)
 """
+import re
 import subprocess
 import sys
 import os
@@ -126,7 +127,38 @@ def click_apply_now():
     })()""")
 
 
+# Screening questions this driver must NEVER blanket-answer "Yes" to — these gate a
+# truthfulness fact about the applicant (language fluency, work authorisation/visa,
+# security clearance, driving licence, a professional qualification) that a blind
+# "click the Yes radio" cannot verify. Found live 2026-09-25: a "German Speaking"
+# QA Analyst posting's screener was auto-answered Yes though the applicant has no German —
+# an integrity violation (AGENTS.md: never fabricate eligibility-gate answers). This is a
+# STOP-and-flag list, not an auto-No — a truthful "No" answer still needs a human/profile
+# check, so any match halts the drive of THIS posting and reports it, never submits blind.
+_UNVERIFIABLE_GATE_RE = re.compile(
+    r"\b(fluent|fluency|native speaker|speak(ing)? (german|french|spanish|italian|"
+    r"mandarin|cantonese|japanese|arabic|portuguese|dutch|polish)|"
+    r"right to work|work permit|visa sponsorship|sponsorship required|"
+    r"security clear(ed|ance)|\bSC\b clear|\bDV\b clear|"
+    r"driving licen[cs]e|professional qualification|chartered|"
+    r"degree in|years? (of )?post-qualification)\b", re.I)
+
+
+def _screening_question_text():
+    """Best-effort visible text of the CURRENT screening step (question label / legend),
+    so answer_yes_and_advance can check it against _UNVERIFIABLE_GATE_RE before clicking."""
+    return ev("""(function(){
+      var q=document.querySelector('fieldset legend, .question, [class*=question], h2, h3');
+      return (q?q.innerText:document.body.innerText.slice(0,500))||'';
+    })()""") or ""
+
+
 def answer_yes_and_advance():
+    # Refuse to blind-answer a question that gates an unverifiable truthfulness fact
+    # (language, clearance, visa, licence, quals) — flag and stop this posting instead.
+    qtext = _screening_question_text()
+    if _UNVERIFIABLE_GATE_RE.search(str(qtext)):
+        return "UNVERIFIABLE_GATE:" + str(qtext)[:200]
     # click Yes radio if present, then Submit if present else Continue
     res = ev("""(function(){
       var ls=[...document.querySelectorAll('label')];
@@ -183,6 +215,9 @@ def apply(job_arg, dry=False):
     time.sleep(6)
     for step in range(8):
         res = str(answer_yes_and_advance())
+        if res.startswith('UNVERIFIABLE_GATE'):
+            return (f"[{job_id}] BLOCKED — unverifiable eligibility-gate question, "
+                     f"never blind-answered: {res}")
         if 'SUBMIT' in res:
             time.sleep(5)
             _log_applied(url, job_id, role, company)
