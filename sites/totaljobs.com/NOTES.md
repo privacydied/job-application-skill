@@ -63,3 +63,45 @@ the same `data-testid`). Fix: append `>> nth=0` to the selector —
 through straight to `/application/confirmation/success` on the first try. This is the same
 "duplicate id/testid → pick nth=0" pattern already documented for SmartRecruiters file
 inputs; apply it here too instead of retrying the bare selector or assuming a wedge.
+
+## New driver shipped 2026-09-25: `sites/totaljobs.com/scripts/tj_apply.py`
+Promotes the manual cfx-driven flow documented above into a real batch driver (mirrors
+`reed_apply.py`'s shape). `python3 tj_apply.py <job_url> [<job_url> ...] [--dry]`.
+
+**TWO apply-flow shapes** exist and the driver handles both:
+1. **Smart Apply review form** (most common): "Apply" click lands on a pre-filled
+   Contact/CV review page needing a second "Send application" click -> confirmation page
+   showing "Application sent!".
+2. **One-click variant**: a single "Apply" click goes straight through to a
+   confirmation-style "Application summary" / "Did all go well with your application?"
+   page — no second click exists or is needed. Treating the absent "Send application"
+   button as a failure here was a real bug (5 genuine submissions misreported STUCK/
+   NO-SEND-BUTTON live 2026-09-25) — fixed by checking for either terminal state before
+   assuming a second click is required.
+
+**Confirmation interstitial**: after "Send application", a "Sending your application...
+this should only take a few seconds" interstitial renders BEFORE "Application sent!" — a
+single short sleep can read the interstitial and misreport STUCK on a genuine submission.
+Poll up to ~15s.
+
+## ⛔ COURSE-SIGNUP TRAP (same class as Reed, 2026-09-25) — different signal shape
+TotalJobs doesn't carry Reed's literal "Training Course" job-type badge, so
+`tj_apply.py`'s `_COURSE_SIGNUP_RE` scans the JD body for course-pitch language
+("fully-funded course", "government-funded programme", "traineeship", "job guarantee",
+"become job-ready", "gain a ... certification", …) before ever clicking Apply. **Extend
+that regex in tj_apply.py** for a new disguise phrasing found on THIS board — Reed's badge
+detector lives in reed_apply.py and is a different signal shape, so don't try to share one
+regex across both drivers.
+
+## ⛔ ROLE-SPECIFIC SCREENING QUESTIONS ON THE REVIEW FORM — never blind-answered
+Some Smart Apply review pages show an "Additional questions" / "Action required" block
+with role-specific Yes/No screeners naming SPECIFIC tech stacks/tools ("strong commercial
+experience with Angular and TypeScript?", "hands-on experience using NgRx?"). Unlike
+Reed's more generic "X years experience?" screeners, TotalJobs' questions can name a
+tech stack the applicant provably doesn't have (live: Gazelle Global Consulting "Frontend
+Developer" asked about Angular/NgRx/RxJS — applicant-profile.md's real stack is
+React/TypeScript). `tj_apply.py` has no code that can verify an arbitrary tech-stack claim
+against the applicant's truthful skills, so `_screening_questions_text()` detects the
+"Additional questions" block and `apply()` refuses — returns `BLOCKED — role-specific
+screening question(s)` — instead of guessing. This is a STOP-and-flag, not an auto-No; a
+human or a future skills-aware check should read the actual question text before deciding.
