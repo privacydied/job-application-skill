@@ -166,6 +166,27 @@ class TestCheckTitle(unittest.TestCase):
             r = check_title.check_title(t)
             self.assertFalse(r["discipline_flag"], f"{t} must not be flagged")
 
+    def test_ambiguous_reliability_titles_excluded(self):
+        """'Reliability Engineer' / 'Site Performance Engineer' / 'Performance Engineer'
+        alone are ambiguous between software SRE and factory/facilities maintenance. Real
+        gap (2026-09-25): 'Reliability Engineer' (Pioneer Selection Ltd, Enfield, factory
+        maintenance) and 'Site Performance Engineer' (Pure Data Centres Group Ltd, CMMS/
+        facilities) both passed the title screen live — the first was even submitted
+        before the mismatch was caught. Neither carries a disqualifying word bare."""
+        for t in ("Reliability Engineer", "Site Performance Engineer", "Performance Engineer"):
+            r = check_title.check_title(t)
+            self.assertFalse(r["eligible"], f"{t} should be off-profile without an IT signal")
+            self.assertTrue(r["discipline_flag"], f"{t} should set discipline_flag")
+
+    def test_reliability_titles_with_it_signal_not_excluded(self):
+        """A software/IT/cloud signal in the title disambiguates toward the on-profile
+        reading — 'Site Reliability Engineer' itself must never be caught by the new
+        ambiguous-reliability guard."""
+        for t in ("Site Reliability Engineer", "Senior Site Reliability Engineer",
+                  "Cloud Performance Engineer", "DevOps Reliability Engineer"):
+            r = check_title.check_title(t)
+            self.assertFalse(r["discipline_flag"], f"{t} must not be flagged")
+
     def test_memoized_immutable(self):
         # iter-3: parse_target_roles is lru_cache'd -> identical cached object, and a
         # tuple (immutable) so a caller can't mutate the shared result.

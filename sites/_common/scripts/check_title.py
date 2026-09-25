@@ -275,6 +275,32 @@ _FIELD_SERVICE_MOD_RE = re.compile(
     r"\b(" + "|".join(re.escape(w) for w in _FIELD_SERVICE_MODIFIER) + r")\b", re.I)
 
 
+# "Reliability Engineer" / "Site Performance Engineer" / "Performance Engineer" are
+# ambiguous: same bare phrase covers software Site-Reliability-Engineering (on-profile)
+# AND factory/facilities maintenance reliability roles (Pioneer Selection Ltd, Enfield,
+# "busy manufacturing environment") or data-centre facilities maintenance (Pure Data
+# Centres Group Ltd, CMMS/Senior-Planner reporting line) — both off-profile, live
+# 2026-09-25. Neither carried a disqualifying word in the bare title, so require an
+# explicit software/IT/cloud signal before treating the bare phrase as on-profile.
+_AMBIGUOUS_RELIABILITY_TITLES = (
+    "reliability engineer", "site performance engineer", "performance engineer",
+)
+_RELIABILITY_IT_SIGNAL_RE = re.compile(
+    r"\b(site reliability|sre|software|cloud|platform|devops|aws|azure|gcp|kubernetes|"
+    r"infrastructure|it\b|systems? engineer|application|api|backend|network engineer)\b",
+    re.I)
+
+
+def _ambiguous_industrial_reliability_role(title_l):
+    """True iff the bare title is one of the reliability/performance-engineer phrases
+    that is ambiguous between software SRE and factory/facilities maintenance, AND no
+    software/IT/cloud signal is present to disambiguate it toward the on-profile reading.
+    JD-level manual check still applies for anything that passes this title-level guard."""
+    if not any(p in title_l for p in _AMBIGUOUS_RELIABILITY_TITLES):
+        return False
+    return not _RELIABILITY_IT_SIGNAL_RE.search(title_l or "")
+
+
 def _field_service_driving_role(title_l):
     """True iff the title is a non-IT field-service role that near-certainly requires
     driving between client sites — off-profile per target-roles.md §13. A bare 'IT Field
@@ -290,7 +316,8 @@ def _field_service_driving_role(title_l):
 def check_title(title):
     title_l = (title or "").lower()
     seniority_flag = any(re.search(r"\b" + re.escape(w) + r"\b", title_l) for w in SENIORITY_WORDS)
-    discipline_flag = _industrial_design_engineer(title_l) or _field_service_driving_role(title_l)
+    discipline_flag = (_industrial_design_engineer(title_l) or _field_service_driving_role(title_l)
+                        or _ambiguous_industrial_reliability_role(title_l))
     early_career_flag = _early_career(title_l)
     best = None  # (tier, phrase) -- prefer the highest tier (A > B > C) on multiple matches
     for phrase, tier in parse_target_roles():
