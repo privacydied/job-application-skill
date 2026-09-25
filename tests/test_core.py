@@ -134,6 +134,35 @@ class TestCheckTitle(unittest.TestCase):
             self.assertTrue(check_title.check_title(t)["eligible"],
                             f"{t} should stay on-profile")
 
+    def test_field_service_driving_roles_excluded(self):
+        """target-roles.md §13: applicant can't drive (provisional licence only) — non-IT
+        field-service roles (pumps, doors/shutters, chromatography, medical/catering
+        equipment, CCTV/access-control, AV) near-certainly require driving between client
+        sites and must be excluded. Real gap (2026-09-25): 11 such postings passed the
+        title screen live and had to be screened out manually mid-drive before this guard
+        existed."""
+        for t in ("Field Service Engineer (Pumps/Utilities)",
+                  "Field Service Engineer (Doors/Shutters)",
+                  "Chromatography Field Service Engineer",
+                  "Medical Field Service Engineer",
+                  "Electrical Field Service Engineer (Catering Equipment)",
+                  "Security Systems Field Service Engineer - Access Control and CCTV",
+                  "AV Field Service Engineer",
+                  "Audio Visual Field Service Engineer"):
+            r = check_title.check_title(t)
+            self.assertFalse(r["eligible"], f"{t} should be off-profile")
+            self.assertTrue(r["discipline_flag"], f"{t} should set discipline_flag")
+
+    def test_field_service_it_roles_not_excluded(self):
+        """A bare 'IT Field Service Engineer' / 'Field Service IT Technician' (no
+        hardware-domain modifier) is genuinely-hands-on IT support that can be London-based
+        with no driving requirement (verified live, Pearson Whiffin posting) — the JD
+        decides that case, not the title screen."""
+        for t in ("IT Field Service Engineer", "Field Service IT Technician",
+                  "Field Service Engineer"):
+            r = check_title.check_title(t)
+            self.assertFalse(r["discipline_flag"], f"{t} must not be flagged")
+
     def test_memoized_immutable(self):
         # iter-3: parse_target_roles is lru_cache'd -> identical cached object, and a
         # tuple (immutable) so a caller can't mutate the shared result.

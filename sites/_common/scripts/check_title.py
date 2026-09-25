@@ -245,10 +245,45 @@ def _early_career(title_l):
     return bool(_EARLY_CAREER.search(title_l or ""))
 
 
+# ⛔ FIELD SERVICE ENGINEER ROLES NEAR-ALWAYS REQUIRE DRIVING (2026-09-25). target-roles.md
+# §13 explicitly documents: "Field Service Engineer / IT Field Technician (C — often requires
+# driving; he can't drive (provisional only)) — screen out any that need a full licence/car."
+# That rule lived only in prose; check_title() had no code enforcing it, so 11 mechanical/
+# hardware field-service postings (pumps, doors/shutters, chromatography, medical equipment,
+# catering equipment, CCTV/access-control — none IT/desktop-support) passed the tier-phrase
+# match live and had to be screened out manually mid-drive. A BARE "IT Field Service
+# Engineer"/"Field Service IT Technician" title (no hardware-domain modifier) can still be
+# genuinely London-based hands-on IT support with no driving requirement (verified live,
+# Pearson Whiffin posting) — the JD decides that case, not the title. This guard only
+# excludes "field service" titles carrying a NON-IT domain modifier, the unambiguous case.
+_FIELD_SERVICE_MODIFIER = (
+    "pump", "pumps", "utilit", "door", "doors", "shutter", "shutters", "chromatography",
+    "medical", "catering", "electrical", "hvac", "hydraulic", "plant", "valve",
+    "access control", "cctv", "security system", "audio visual", "audio-visual", "av",
+    "fire alarm", "fire safety", "lift", "elevator", "refriger", "boiler", "weighbridge",
+    "forklift", "vending", "coffee machine",
+)
+_FIELD_SERVICE_RE = re.compile(r"\bfield service\b")
+_FIELD_SERVICE_MOD_RE = re.compile(
+    r"\b(" + "|".join(re.escape(w) for w in _FIELD_SERVICE_MODIFIER) + r")\b", re.I)
+
+
+def _field_service_driving_role(title_l):
+    """True iff the title is a non-IT field-service role that near-certainly requires
+    driving between client sites — off-profile per target-roles.md §13. A bare 'IT Field
+    Service Engineer' / 'Field Service IT Technician' (no hardware-domain modifier) is
+    NOT flagged here; that shape needs a JD-level driving check, not a title-level one.
+    The modifier can appear either side of 'field service' ('Chromatography Field Service
+    Engineer' vs 'Field Service Engineer (Pumps/Utilities)')."""
+    if not _FIELD_SERVICE_RE.search(title_l or ""):
+        return False
+    return bool(_FIELD_SERVICE_MOD_RE.search(title_l or ""))
+
+
 def check_title(title):
     title_l = (title or "").lower()
     seniority_flag = any(re.search(r"\b" + re.escape(w) + r"\b", title_l) for w in SENIORITY_WORDS)
-    discipline_flag = _industrial_design_engineer(title_l)
+    discipline_flag = _industrial_design_engineer(title_l) or _field_service_driving_role(title_l)
     early_career_flag = _early_career(title_l)
     best = None  # (tier, phrase) -- prefer the highest tier (A > B > C) on multiple matches
     for phrase, tier in parse_target_roles():
