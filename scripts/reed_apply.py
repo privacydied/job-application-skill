@@ -201,6 +201,17 @@ def apply(job_arg, dry=False):
     # Reed's job page lazy-renders the "Apply now" button via JS; a 5s settle races it
     # and click_apply_now() returns 'none' -> LOOP-END. Give the SPA time to paint.
     time.sleep(9)
+    # ⛔ COURSE-SIGNUP TRAP (found live 2026-09-25): some Reed postings with normal-looking
+    # junior job titles ("Trainee IT Support Assistant", "Trainee Digital Marketing
+    # Executive", "Web Developer Trainee") are actually paid/government-funded TRAINING
+    # COURSE sign-ups in disguise — Reed itself labels them "Training Course" in the job-type
+    # badge, distinct from "Permanent"/"Contract"/"Temporary". check_title.py can't catch
+    # this (the title alone looks like a real junior role); the badge text is the reliable
+    # machine-readable signal. Incident: 3 course postings were auto-applied to before this
+    # check existed and had to be corrected to Skipped after submission.
+    body_text = ev("document.body.innerText") or ""
+    if "Training Course" in str(body_text):
+        return f"[{job_id}] SKIP course-signup (Reed job-type badge = 'Training Course', not a real job)"
     role, company = _scrape_meta()   # capture BEFORE submit (job header vanishes on 404 redirect)
     r = click_apply_now()
     if not r or 'clicked' not in str(r):

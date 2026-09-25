@@ -44,6 +44,24 @@ Modal: Yes/No screening radios + "Continue", then "About you" + "Submit applicat
 Answer screening "Yes" (truthful), Continue to Submit, verify on the Applications list
 (badge/cards) — the post-submit redirect 404s but the app REGISTERS.
 
+## ⛔ COURSE-SIGNUP TRAP, fixed 2026-09-25: "Trainee X" titles can be disguised paid courses
+Some Reed postings with normal-looking junior job titles — "Trainee IT Support Assistant",
+"Trainee Digital Marketing Executive", "Trainee 2nd Line IT Support", "Trainee Web Developer",
+"Web Developer Trainee" — are NOT real jobs. They are paid or government-funded TRAINING
+COURSE sign-ups (Netcom Training, ITOL Recruit, IT Career Switch are repeat offenders) dressed
+up as job listings. `check_title.py` cannot catch this — the title alone reads like a real
+junior role. The reliable signal: Reed itself labels the posting's job-type badge
+**"Training Course"**, distinct from "Permanent"/"Contract"/"Temporary"/"Apprenticeship" —
+visible in `document.body.innerText` right after the title/company/salary line.
+Live incident: 3 course postings (57384761, 57385009, 57385027, all "Netcom Online Learning")
+were auto-applied to by `reed_apply.py` before this check existed, caught only when the user
+noticed and had to be corrected to `Skipped` after submission (never withdrawn — see the
+never-withdraw rule). Two more (56451000 "IT Career Switch", 57376409 "ITOL Recruit") were
+caught live before driving this time.
+**Fix:** `apply()` reads `document.body.innerText` right after page-settle and refuses —
+returns `SKIP course-signup` — if `"Training Course"` appears, before ever clicking Apply now.
+**Extend the check in `reed_apply.py`** if a course poster starts using different badge text.
+
 ## ⚠️ INTEGRITY BUG, fixed 2026-09-25: blanket "click Yes" screener answering is unsafe
 `answer_yes_and_advance()` used to click whichever radio label read "Yes" with **zero
 visibility into the actual question text** — it cannot tell a benign "2+ years' UX
