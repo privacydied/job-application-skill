@@ -102,6 +102,12 @@ _DESIGN_ENG_INDUSTRIAL = (
     # engineer" phrase — a scaffolding/temporary-works structural design role, not a
     # UX/product design role. Same family as the civil/structural modifiers above.
     "scaffolding", "scaffold", "temporary works", "formwork", "falsework",
+    # --- safety/PPE hardware modifier (added 2026-09-25 after a live leak) ---
+    # "Design Engineer – Safety Equipment" scored Tier A off the bare "design engineer"
+    # phrase — its own "Industry Sector" line reads "Mechanical Design Engineer, Mechanical
+    # Engineer, CAD Engineer, ... Industrial Engineering and Product Design", a genuine
+    # mechanical/PPE hardware role, not UX/product design.
+    "safety equipment",
 )
 
 

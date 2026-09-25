@@ -92,7 +92,10 @@ class TestCheckTitle(unittest.TestCase):
         for t in ("Electrical Design Engineer", "ICT Design Engineer",
                   "Mechanical Design Engineer", "CAD Design Engineer",
                   "RF Design Engineer", "Systems Design Engineer",
-                  "Structural Design Engineer"):
+                  "Structural Design Engineer",
+                  # Live leak 2026-09-25: "Design Engineer – Safety Equipment" — its own
+                  # "Industry Sector" line reads Mechanical/CAD/Industrial Engineering.
+                  "Design Engineer – Safety Equipment"):
             r = check_title.check_title(t)
             self.assertFalse(r["eligible"], f"{t} should be off-profile")
             self.assertTrue(r["discipline_flag"], f"{t} should set discipline_flag")
