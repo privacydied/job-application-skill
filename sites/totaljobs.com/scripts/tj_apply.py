@@ -199,7 +199,8 @@ def apply(url, dry=False):
         href = ev("location.href") or ""
         if "Application sent" in str(final) or "confirmation/success" in str(href):
             break
-        if "Sending your application" not in str(final):
+        if ("Sending your application" not in str(final)
+                and "Preparing your application" not in str(final)):
             break  # settled on something else — stop polling, report what we see
     # ⛔ NEITHER "Did all go well with your application?" NOR a bare confirmation/success
     # URL / "Application summary" page is a reliable submit signal on its own (found live

@@ -130,3 +130,16 @@ Applications list before counting it. **When re-driving a one-click-flow posting
 verify against the account's own "N applications" list (or check the job listing itself
 for "Already applied" vs plain "Apply") before trusting a confirmation page — this applies
 whether the driver or a human eyeballed it.**
+
+## Fix 2026-09-25 (same session, later): "Preparing your application" interstitial also breaks the poll early
+
+The polling loop only kept looping while the body showed the literal text "Sending your
+application" — a genuinely-submitted Sanderson Recruitment DevOps Engineer posting instead
+showed **"Preparing your application... This should only take a few seconds"** at the
+first poll, which is a DIFFERENT interstitial string, so the loop's early-exit condition
+fired after a single 2.5s sleep and reported `STUCK` even though the real "Application
+sent!" banner rendered ~3s later (confirmed by a manual re-check). Fixed by widening the
+early-exit condition to also keep polling through "Preparing your application". If another
+interstitial wording turns up STUCK-but-actually-fine again, add its literal string here
+rather than loosening the terminal-state trust criteria (which stays "Application sent!"
+only, per the section above).
