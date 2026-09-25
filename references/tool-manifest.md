@@ -85,7 +85,7 @@ lists reappear outside `check_title.py`.
 | Coalesce unanswered screeners into one worksheet | `screener.py triage <drain.log…> [--worksheet f.csv]` → `teach-batch` | re-derive per session; teach an eligibility gate |
 | Rank the queue by JD FIT, not just ATS ease | `fit_score.py --queue queue.jsonl` (auto in pipeline order) | order by apply_rank alone |
 | Turn inbound email into sourcing rows / outcome events | `scripts/email_ingest.py alerts\|responses` | scrape a board's hostile search UI |
-| File "thank you for applying"/application-receipt emails into a mailbox folder | `scripts/email_ingest.py file [--src INBOX] [--dest "INBOX.Job Applications"] [--dry-run]` (IMAP MOVE, or COPY+STORE\Deleted+EXPUNGE fallback) | a new IMAP mover script — reuses `_connect()`/`is_application_confirmation()` |
+| Inbox triage: keep only next-step job emails (interview/assessment/offer), move all other job mail to a folder | `scripts/email_ingest.py file [--src INBOX] [--dest "INBOX.Job Applications"] [--dry-run]` (IMAP MOVE, or COPY+STORE\Deleted+EXPUNGE fallback) | reuses `_connect()`/`is_job_related()`/`is_next_step()` |
 | Update tracker Status + conversion stats from responses | `outcomes.py apply <events> \| aggregate \| rates` | hand-update post-Applied statuses |
 | Compile a per-task ~2k-token briefing (tools+quirks+live state) | `scripts/brief.py "<intent>"` | re-read SKILL.md + the whole ref corpus |
 | Glance-able session dashboard | `scripts/status_dashboard.py` (writes status.json) | a dozen ad-hoc probes at session start |

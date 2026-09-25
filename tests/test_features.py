@@ -327,38 +327,57 @@ class TestEmailIngest(unittest.TestCase):
             "Update on your application",
             "Thank you for taking the time to interview with us. "
             "Unfortunately, we have decided not to proceed with your application."), "Rejected")
+        # Regression (live-mailbox, UKEF interview thread, 2026-09-25): "invite you to attend
+        # an interview" was missed — the rule required "interview" immediately after
+        # "invite ... to", and "attend an" broke the match, silently leaking a genuine
+        # next-step email into the file-away path.
+        self.assertEqual(email_ingest.classify_response(
+            "UKEF Interview - Service Designer - 18271950",
+            "I would like to invite you to attend an interview on Tuesday at 1pm."), "Interview")
 
-    def test_is_application_confirmation(self):
-        # Genuine receipts — the class of email that should be filed.
-        self.assertTrue(email_ingest.is_application_confirmation(
+    def test_is_job_related(self):
+        # Known ATS sender domain -> job-related regardless of language.
+        self.assertTrue(email_ingest.is_job_related(
+            "Update", "noreply@greenhouse-mail.io", "see attached"))
+        self.assertTrue(email_ingest.is_job_related(
+            "Update", "notifications@myworkdayjobs.com", "see attached"))
+        # Own-domain recruiter, no ATS sender match -> caught by job-application language.
+        self.assertTrue(email_ingest.is_job_related(
+            "Your application for Service Designer",
+            "sandy.sehmi@capgemini.com", "Thank you for applying to Capgemini."))
+        self.assertTrue(email_ingest.is_job_related(
+            "UKEF Interview - Service Designer - 18271950",
+            "recruitment@ukexportfinance.gov.uk", "Our talent acquisition team would like..."))
+        # Unrelated personal mail must never match, even with an unrelated ATS-shaped domain.
+        self.assertFalse(email_ingest.is_job_related(
+            "Your statement is ready", "alerts@mybank.co.uk", "Your balance this month..."))
+        self.assertFalse(email_ingest.is_job_related(
+            "Your weekly newsletter", "news@example.com", "Top stories this week"))
+        self.assertFalse(email_ingest.is_job_related(
+            "Your festival ticket", "tickets@festivalco.com", "See you there!"))
+
+    def test_is_next_step(self):
+        # Genuine next steps — the ONLY class of job-related email kept in the inbox.
+        self.assertTrue(email_ingest.is_next_step("Invitation to interview for UX", ""))
+        self.assertTrue(email_ingest.is_next_step("We are pleased to offer you", ""))
+        self.assertTrue(email_ingest.is_next_step("Please complete an online assessment", ""))
+        # Not next steps -> filed to Job Applications: rejections, plain receipts, unclassified
+        # status noise.
+        self.assertFalse(email_ingest.is_next_step("Unfortunately we won't be progressing", ""))
+        self.assertFalse(email_ingest.is_next_step(
             "Thank you for your application to Figma", "We have received your application"))
-        self.assertTrue(email_ingest.is_application_confirmation(
-            "We have completed your application for IT Support Analyst", ""))
-        self.assertTrue(email_ingest.is_application_confirmation(
-            "We've received your application", ""))
-        # A decision email must never be treated as a plain receipt, even if it opens with a
-        # "thank you" pleasantry — classify_response owns these, so is_application_confirmation
-        # defers to it and returns False.
-        self.assertFalse(email_ingest.is_application_confirmation(
+        self.assertFalse(email_ingest.is_next_step(
+            "Government Recruitment Service: Sift Progression Update",
+            "Thank you for your patience during the sift process."))
+        self.assertFalse(email_ingest.is_next_step(
+            "Application withdrawn - Digital Learning Designer - 478114",
+            "Thank you for your interest in this role."))
+        self.assertFalse(email_ingest.is_next_step("Your weekly newsletter", ""))
+        # A post-interview REJECTION is a decision, not a next step -> filed, not kept.
+        self.assertFalse(email_ingest.is_next_step(
             "Update on your application",
             "Thank you for taking the time to interview with us. "
             "Unfortunately, we have decided not to proceed with your application."))
-        self.assertFalse(email_ingest.is_application_confirmation(
-            "Invitation to interview for UX", ""))
-        # Regression (live-mailbox false positives, 2026-09-25): a generic "thank you for your
-        # <patience/time/interest>" pleasantry inside a status update, withdrawal notice, or
-        # reschedule request must NOT be mistaken for a receipt.
-        self.assertFalse(email_ingest.is_application_confirmation(
-            "Government Recruitment Service: Sift Progression Update",
-            "Thank you for your patience during the sift process."))
-        self.assertFalse(email_ingest.is_application_confirmation(
-            "Application withdrawn - Digital Learning Designer - 478114",
-            "Thank you for your interest in this role."))
-        self.assertFalse(email_ingest.is_application_confirmation(
-            "RE: Missed Interview - Reschedule Request",
-            "Thank you for your time earlier."))
-        self.assertFalse(email_ingest.is_application_confirmation(
-            "Your weekly newsletter", "Thank you for your continued support."))
 
     def test_audit_proofs_scopes_cited_proof_to_own_folder(self):
         # A cited proof must resolve inside the ROW'S OWN applications/<slug>/ folder — matching

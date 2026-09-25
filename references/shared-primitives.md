@@ -124,20 +124,29 @@ hardcode an address/password. Reuses `scripts/email_ingest.py`'s `_connect()`.
   racing for the first one's code.
 
 ## Mailbox filing — `scripts/email_ingest.py file`
-Moves genuine "thank you for applying" / "we have received your application" RECEIPT emails
-out of the inbox into a dedicated mailbox folder over IMAP (default `INBOX.Job Applications`,
-already exists on `imap.example.com`). Uses IMAP MOVE where the server supports it (RFC 6851),
-else COPY + STORE `\Deleted` + EXPUNGE. Pure classifier: `is_application_confirmation(subject,
-body)` — deliberately narrower than `classify_response()` (a decision email is excluded even if
-it opens with a "thank you" pleasantry, so a single email is never double-handled by both).
+Inbox triage over IMAP: keeps ONLY genuine next-step job emails (interview invite, assessment,
+offer) in the inbox; moves every OTHER job-related email (plain "thank you for applying"
+receipts, rejections, status updates, account-verification noise) into a dedicated mailbox
+folder (default `INBOX.Job Applications`). A non-job email (bank statement, newsletter,
+personal mail) is never touched. Uses IMAP MOVE where the server supports it (RFC 6851), else
+COPY + STORE `\Deleted` + EXPUNGE. Two pure classifiers, checked in order:
+  - `is_job_related(subject, from_addr, body)` — the gate. True if the sender matches a known
+    ATS/board domain (`_ATS_SENDER_DOMAINS`, extends `BOARD_HOSTS` with pure ATS-mail platforms
+    like `greenhouse-mail.io`, `myworkdayjobs.com`, `hire.lever.co`, `ashbyhq.com`, `tal.net`,
+    …) OR the subject/body carries unambiguous application/recruitment language
+    (`_JOB_LANGUAGE_RE`) — needed for a real recruiter emailing from their own employer domain
+    (e.g. `sandy.sehmi@capgemini.com`, `ukexportfinance.gov.uk`).
+  - `is_next_step(subject, body)` — reuses `classify_response()`'s Interview/Assessment/Offer
+    rules (Rejected is NOT a next step — nothing left to do).
+  `file_non_next_steps()` moves a message iff `is_job_related()` and NOT `is_next_step()`.
 - CLI: `python3 scripts/email_ingest.py file [--src INBOX] [--dest "INBOX.Job Applications"]
-  [--days 14] [--dry-run]` — always `--dry-run` first when tuning the classifier against a live
-  mailbox; live-probing 2026-09-25 found "thank you for your <patience/time/interest>" generic
-  pleasantries inside status-update/withdrawal/reschedule emails false-positiving until the
-  regex was anchored to "applying"/"your application" specifically and `_OUTCOME_OVERRIDE_RE`
-  gained sift-progression/withdrawn/missed-interview/reschedule exclusions.
-- **Extend `_CONFIRMATION_RE`/`_OUTCOME_OVERRIDE_RE` in this file** for a new false positive —
-  never fork a second mover/classifier.
+  [--days 14] [--dry-run]` — always `--dry-run` first when tuning against a live mailbox.
+  Live-probing 2026-09-25 found `classify_response`'s Interview rule missed "invite you to
+  attend an interview" (extra "attend an" broke the match), which would have leaked a genuine
+  UKEF interview invite into the move — fixed by widening the Interview regex, verified via a
+  second dry-run confirming zero next-step leaks before the real (live) move of 84 messages.
+- **Extend `_ATS_SENDER_DOMAINS`/`_JOB_LANGUAGE_RE`/`_RESPONSE_RULES` in this file** for a new
+  false positive or false negative — never fork a second mover/classifier.
 
 ## Misc shared engines (grep before re-rolling)
 `recaptcha.py`, `accounts.py`, `company_cache.py`, `statedb.py` / `state_view.py`, `journal.py`,

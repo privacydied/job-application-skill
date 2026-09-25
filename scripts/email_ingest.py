@@ -14,11 +14,16 @@ to a dedicated mailbox over IMAP and:
                   their anti-bot surface entirely).
   * `responses` — classifies response emails into {status, company} outcome events for M.3
                   (outcomes.py), which updates the tracker + conversion stats.
-  * `file`      — moves genuine "thank you for applying" / "we have received your
-                  application" RECEIPT emails (distinct from a status decision — see
-                  `is_application_confirmation()`) out of the inbox into a dedicated mailbox
-                  folder (default `INBOX.Job Applications`), so the inbox stops filling up
-                  with these while `responses` keeps seeing decision emails untouched.
+  * `file`      — inbox triage: a job-related email that is a genuine NEXT STEP requiring
+                  the applicant's action or attention (interview invite, assessment/online
+                  test, offer) stays in the inbox; every OTHER job-related email — plain
+                  "thank you for applying" receipts, rejections, generic status updates,
+                  account-verification noise — is moved into a dedicated mailbox folder
+                  (default `INBOX.Job Applications`). A NON-job email (bank statement,
+                  newsletter, festival ticket, …) is never touched either way — see
+                  `is_job_related()`. This is the user's own standing rule (2026-09-25):
+                  "the only thing I want to remain in my inbox are actual next step emails
+                  like 'we want to give you an interview' — any fluff should be moved."
 
 CREDENTIALS. IMAP creds come from ats-credentials.csv (the sanctioned source — never env),
 row whose `site` starts with `imap` (e.g. `imap.gmail.com`): email col = address, password
@@ -37,12 +42,13 @@ CLI:
   email_ingest.py responses [--folder INBOX] [--days 14] # outcome events JSON to stdout
   email_ingest.py file    [--src INBOX] [--dest "INBOX.Job Applications"] [--days 14]
                           [--dry-run]
-                          # moves genuine "thank you for applying" / application-receipt
-                          # confirmation emails (NOT rejections/interviews/offers — those
-                          # stay in --src for classify_response/outcomes.py to see) from
-                          # --src into --dest via IMAP MOVE (COPY + STORE Deleted + EXPUNGE
-                          # fallback for servers without MOVE). Idempotent: only touches
-                          # --src, so a second run just finds nothing left to move.
+                          # Inbox triage. Moves every JOB-RELATED email from --src to --dest
+                          # EXCEPT a genuine next-step (interview invite / assessment / offer)
+                          # — those are left in --src on purpose, so the only job mail left in
+                          # the inbox is something requiring the applicant's action. A non-job
+                          # email is never touched. Via IMAP MOVE (COPY + STORE Deleted +
+                          # EXPUNGE fallback for servers without MOVE). Idempotent: only
+                          # touches --src, so a second run just finds nothing new to move.
   email_ingest.py test     [--folder INBOX]                # connect + count, no parsing
 """
 import json
@@ -70,7 +76,7 @@ _HREF_RE = re.compile(r'<a\b[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', re.I 
 # Response classification: order matters — check the most decisive first.
 _RESPONSE_RULES = [
     ("Offer", r"\b(pleased to offer|offer of employment|job offer|we would like to offer)\b"),
-    ("Interview", r"\b(invit\w* (you )?to (an? )?interview|invitation to interview|"
+    ("Interview", r"\b(invit\w* (you )?to (attend (an? )?)?(an? )?interview|invitation to interview|"
                   # NB: no bare "interview with" — a post-interview REJECTION ("thank you
                   # for taking the time to interview with us. Unfortunately…") contains that
                   # phrase, and Interview is checked before Rejected, so it would mask the
@@ -124,52 +130,67 @@ def classify_response(subject, body):
     return None
 
 
-# ── Application-CONFIRMATION classification (distinct from classify_response above) ─────
-# A "thank you for applying" / "we have received your application" receipt is NOT a status
-# outcome (no interview/offer/rejection decision has happened yet) — classify_response()
-# correctly returns None for it. This is a second, narrower pure classifier for exactly
-# that receipt class, so `file` can move it without touching outcomes.py's rejection/
-# interview/offer detection or its own confirmation logic elsewhere in the funnel.
-_CONFIRMATION_RE = re.compile(
-    # ⛔ "thank you for your <anything>" is too loose on its own — live-mailbox probing found
-    # it firing on "Thank you for your patience", "…your time", "…your interest" inside status
-    # updates, withdrawal notices and even a missed-interview reschedule email, none of which
-    # are receipts. Anchor the "thank you" phrasing specifically to "applying"/"application" so
-    # a generic pleasantry elsewhere in the body can't trigger it.
-    r"\b(thank you for (applying|your application|your recent application)|"
-    r"thanks for applying|"
-    r"we('| ha)ve received your application|application received|"
-    r"application(?:s)? confirmation|your application (?:has been |was )?(?:received|submitted)|"
-    r"we('| ha)ve completed your application|"
-    r"you'?ve successfully applied|successfully submitted your application|"
-    r"confirming (?:receipt of )?your application)\b", re.I)
+# ── Inbox triage: job-related? / genuine next step? ──────────────────────────────────────
+# The user's rule (2026-09-25): keep ONLY genuine next-step emails (interview invite,
+# assessment/test, offer) in the inbox; move every OTHER job-related email — plain "thank
+# you for applying" receipts, rejections, generic status updates, account-verification
+# noise — to a dedicated folder. A NON-job email (bank statement, newsletter, personal mail)
+# must never be touched by either rule, so job-relatedness is checked FIRST and independently
+# of next-step-ness.
 
-# A confirmation-shaped subject that is ACTUALLY a later-stage outcome, a withdrawal, or an
-# unrelated request must not be filed as a plain receipt — e.g. "Your application outcome for
-# the role of X", "Application withdrawn - …", a missed-interview reschedule, or a sift/stage
-# progress update that happens to thank the candidate along the way. Decisive non-receipt
-# language always wins; checked first and excluded from `is_application_confirmation`.
-_OUTCOME_OVERRIDE_RE = re.compile(
-    r"\b(application outcome|regarding your application|update on your application|"
-    r"following your application|application withdrawn|sift progression|"
-    r"missed interview|reschedule|interview request|extra info needed|"
-    r"application update)\b", re.I)
+# Known ATS / job-board sending domains (extends BOARD_HOSTS with pure-ATS mail platforms
+# that never appear in BOARD_HOSTS's alert-link scan because they email FROM these domains
+# rather than linking TO a board). Substring match against the raw From header.
+_ATS_SENDER_DOMAINS = (
+    "greenhouse-mail.io", "greenhouse.io", "hire.lever.co", "lever.co", "ashbyhq.com",
+    "myworkday.com", "myworkdayjobs.com", "workday.com", "successfactors.com",
+    "taleo.net", "icims.com", "smartrecruiters.com", "jobvite.com", "bamboohr.com",
+    "recruitee.com", "teamtailor.com", "teamtailor-mail.com", "workable.com",
+    "workablemail.com", "breezy.hr", "personio.com", "oraclecloud.com", "sap.com",
+    "cornerstoneondemand.com", "jobtrain.co.uk", "tal.net", "networxrecruitment.com",
+    "harri.com", "applygateway.com", "beapplied.com", "otp.workday.com",
+    "recruiting.com", "candidates.workablemail.com",
+) + tuple(BOARD_HOSTS.keys())
+
+# Job-application LANGUAGE — used as the fallback signal when the sender isn't a known ATS
+# domain (a hiring manager or in-house recruiter emailing from the employer's own domain,
+# e.g. "sara.mandic@deptagency.com", never matches a sender-domain list). Anchored to
+# unambiguous application/recruitment phrasing, not generic words like "interview" or
+# "offer" alone (those are the NEXT-STEP signal below, and would double-count here).
+_JOB_LANGUAGE_RE = re.compile(
+    r"\b(your application|job application|application (?:for|to|at)|"
+    r"applying (?:for|to)|your candidacy|your candidature|"
+    r"thank you for (?:your interest|applying)|"
+    r"recruitment team|talent (?:acquisition|team)|hiring team|"
+    r"careers? (?:team|page)|job (?:offer|opening|vacancy)|"
+    r"position (?:you applied|of)|role (?:you applied|of))\b", re.I)
 
 
-def is_application_confirmation(subject, body):
-    """Pure: (subject, body) -> True if this looks like a genuine "your application was
-    received" receipt — the class of email the user wants auto-filed into a Job Applications
-    folder. Deliberately narrower than classify_response: a real interview/offer/rejection
-    email is routed by classify_response instead (checked first here so a decision email
-    that also happens to open with "thank you for applying" is never miscategorised as a
-    plain receipt and hidden from outcomes.py)."""
-    subj = subject or ""
-    blob = f"{subj}\n{body or ''}"
-    if classify_response(subj, body):
-        return False
-    if _OUTCOME_OVERRIDE_RE.search(subj):
-        return False
-    return bool(_CONFIRMATION_RE.search(blob))
+def is_job_related(subject, from_addr, body):
+    """Pure: (subject, from, body) -> True if this email is plausibly part of a job
+    application (any stage) — the gate that keeps `file` from ever touching unrelated inbox
+    mail. True if the sender is a known ATS/board domain, OR the subject/body carries
+    unambiguous application/recruitment language."""
+    frm_low = (from_addr or "").lower()
+    if any(dom in frm_low for dom in _ATS_SENDER_DOMAINS):
+        return True
+    blob = f"{subject or ''}\n{body or ''}"
+    return bool(_JOB_LANGUAGE_RE.search(blob))
+
+
+# A genuine NEXT STEP: something that requires the applicant to act or pay attention (attend
+# an interview, sit an assessment, respond to an offer). Reuses classify_response's decisive,
+# well-tested Interview/Offer/Assessment/Rejected rules rather than a second word list —
+# Rejected is deliberately NOT a next step (nothing left to do) and is excluded here.
+_NEXT_STEP_STATUSES = {"Interview", "Offer", "Assessment"}
+
+
+def is_next_step(subject, body):
+    """Pure: (subject, body) -> True if classify_response() says this is an Interview,
+    Assessment, or Offer email — the ONLY class of job-related email the user wants left in
+    the inbox. Rejected and anything unclassified (plain receipts, status updates, account
+    verification, …) are not next steps, so `file` moves them."""
+    return classify_response(subject, body) in _NEXT_STEP_STATUSES
 
 
 # ── IMAP layer (only reached at runtime; the pure fns above are what tests target) ──────
@@ -321,13 +342,13 @@ def _imap_move(M, folder, uid, dest):
     return True
 
 
-def file_confirmations(src="INBOX", dest="INBOX.Job Applications", days=14, dry_run=False):
-    """Move genuine application-confirmation emails ("thank you for applying", "we have
-    received your application", …) from `src` into `dest` over IMAP. Returns the list of
-    {subject, from} dicts that were (or, in dry-run, would be) moved. Rejection/interview/
-    offer/assessment emails are left untouched — classify_response() already owns those for
-    outcomes.py, and is_application_confirmation() explicitly excludes anything it recognises
-    as a decision so a single email is never double-handled by two different consumers.
+def file_non_next_steps(src="INBOX", dest="INBOX.Job Applications", days=14, dry_run=False):
+    """Inbox triage. Moves every JOB-RELATED email from `src` into `dest` EXCEPT a genuine
+    next step (interview invite, assessment, offer) — those are deliberately left in `src`
+    so the only job mail remaining in the inbox is something requiring the applicant's
+    action. A non-job email (bank statement, newsletter, personal mail) is never touched,
+    gated by is_job_related() before is_next_step() is even considered. Returns the list of
+    {subject, from} dicts that were (or, in dry-run, would be) moved.
 
     Side effects (unless dry_run): moves matching messages in `src`. Never deletes anything
     outright — MOVE/COPY+EXPUNGE relocates the message, it doesn't discard it."""
@@ -343,7 +364,10 @@ def file_confirmations(src="INBOX", dest="INBOX.Job Applications", days=14, dry_
             if typ != "OK" or not msgdata or not msgdata[0] or not isinstance(msgdata[0], tuple):
                 continue
             subject, frm, body = _parse_headers_and_body(msgdata[0][1])
-            if not is_application_confirmation(subject, httpfeed.strip_html(body)):
+            clean_body = httpfeed.strip_html(body)
+            if not is_job_related(subject, frm, clean_body):
+                continue
+            if is_next_step(subject, clean_body):
                 continue
             moved.append({"subject": subject, "from": frm})
             if not dry_run:
@@ -414,13 +438,13 @@ def main():
         dest = opt("--dest", "INBOX.Job Applications")
         dry = "--dry-run" in argv
         try:
-            moved = file_confirmations(src=src, dest=dest,
-                                        days=int(opt("--days", "14")), dry_run=dry)
+            moved = file_non_next_steps(src=src, dest=dest,
+                                         days=int(opt("--days", "14")), dry_run=dry)
         except Exception as e:  # noqa: BLE001
             print("[]"); print(f"ERROR: {e}", file=sys.stderr); return 2
         print(json.dumps(moved, ensure_ascii=False, indent=2))
         verb = "would move" if dry else "moved"
-        print(f"\n{verb} {len(moved)} application-confirmation email(s) from {src!r} "
+        print(f"\n{verb} {len(moved)} non-next-step job email(s) from {src!r} "
               f"to {dest!r}.", file=sys.stderr)
         return 0
     print("Usage: email_ingest.py alerts|responses|file|test "
