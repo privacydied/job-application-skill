@@ -84,12 +84,28 @@ _RESPONSE_RULES = [
                   r"interview (invitation|for)|schedule (an?|your) interview|"
                   r"book (an?|your) interview|first[- ]stage interview|"
                   r"phone screen|screening call|meet the team)\b"),
-    ("Assessment", r"\b(assessment|online test|coding challenge|take[- ]home|"
-                   r"complete (a|the) (task|exercise)|hackerrank|testgorilla|codility)\b"),
     ("Rejected", r"\b(unfortunately|not (be )?(progress|moving forward)|"
                  r"decided not to|will not be taking your application|"
                  r"other candidates|unsuccessful on this occasion|not to proceed|"
                  r"regret to inform)\b"),
+    # NB: Rejected is checked BEFORE Assessment for the same reason Interview's ambiguous
+    # phrase was dropped above — "unfortunately... following the online assessment" is a
+    # rejection, not an invite, and the bare word "assessment" alone can't tell them apart.
+    # Decisive assessment-INVITE signals (invitation/complete/named tool) are safe either
+    # order since they don't co-occur with rejection language in practice.
+    ("Assessment", r"\b(online (assessment|test)|coding challenge|take[- ]home|"
+                   r"complete (a|the) (task|exercise|.*\btest\b)|hackerrank|testgorilla|"
+                   r"codility|invit\w* (you )?to complete|skills test|"
+                   r"complete the .*(test|assessment)|assessment invitation|"
+                   r"invitation to (the |an? )?assessment|"
+                   # A generic "you must act to progress" stage that isn't literally an
+                   # assessment/interview/offer — e.g. a recruiter portal's "complete the
+                   # next stage" / "complete the questions" screening-form nudge (Pontoon,
+                   # live 2026-09-25). Anchored to decisive action language, not bare
+                   # "next steps" (which also appears in receipts/rejections as filler).
+                   r"complete the next stage|complete the questions|"
+                   r"to progress your application, (we need|please)|"
+                   r"next stage of the application process)\b"),
 ]
 
 

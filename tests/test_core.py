@@ -52,7 +52,9 @@ def tearDownModule():
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _SCRIPTS = os.path.join(_HERE, "..", "sites", "_common", "scripts")
+_ROOT_SCRIPTS = os.path.join(_HERE, "..", "scripts")
 sys.path.insert(0, _SCRIPTS)
+sys.path.insert(0, _ROOT_SCRIPTS)
 
 # --- stub the browser layer BEFORE importing atsform/jd -----------------------
 _cfx = types.ModuleType("cfx")
@@ -4905,3 +4907,64 @@ class TestTileVision(unittest.TestCase):
         self.assertEqual(offenders, [],
                          "re-implemented vision caller outside tilevision.py -> "
                          + " | ".join(offenders))
+
+
+class TestEmailIngestNextStep(unittest.TestCase):
+    """email_ingest.py classify_response()/is_next_step() gate what stays in the inbox
+    vs. gets filed to 'INBOX.Job Applications' (user's standing 2026-09-25 rule: only a
+    genuine next step — interview/assessment/offer — stays in the inbox). Real gap found
+    live 2026-09-25: a CSJ 'Invitation to complete the Customer Service Skills Test' email
+    (a genuine Assessment next-step, from the applicant's own OFGEM application that same
+    day) was about to be filed away by `file --dry-run` because the Assessment regex only
+    matched the literal word 'assessment' or a named tool (hackerrank/testgorilla/codility),
+    never the generic 'invitation to complete the <X> test' phrasing CSJ actually uses."""
+
+    def test_csj_skills_test_invite_is_assessment(self):
+        import email_ingest
+        subj = ("Invitation to complete the Customer Service Skills Test - "
+                "Service Desk Analyst - 483210")
+        self.assertEqual(email_ingest.classify_response(subj, ""), "Assessment")
+        self.assertTrue(email_ingest.is_next_step(subj, ""))
+
+    def test_rejection_still_wins_over_assessment_language(self):
+        import email_ingest
+        # Assessment is checked before Rejected in _RESPONSE_RULES order — a genuine
+        # post-assessment rejection must not get masked back into Assessment by this fix.
+        subj = "Unfortunately, you were not successful following the online assessment"
+        self.assertEqual(email_ingest.classify_response(subj, ""), "Rejected")
+
+    def test_offer_and_interview_unaffected(self):
+        import email_ingest
+        self.assertEqual(
+            email_ingest.classify_response("We are pleased to offer you the position", ""),
+            "Offer")
+        self.assertEqual(
+            email_ingest.classify_response("Invitation to interview for Software Engineer", ""),
+            "Interview")
+
+    def test_plain_receipt_is_not_a_next_step(self):
+        import email_ingest
+        subj = "Thank you for applying to Acme Corp"
+        self.assertIsNone(email_ingest.classify_response(subj, ""))
+        self.assertFalse(email_ingest.is_next_step(subj, ""))
+
+    def test_generic_complete_next_stage_nudge_is_a_next_step(self):
+        """Real gap (2026-09-25, Pontoon 'Design Researcher' reminder): a recruiter portal's
+        generic 'complete the next stage of the application process' / 'complete the
+        questions to progress' nudge is a genuine action-required next step, not literally
+        an assessment/interview/offer, but functionally the same 'you must act' category."""
+        import email_ingest
+        subj = "Reminder: Next steps for your Design Researcher application with Pontoon"
+        body = ("We recently wrote to you to ask you to complete the next stage of the "
+                "application process for the Design Researcher position. To progress your "
+                "application, we need you to complete the questions in the link below.")
+        self.assertEqual(email_ingest.classify_response(subj, body), "Assessment")
+        self.assertTrue(email_ingest.is_next_step(subj, body))
+
+    def test_next_stage_language_does_not_mask_a_real_rejection(self):
+        """The new 'complete the next stage' signal must not swallow a rejection that
+        happens to share the phrase 'next stage' (e.g. 'not be progressing ... to the next
+        stage') — Rejected is checked first in _RESPONSE_RULES, so this must stay Rejected."""
+        import email_ingest
+        subj = "Unfortunately we will not be progressing your application to the next stage"
+        self.assertEqual(email_ingest.classify_response(subj, ""), "Rejected")
