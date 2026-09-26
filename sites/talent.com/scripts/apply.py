@@ -124,7 +124,9 @@ def _login_code(wait_s=120):
             M.select("INBOX", readonly=True)
             typ, data = M.search(None, "(SINCE %s)" % datetime.now().strftime("%d-%b-%Y"))
             for n in reversed((data[0].split() if (typ == "OK" and data and data[0]) else [])[-30:]):
-                t, md = M.fetch(n, "(RFC822)")
+                # BODY.PEEK[] — RFC822 is shorthand for BODY[], which implicitly marks the
+                # message \Seen server-side even under a readonly SELECT. See email_ingest.py.
+                t, md = M.fetch(n, "(BODY.PEEK[])")
                 if t != "OK" or not md or not md[0]:
                     continue
                 m = emaillib.message_from_bytes(md[0][1])

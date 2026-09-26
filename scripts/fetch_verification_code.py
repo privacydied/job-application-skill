@@ -364,7 +364,11 @@ def get_code(sender="greenhouse", minutes=20, digits=None, company=None,
             typ, data = M.search(None, f"(SINCE {since})")
             nums = data[0].split() if (typ == "OK" and data and data[0]) else []
             for num in reversed(nums):  # newest first
-                typ, md = M.fetch(num, "(RFC822)")
+                # BODY.PEEK[] — RFC822 is shorthand for BODY[], which implicitly marks a
+                # message \Seen on the server even under a readonly SELECT (readonly only
+                # blocks explicit STORE, not this fetch-triggered side effect; verified live
+                # 2026-09-26 via email_ingest.py's identical bug). PEEK avoids it.
+                typ, md = M.fetch(num, "(BODY.PEEK[])")
                 if typ != "OK" or not md or not md[0]:
                     continue
                 msg = emaillib.message_from_bytes(md[0][1])

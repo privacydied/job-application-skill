@@ -267,7 +267,13 @@ def _fetch(folder, days):
         if typ != "OK":
             return out
         for num in (data[0].split() if data and data[0] else []):
-            typ, msgdata = M.fetch(num, "(RFC822)")
+            # BODY.PEEK[] (not RFC822 / BODY[]) — RFC822 is IMAP shorthand for BODY[], and
+            # fetching BODY[] implicitly sets \Seen on the server even when the mailbox was
+            # SELECTed readonly (readonly only blocks explicit STORE commands, not the
+            # server's own auto-\Seen side effect of a non-peek FETCH — verified live
+            # 2026-09-26: a `responses`/debugging pass over 14 days of mail silently marked
+            # every scanned message read). PEEK fetches the identical bytes without the flag.
+            typ, msgdata = M.fetch(num, "(BODY.PEEK[])")
             if typ != "OK" or not msgdata or not msgdata[0]:
                 continue
             msg = emaillib.message_from_bytes(msgdata[0][1])
@@ -376,7 +382,11 @@ def file_non_next_steps(src="INBOX", dest="INBOX.Job Applications", days=14, dry
         typ, data = M.uid("SEARCH", None, f"(SINCE {since})")
         uids = data[0].split() if (typ == "OK" and data and data[0]) else []
         for uid in uids:
-            typ, msgdata = M.uid("FETCH", uid, "(RFC822)")
+            # BODY.PEEK[] — see the identical note on _fetch() above. Classification reads
+            # every message in the window even when it decides NOT to move it (e.g. it's a
+            # genuine next-step staying in the inbox), so a non-peek fetch here would mark
+            # exactly the messages the user most wants to notice as already-read.
+            typ, msgdata = M.uid("FETCH", uid, "(BODY.PEEK[])")
             if typ != "OK" or not msgdata or not msgdata[0] or not isinstance(msgdata[0], tuple):
                 continue
             subject, frm, body = _parse_headers_and_body(msgdata[0][1])
