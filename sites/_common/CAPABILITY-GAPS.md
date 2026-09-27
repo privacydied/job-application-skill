@@ -467,4 +467,23 @@ note above) without re-reading current state first can literally CONCATENATE new
 old ("LinkedInLinkedIn", "N/AN/A") rather than overwrite it — always re-`snap`/read the live
 value before a second fill attempt, never blind-retry the same type call.
 
+## LinkedIn specifically 500s/times out on every navigate for ~20+ min after a camofox-browser container restart, while other sites (example.com, adzuna.co.uk) work immediately (2026-09-27)
+
+After `camofox-browser` self-restarted from a native-memory-pressure kill (`native memory
+pressure, restarting browser`, `growthMb:348` over a `thresholdMb:300`), `/health` reported
+`browserConnected:true` within ~30s and plain sites (`example.com`, `adzuna.co.uk`) opened
+new tabs instantly. But every `POST /tabs/open` / `/navigate` to any `linkedin.com` URL
+either 500'd (`page.goto: Timeout 30000ms exceeded`, destroying the session) or itself
+timed out client-side at 30-45s, repeatably, across ~5 separate attempts and 2 fresh
+sessions over roughly 20 minutes. Root cause not confirmed — candidates: (a) LinkedIn's own
+anti-bot/rate-limit noticing the restored session's fingerprint looks "different" after the
+restart and slow-walking it, (b) the persisted storage-state profile for this user being in
+a state LinkedIn doesn't like post-restore, (c) plain bad luck/transient LinkedIn-side
+slowness unrelated to our restart. **Do not spin indefinitely retrying LinkedIn navigation
+after a restart** — verify basic engine health with a NON-LinkedIn URL first (confirms the
+browser itself is fine), then if LinkedIn specifically still fails after 2-3 tries a few
+minutes apart, pivot to a different sourcing channel (Adzuna, CSJ, NHS Jobs — same camofox
+tab, no LinkedIn-specific issue observed) rather than blocking all progress on one board
+recovering. Revisit LinkedIn after a longer cooldown (30+ min) if it's still needed.
+
 ## (add further gaps here as they're discovered)
