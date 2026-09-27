@@ -134,6 +134,41 @@ click→wait→`/upload`→confirm-by-filename recipe, just a different icon gly
 attached filename doesn't match the CURRENT application's tailored resume.** Don't trust a
 pre-sign-in CV upload to survive sign-in.
 
+## ⚠️ Country/State-Province picklist pair RESETS EACH OTHER on this LUXGRP tenant (verified live, EssilorLuxottica UX/UI Designer req 947117, 2026-09-27)
+Every time the "Primary Country" (or the per-row work-experience "Country") picklist commits
+a real selection via the type-then-click recipe below, the ADJACENT "Primary State/Province"
+(or "State/Province") picklist on the same row silently reverts to "No Selection" — and
+vice versa: committing State/Province resets Country back to empty. This is NOT a driver bug,
+it is the form's own re-render behavior (confirmed by re-screenshotting after each single
+commit — the OTHER field visibly blanks with no interaction on it). **Fix: always fill
+State/Province FIRST, then Country LAST** (Country appears more stable once set after
+State/Province, in the two rows tested this session — Profile Information and the Current
+Work Experience row). Re-screenshot after every commit and expect to redo the other field
+at least once; do not assume either survives the other's commit without checking.
+
+### Real interaction recipe for these `_input`/`_selectButton` picklists (JS `.value=` does NOT work)
+1. `cfx.sh click-xy <x> <y>` directly on the input to open its dropdown AND establish real
+   browser focus (a JS `.focus()` call on the element does NOT count — `cfx.sh press <key>`
+   sends keys to whatever the browser itself considers focused, and a JS-focused element is
+   invisible to that).
+2. `cfx.sh press <char>` once per character to type the filter text (no batch/type endpoint
+   works reliably here — the field's colon-containing id breaks CSS-selector-based `/type`
+   calls, per the existing NOTES entry above).
+3. Screenshot to read the filtered option list and its real on-screen coordinates, then
+   `cfx.sh click-xy` the exact matching option row. Do not trust `combobox_pick`'s freetext
+   fallback path on these fields (see the existing warning above) — verify the committed
+   value by screenshot every time.
+4. To clear a field before retyping: `cfx.sh press "Control+a"` then `cfx.sh press
+   "Backspace"` — a JS `.value=''` clear does NOT reliably stick (observed appending new
+   text onto stale text once: "Greater LondonLondon").
+
+### UK county list has NO plain "London" option — use "Middlesex"
+The Primary/work-experience State/Province picklist for United Kingdom is an old-style UK
+county list (Aberdeenshire, Anglesey, ... alphabetical). Typing "London" only matches
+"Londonderry" (Northern Ireland). Typing "Greater London" returns "There were no results".
+**"Middlesex"** — the historic county covering most of Greater London including N1 postcodes
+— is the correct, genuine best-match option and is present in the list.
+
 ## `#fbqa_apply` click POST reports `timed out after 30s` on a SUCCESSFUL submit — don't treat the click timeout as failure, re-check page state first
 Both the sign-in submit (`#fbqa_signin`) and the final apply submit (`#fbqa_apply`) triggered
 a real page navigation, and `cfx.click_selector`'s underlying Playwright trusted-click POST
