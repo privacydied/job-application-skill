@@ -193,6 +193,33 @@ posting is still off-lane per the applicant's London/remote-UK screen). Use this
 pre-filter a whole `ats_hint=smartrecruiters` batch from the queue in one HTTP round-trip
 each, before spending a camofox nav+eval cycle on postings that are off-location anyway.
 
+## ⚠️ Employer-defined SPL-AUTOCOMPLETE question can have ZERO backing options (genuine site bug, not a driver gap) — verified live, Williams Racing 2026-09-27
+A required `SPL-AUTOCOMPLETE` "preliminary question" ("Please confirm your notice period.")
+rendered **zero `spl-select-option` elements for every typed input tried** ("One month",
+"Month", "1", "a", "e", "notice", "immediate", "week", "days") — confirmed via
+`document.querySelectorAll('spl-select-option').length === 0` after each keystroke round
+and a 1.3s settle wait. Blurring the field (Tab) without a selection clears the typed text
+back to empty and re-lights "This field is required" — there is no way to satisfy this
+field via typed free text, only via clicking a rendered option, and none ever render. This
+is very likely the employer's own question config missing its option list (a
+SmartRecruiters "custom autocomplete" question type requires an admin-defined value list;
+an empty one is a real, employer-side configuration bug), not a `pick()`/driver defect —
+every OTHER field on the same form (plain Yes/No autocompletes, free-text salary, city)
+worked normally. **Recognize this pattern**: if `pick()`'s type-then-settle step
+consistently yields 0 `spl-select-option` nodes across many different query strings
+(not just one bad guess), stop — it is a dead field, log `Blocked`, do not keep guessing
+more strings indefinitely.
+
+## `pick()`'s final `cfx.click_selector()` frequently TIMES OUT (30s) even though the value commits correctly
+Verified repeatedly live (Williams Racing form): `apply.py pick <id> <text>` throws
+`CfxError: .../click -> timed out after 30s` on nearly every call, yet a screenshot taken
+right after shows the field correctly populated with the picked value. Root cause not
+fully diagnosed (possibly the click lands but the ensuing navigation/re-render event the
+REST endpoint waits on never resolves) — treat the traceback as **non-fatal noise**:
+after a `pick()` timeout, screenshot or `fields` to verify the real committed value before
+assuming failure, rather than retrying the call (a retry rapid-fires another slow 30s
+timeout for no benefit once the value is already set).
+
 ## Net takeaway for a future driver
 A proper `sites/smartrecruiters/scripts/apply.py` should: (1) walk-shadow-DOM to enumerate
 every `SPL-INPUT`/`SPL-RADIO`/`SPL-CHECKBOX`/`SPL-AUTOCOMPLETE` on the page by id, (2) read
