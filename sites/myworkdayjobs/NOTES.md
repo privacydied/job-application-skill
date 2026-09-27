@@ -101,3 +101,26 @@ multiselect branch (formField-by-label → trusted-click Search → pick promptO
 `click_button("Save and Continue")` retries with a trusted `/click` when the synthetic click
 no-ops. So `atsform.py apply <config>` drives My Information — just include `select`/`radio`
 entries for "How Did You Hear About Us?" and "Have you previously worked for …?".
+
+## ⛔ "Create Account" step stalls silently, twice live (2026-09-27, Jupiter Asset Management + Condé Nast)
+
+On two unrelated Workday tenants today, the guest-apply flow's step 1 "Create Account" form
+(email + password + verify password) filled correctly (verified via read-back), and clicking
+the `button[data-automation-id=createAccountSubmitButton]` (also tried via generic text-match
+click) produced NO visible change — no error message, no navigation, no progress indicator —
+even after a 6s wait. A honeypot field ("Enter website. This input is for robots only, do not
+enter if you're human.") is present on the same page but was never touched, so it is unlikely
+to be the direct cause, though its mere presence suggests active bot-detection on this step.
+
+**Not yet root-caused.** Two live sightings, no working fix found this session. Candidates for
+a future investigation: (1) the click may need to be a genuine trusted click via the `/click`
+endpoint with `ref`/`selector` rather than a synthetic `.click()` — same class of issue
+documented elsewhere in this file for Workday's Next/Sign-in buttons (see "synthetic .click()
+no-ops on Workday" notes); (2) Workday's bot-detection may be silently rejecting the whole
+session before this point; (3) the honeypot field may need to be explicitly left with its
+default (empty) value in a specific way rather than simply untouched.
+
+**Workaround for now:** if `Autofill with Resume` -> `Create Account` stalls with no error
+after ~10s and a retry, log `Blocked` (not a 3rd attempt) rather than sink further time — this
+matches the existing "Still stuck after ~10 min -> log Blocked" guidance for Workday generally,
+just found earlier in the flow (step 1 of 7) than previously documented cases.
