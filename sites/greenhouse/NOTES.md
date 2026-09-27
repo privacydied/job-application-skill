@@ -152,3 +152,29 @@ unconditionally, since that route never renders the unsubmitted form.
 ALSO free of live validation-error text, or gated behind a URL-route check — never trust
 "the phrase appears somewhere on the page" alone, especially on an employer's own privacy
 boilerplate (any phrasing overlap risk applies to every ATS, not just Greenhouse).
+
+## Embedded/branded Greenhouse listing — drive the iframe src directly, not the branded page URL (2026-09-27)
+
+Some employers (dmg::media, verified live) serve their Greenhouse posting through their own
+branded careers-page URL (`https://<company-domain>/careers/jobs/<slug>/?gh_jid=<id>`), which
+renders the job description but NOT the actual apply form fields in the top-level document —
+the form itself lives in a hidden `<iframe src="https://job-boards.greenhouse.io/embed/job_app?
+for=<company>&validityToken=...&token=<gh_jid>">`. Driving the branded URL directly gets
+`RESUME_UPLOAD_FAIL no file input for '#resume'` (the fields genuinely aren't in that
+document). **Fix: read the iframe's `src` attribute and `cfx.goto()` that URL directly** — it
+renders the same standard Greenhouse form (name/email/resume/EEO/etc.) as a normal top-level
+page, and `atsform`/`gh_apply.py` drive it exactly as any other Greenhouse posting. Detect
+this shape when `gh_apply.py` reports a missing `#resume` input on first nav: check
+`document.querySelectorAll('iframe')` for a `job-boards.greenhouse.io/embed/job_app` src
+before concluding the form is broken.
+
+## "Authorised to work" renders as checkbox-fieldset, not radio, on some Greenhouse forms — verified again 2026-09-27
+Same shape as the CRITICAL FIX note above documents for a different posting: 4
+`input[type=checkbox]` inside `fieldset.checkbox`, one per option, positionally ordered to
+match the visible option text (no distinguishing `value`/`label` text beyond a numeric
+`value`). `atsform.set_radio`/`combobox_pick` both correctly report NOT_FOUND for it. Fix:
+locate the fieldset by its legend text, index into its checkbox inputs by the OPTION'S
+POSITION in the visible option list, and `.click()` that one directly — same technique both
+times this has been hit live. Worth promoting into a named `atsform` helper
+(`set_checkbox_group_by_position`) next time this recurs a third time, per the
+no-divergent-duplicate rule; two live sightings isn't yet the fork trigger.
