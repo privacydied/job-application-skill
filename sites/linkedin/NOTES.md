@@ -172,6 +172,51 @@ Submit. Uncheck the "Follow <company>" box on Review before submitting.
 - The `Save this application?` `dismiss-save` action clicks the dialog's own **Dismiss (✕)**
   (returns to the form). Save/Discard both CLOSE the modal — don't use them to progress.
 
+## ⚠️ Easy Apply modal is NO LONGER guaranteed to be in shadow DOM (verified live, VCCP Midweight AI Creative, 2026-09-27)
+`easyapply.py`'s core assumption — the modal lives inside a `div.theme--light` shadow
+root, found via `[...document.querySelectorAll('*')].find(e=>e.shadowRoot && ...)` —
+**did not hold this session**. The only shadow host found had just 4 inputs/buttons (a
+small unrelated widget); the real Easy Apply modal (First name, Last name, phone, email,
+city, radios, Submit button — the works) was sitting directly in the **plain light DOM**,
+reachable via ordinary `document.querySelectorAll`. Symptom: `easyapply.py state`/`fill`
+silently resolve against the WRONG root (falls back to `document`, then a naive
+"biggest dialog" scorer grabs the page's own search-filter `[role=dialog]` instead —
+you'll see spurious `checkbox:Jobs | checkbox:Date posted | checkbox:Remote | ...`
+labels in `fill`/`state` output, which is the tell that this has happened). `easyapply
+fill "<label>" "<val>"` still worked for the *first* two fields tested (name, phone) by
+luck/substring match, then broke down for anything past the filter-bar noise (city,
+radios found zero matches). **Root cause not confirmed** (LinkedIn A/B test? modal
+markup migrated out of shadow DOM entirely on some accounts/dates?) — until re-verified,
+treat shadow-DOM as a MAYBE, not a given: check `document.querySelectorAll('.theme--light').shadowRoot?.querySelectorAll('input').length` first; if it's near-zero while a
+modal is visibly open on screen, the fields are in the plain document and you must
+resolve them by direct `document.querySelector`/label-proximity JS, not `easyapply.py`'s
+SR/DLG resolution.
+
+### Working fallback recipe when this happens
+- Plain-DOM radios in this newer markup have **no `<label for>` text and no `.labels[0]`
+  content** — the visible "Yes"/"No" text lives in a **sibling `<p>` two levels up**
+  (`radio.closest('div').parentElement` sibling div's `<p>`), not associated via
+  `for`/`aria-label` at all. Walk: `radio.closest('div').parentElement.querySelector('p').innerText` for the option text, and climb 3-4 more `parentElement` levels from there
+  to find the actual question text (also has no semantic tag — just accumulated
+  `innerText` length as a heuristic).
+- A "Location (city)" autocomplete input with generated obfuscated ids like `«r2f»`
+  (React `useId()` output, literal guillemet characters) — reachable by plain
+  `document.querySelector('input#«IDu»')` (needs the actual unicode guillemets
+  in the selector string, not literal `<`/`>`). Type via `/type mode=keyboard`, wait
+  ~1.5s for the suggestion list, then **use ArrowDown+Enter, not `click-xy`/`click_selector`** — a raw coordinate/selector click on the suggestion row silently
+  no-ops (500 from the click endpoint) even though the row visibly highlights. Verify
+  by re-screenshotting the input's committed text, and re-check it picked the RIGHT
+  option (typing "London" alone surfaced 8 similarly-worded matches incl. Canada/Ohio/
+  Kentucky — ArrowDown-through-list order is NOT guaranteed to put the correct country
+  first; narrow the query, e.g. "Greater London", until only one match remains before
+  committing).
+- The "Additional Questions" step can be MULTI-SCREEN even though it looks like one
+  page — clicking what looks like "Next"/"Review" the first time only scrolled to
+  reveal a second set of required radios/text fields further down the same step
+  (5 more required questions appeared after the visible optional ones). Always
+  re-read `document.body.innerText` for `"This field is required"` after any Next/Review
+  click before assuming you've reached the true review screen.
+
 ## LinkedIn → Adzuna / ApplyIQ external-apply hop
 Several postings (e.g. Solirius Reply User Researcher `4438932407`) route Apply →
 `linkedin.com/safety/go/?url=...adzuna.co.uk...` → Adzuna's own ApplyIQ flow, not a
