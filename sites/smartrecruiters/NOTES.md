@@ -1,5 +1,42 @@
 # SmartRecruiters (jobs.smartrecruiters.com) — verified apply flow (2026-08-28)
 
+## ⛔ Preliminary-questions step ("Screening Questions") uses a DEEPLY NESTED shadow-DOM tree — `atsform.py`'s single-shadow-root walk cannot reach it; recursive traversal required
+Verified live, Version 1 "Service Designer" req 744000139556655, 2026-09-28. This step's
+custom element (`sr-screening-questions-form`) has its OWN shadow root nested inside the
+page's shadow root(s), so a single-level `[...document.querySelectorAll('*')].find(e=>e.shadowRoot)` walk (as used elsewhere in this codebase) finds zero usable inputs even
+though the visible page clearly has ~13 fields. Fix: recurse — `function gather(root,out){
+root.querySelectorAll('input,textarea,select').forEach(e=>out.push(e));
+[...root.querySelectorAll('*')].forEach(e=>{if(e.shadowRoot) gather(e.shadowRoot,out);});
+return out;}` called on `document`, collecting across every nesting depth. Fields have no
+usable name/id for label matching — resolve the question text by walking UP from each
+input via `el.getRootNode().host` (crossing back out of its own shadow boundary) a few
+levels to find the nearest ancestor with real `innerText`.
+- **Click/focus must dispatch mousedown+mouseup+click with explicit `composed:true` and
+  real `clientX/clientY` coordinates matching the element's `getBoundingClientRect()`** —
+  a bare `.click()` on the nested element does NOT reliably open its autocomplete dropdown
+  (verified: several fields required this exact dispatch pattern before the option list
+  rendered). `document.elementFromPoint(x,y)` does NOT pierce this nesting either — it
+  returns the outer `sr-screening-questions-form` custom element regardless of depth, not
+  the actual input — always resolve elements via the recursive `gather()` list by index,
+  never by click coordinate alone.
+- Radio-equivalents here are `spl-radio` custom elements (`role="radio"`), not native
+  `input[type=radio]` — find via the same recursive `querySelectorAll('spl-radio')` and
+  `.click()` directly (this DID work with a bare click, unlike the autocomplete fields).
+- The Submit button on this step is `spl-button` with innerText `"Submit"` (not the
+  earlier `_click_spl_button("Submit")` helper's assumption of a single global button —
+  correctly matches by text after recursive gather, same pattern as fields).
+
+## ⛔ Final Submit can fail with a genuine SERVER-SIDE error, not a validation issue
+"Cannot submit your application. Please try again in a while." + toast "An error occurred,
+please try again later." — occurred twice in a row on the exact same fully-valid,
+no-field-errors form (Version 1 Service Designer, 2026-09-28). This is NOT the client-side
+`content review`/`combobox` failure pattern documented elsewhere in this file; the check()
+equivalent showed zero errors and every required field correctly filled. Treat as a
+genuine platform outage/rate-limit on SmartRecruiters' submit endpoint for this employer's
+posting — log `Blocked` after 2 attempts, do not keep retrying (per the skill's CAPTCHA/
+retry-cap doctrine generally, applied here to a non-CAPTCHA server error of the same
+"stop escalating, it's not you" shape).
+
 No shipped driver existed before this. First real submission: Legal & General, "Product
 Analyst (Funds Oversight)", 744000145913189 — verified end-to-end via camofox.
 
