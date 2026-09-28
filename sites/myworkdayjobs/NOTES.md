@@ -124,3 +124,17 @@ default (empty) value in a specific way rather than simply untouched.
 after ~10s and a retry, log `Blocked` (not a 3rd attempt) rather than sink further time — this
 matches the existing "Still stuck after ~10 min -> log Blocked" guidance for Workday generally,
 just found earlier in the flow (step 1 of 7) than previously documented cases.
+
+## ✅ FIXED (2026-09-28, Entrust Junior Product Designer, R004374): candidate (1) above was correct — use a trusted `cfx.click_selector`, not a raw `.click()`
+Confirmed on a third live tenant: filling the Create Account form exactly as before (email,
+password, verify-password, honeypot left untouched, terms checkbox ticked) then calling
+`cfx.click_selector('button[data-automation-id=createAccountSubmitButton]')` — the SAME
+trusted-click mechanism already documented above for `pageFooterNextButton`/
+`signInSubmitButton` — advanced the flow immediately and correctly to the next step
+(`Autofill with Resume` page). A generic JS `.click()` or ref-based click had been the
+previous (failing) approach on this exact button in the two 2026-07-27 sightings. **This
+button belongs in the same "no-ops on synthetic .click(), needs a trusted /click with
+selector" family as the other Workday nav buttons — treat `createAccountSubmitButton`
+identically to `pageFooterNextButton` from now on, not as a separate mystery.** If it still
+silently stalls after using `click_selector` specifically, then escalate to `Blocked` per
+the workaround above; don't burn time on a raw `.click()` first.
