@@ -168,6 +168,26 @@ this shape when `gh_apply.py` reports a missing `#resume` input on first nav: ch
 `document.querySelectorAll('iframe')` for a `job-boards.greenhouse.io/embed/job_app` src
 before concluding the form is broken.
 
+## ⚠️ Profile-bank fuzzy match mis-answered a company-specific "currently/previously employed by <Company>" screener — verified live, Exadel AI Product Designer, 2026-09-28
+`gh_apply.py`'s screener bank auto-answered "Are you currently employed or contracted to
+Exadel or any of its' subsidiaries?" with **"Yes - Other"** — wrong; Jane has never worked
+at Exadel. The bank matched some generic employment-status fact in
+`applicant-profile.md`/`apply-defaults.json` against the substring "currently employed"
+without checking it was scoped to THIS specific company, and picked a nonsensical "Yes -
+Other" option. The sibling question "Have you previously been employed..." was correctly
+left unanswered (not in the bank at all) and blocked submit with a validation error — this
+is what surfaced the wrong answer on the first question too, on inspection.
+**Fix applied**: manually `atsform.combobox_pick` both fields to "No" (truthful — no prior
+Exadel relationship) immediately before clicking Submit directly, bypassing a second
+`gh_apply.py` re-run (which re-applies the bank and would silently overwrite the correct
+manual answer with "Yes - Other" again — confirmed this happens by re-running once and
+watching it revert). **General lesson: any "employed by/for THIS SPECIFIC EMPLOYER"
+screener question is not a fact the shared profile bank should ever auto-answer** — it's
+inherently per-posting, not a stable applicant fact like "right to work in the UK". If seen
+a third time, this should be excluded from the bank's substring-match candidates
+entirely (e.g. a bank-key denylist for "this company"/"this employer"/company-name-specific
+phrasing) rather than fixed ad hoc per posting again.
+
 ## "Authorised to work" renders as checkbox-fieldset, not radio, on some Greenhouse forms — verified again 2026-09-27
 Same shape as the CRITICAL FIX note above documents for a different posting: 4
 `input[type=checkbox]` inside `fieldset.checkbox`, one per option, positionally ordered to
