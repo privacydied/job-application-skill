@@ -1,0 +1,17 @@
+{
+  "cv": "dojo-brand-motion-resume.pdf",
+  "company": "Dojo",
+  "role": "Brand & Motion Designer",
+  "url": "https://job-boards.greenhouse.io/embed/job_app?for=dojo&token=4997424101",
+  "source": "Greenhouse",
+  "defaults": true,
+  "eeo": false,
+  "cover": "dojo-brand-motion-cover.txt",
+  "fill": {
+    "Location (City)": "London"
+  },
+  "combo": {
+    "Does this working model align": "Yes",
+    "require visa sponsorship": "No"
+  }
+}

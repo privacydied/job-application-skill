@@ -1,0 +1,16 @@
+{
+ "cv": "family-design.pdf",
+ "company": "Theodo",
+ "role": "Senior Product Designer",
+ "url": "https://jobs.lever.co/theodo/1133404c-02ff-4e0b-92de-f88e7f7f79a6",
+ "source": "ats-direct -> Lever",
+ "defaults": true,
+ "fill": {
+  "What is your right to work": "British citizen - full right to work in the UK, no sponsorship required",
+  "salary expectations": "GBP 70,000",
+  "Please link your portfolio": "https://example.com"
+ },
+ "radios": {
+  "happy with 3 days a week": "Yes"
+ }
+}

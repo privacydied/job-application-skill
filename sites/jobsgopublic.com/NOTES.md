@@ -75,3 +75,13 @@ hand-off; it does not name the ATS because the search page does not know it.
   every row observed. Values are strings like `"34206.000000"` — `httpfeed.money()` copes.
   The feed appends the unit when it is not `YEAR`.
 - No CAPTCHA on the sourcing path.
+
+## 2026-10-05: `geo_location=London, UK` now returns result_count 0 (feed under-reports to 0)
+Live check: `?search=digital` = 962, `?keywords=` is ignored (9535), `&geo_location=London%2C%20UK` = 0, bare `London` = 0.
+Until the feed learns the new geo label, drive with `feed.py --nav "https://www.jobsgopublic.com/jobs?search=<q>"
+--pages 2` and filter London on the `address` text locally (that is how the 181-row sweep was done).
+
+## Waltham Forest / Oracle Fusion Recruiting apply (2026-10-09)
+`fa-evng-saasfaprod1.fa.ocs.oraclecloud.com/.../job/<id>`: "Apply Now" -> email + terms (no account, no code) -> a 4-step
+form whose Application Questions include "unspent criminal convictions" and "disciplinary proceedings" - the applicant's own
+declarations, so the run stops (logged Blocked). The page is snapshot-readable with `cfx.sh snap` (refs work).

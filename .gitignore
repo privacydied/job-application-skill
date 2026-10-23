@@ -191,3 +191,8 @@ runcfg/answers/
 .vcode-consumed.json
 .worktrees/
 .runtime_specs/
+docs/applied-since-2026-09-04.md
+
+# UC journal evidence driver (scripts/uc_journal.py)
+uc-journal-posted.csv
+.uc_otp

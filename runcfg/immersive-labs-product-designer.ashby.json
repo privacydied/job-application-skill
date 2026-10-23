@@ -1,0 +1,18 @@
+{
+ "cv": "immersive-pd-resume.pdf",
+ "company": "Immersive",
+ "role": "Product Designer - UK (Remote)",
+ "url": "https://jobs.ashbyhq.com/immersivelabs/5131380f-62ed-4231-a1f3-18aa028854ae/application",
+ "source": "ats-direct",
+ "defaults": true,
+ "location": "London",
+ "fill": {
+  "Website": "https://example.com",
+  "Do you accept": "Yes",
+  "similar roles": "No",
+  "We want you to shine": "No adjustments needed, thank you. I look forward to speaking with the Immersive team."
+ },
+ "toggles": {
+  "without VISA sponsorship": "Yes"
+ }
+}

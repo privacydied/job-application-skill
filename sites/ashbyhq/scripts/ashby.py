@@ -500,7 +500,7 @@ def apply(config_path: str, do_submit: bool = False) -> int:
         if _blk:
             print(f"OFF_LOCATION {cfg.get('company')} | {cfg.get('role')} — {_blk}")
             return 11
-        hit = precheck.already_applied(url=cur_url or cfg.get("url"),
+        hit = precheck.already_applied(url=cfg.get("url") or cur_url,  # cfg url first: the tab may still show the PREVIOUS posting
                                        company=cfg.get("company"), role=cfg.get("role"))
         if hit and precheck.is_applied(hit[0]):
             print(f"SKIP_ALREADY_APPLIED {cfg.get('company')} | {cfg.get('role')} — "

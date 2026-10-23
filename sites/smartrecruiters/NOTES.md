@@ -265,3 +265,19 @@ the `definition` JSON attribute for question metadata instead of parsing rendere
 (4) route every autocomplete/dropdown through type-then-`Enter` (never a synthetic click on
 the option node). This recipe converted the first-ever SmartRecruiters submission for this
 skill; reuse it rather than re-discovering the shadow-DOM traps from scratch.
+
+## 2026-10-15 — Turner & Townsend (oneclick-ui) live submit: four new traps
+- **Autocomplete/multiselect commit:** `/type` with `mode:"fill"` sets the text but does NOT
+  filter the list (ArrowDown+Enter then commits the FIRST unfiltered option — wrong answer).
+  Clear with `mode:"fill", text:""`, then `/type mode:"keyboard"` with a distinctive prefix
+  (e.g. `35,000 - 4`), then ArrowDown+Enter. Verify chips by screenshot.
+- **Education / Experience can be REQUIRED sections** ("Please provide at least one education
+  entry"). `Add` opens an inline card; Institution/Title/Company are autocompletes that only
+  keep a value committed from the list (type keyboard-mode → ArrowDown → Enter, or click the
+  first visible option). Dates are `SPL-DATE-FIELD` with an inner text input: `/type fill`
+  `MM/YYYY` into it works. Description rejects `;`. Click `Save` on the card.
+- **Hiring-manager message:** a JS value-set leaves the SPL-TEXTAREA host `ng-invalid` and
+  blocks Next silently. Type it with `/type` on the inner `<textarea>` (tag it with a data
+  attribute; Playwright CSS pierces open shadow roots).
+- **Screening questions** live as JSON in `SR-SCREENING-QUESTIONS-FORM[definition]`; inputs are
+  `INPUT#question_<uuid>`; radios are `SPL-RADIO` hosts (`.click()` works).

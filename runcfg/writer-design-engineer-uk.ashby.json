@@ -1,0 +1,23 @@
+{
+ "cv": "writer-design-engineer.pdf",
+ "company": "WRITER",
+ "role": "Design engineer (UK)",
+ "url": "https://jobs.ashbyhq.com/WRITER/fe2940b1-d097-472c-a310-4d60a76cecbf/application",
+ "source": "totaljobs->Ashby",
+ "defaults": true,
+ "location": "London",
+ "fill": {
+  "Why are you interested in joining WRITER?": "I'm applying for the Design Engineer (UK) role at WRITER because owning a design system as a product, for both the humans and the AI agents building with it, is the work I'm drawn to at the design-code seam.\n\nI've spent about six years in product and interaction design. As an Interaction Designer at UKHSA on the NHS COVID-19 App, I worked within the GOV.UK Design System, where accessibility is built into every component rather than added afterwards. That's the standard you describe for WDS. On the build side, my project Fifteen is a TypeScript monorepo with a React 18 + Vite front end and an in-house design-system package. I built the design tokens, generated light/dark multi-theme stylesheets and per-theme typography, and the components that consume them. I also build agentic tools myself (a self-hosted LLM assistant with tool use, and a local Whisper + llama.cpp dictation tool), so making a design system legible to AI agents through .md skills and documentation is a problem I find genuinely interesting.\n\nI'd bring a designer's eye for polish and a builder's sense of what keeps a system in sync across Figma, code and docs. I'm London-based, happy with hybrid working, and available immediately. I'd welcome the chance to talk about WDS.",
+  "Please give an example from your professional experience": "Own: at CryptoKnowledge I took a whole product from blank page to running service. I co-designed an 8-week curriculum, created the brand identity, designed and built the WordPress/LearnDash platform, and set up the hosting, CI/CD, security hardening, backups and monitoring myself, then ran the Facebook Ads that filled it. No hand-offs: when something broke, in the design or in the deployment, it was mine to fix. Challenge: on the NHS COVID-19 App I pushed for accessibility to be built into the design from the start rather than retrofitted, working within the GOV.UK Design System and the A11Y project."
+ },
+ "radios": {
+  "Are you located within 50 miles": "London, UK",
+  "Gender": "Decline to self-identify"
+ },
+ "toggles": {
+  "join us for in": "Yes",
+  "at least 18 years": "Yes",
+  "legally authorized to work in the country": "Yes",
+  "require employment visa sponsorship": "No"
+ }
+}

@@ -105,3 +105,11 @@ session-expiry-during-edit bug compounding with the value-doesn't-persist sympto
 causes. If a future run hits the same "field reads back correctly but row stays
 incomplete after Continue" loop more than ~2-3 times on this site, check for the Session
 Expire dialog FIRST before assuming a driver/selector problem.
+
+## Returning applicant fast path (2026-10-05, Design Systems Designer 949, ~35 min)
+Sign in first (`/Account/Login?JobId=<id>`; `RegisterNoPassword` says "You already have an account"), then PreAssessment
+(18+ / right to work) -> "show me previous applications" -> pick the old one -> About You prefilled. **The copy carries the
+old CV-parser mistakes** (last name, known-as, address field, secondary-college row all garbled; UKHSA role missing; Hopin row said
+"freelance"): re-check every field. Native setter persists fine on this ATS when no Session-Expire modal is up; in the
+Employment modal TemplateData[2]=Job title and [3]=Employer (the reverse of the review-table order). Confirmation =
+`Application/ThankYou` ("successfully applied").

@@ -1,0 +1,19 @@
+{
+ "cv": "elliptic-ecc.pdf",
+ "company": "Elliptic",
+ "role": "Education Content Creator - FTC",
+ "url": "https://jobs.ashbyhq.com/elliptic/c6221876-7dd3-4a72-acd0-932bc89e9a1f/application",
+ "source": "linkedin->Ashby",
+ "defaults": true,
+ "location": "London",
+ "files": {
+  "Cover Letter": "elliptic-ecc-cover.txt"
+ },
+ "fill": {
+  "Salary Expectations": "\u00a340,000-\u00a345,000 pro rata"
+ },
+ "toggles": {
+  "work authorization sponsorship": "No",
+  "eight in-office days": "Yes"
+ }
+}

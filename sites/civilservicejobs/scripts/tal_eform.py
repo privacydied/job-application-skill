@@ -282,7 +282,27 @@ def walk(spec, submit=False, max_page=99):
             break
         time.sleep(2.5)
         page += 1
+        page = _revisit_unfilled(page, results)
     return results
+
+
+def _revisit_unfilled(page, results):
+    """CSJ can jump from Personal information straight to Declaration while the Diversity
+    monitoring page is still unfilled (Declaration then lists it under 'problems that need to
+    be fixed' and never renders Submit). If that happens, go back to page 4 and fill it."""
+    if any(k == "revisit" for k, _ in results):
+        return page  # one revisit only - never loop
+    try:
+        body = cfx.evaluate("document.body.innerText") or ""
+    except cfx.CfxError:
+        return page
+    if "Declaration" in _page_title() and "problems that need to be fixed" in body \
+            and "Diversity monitoring" in body.split("problems that need to be fixed", 1)[1][:200]:
+        results.append(("revisit", "Diversity monitoring unfilled - back to page 4"))
+        _navigate(f"{_EOFORM_BASE}/page/4")
+        time.sleep(6)
+        return 4
+    return page
 
 
 def csj_dedup_guard(jcode=None, url=None, company=None, role=None):

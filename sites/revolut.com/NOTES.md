@@ -65,3 +65,9 @@ after the CV + text fields were already filled successfully. Retrying with the e
 same driver will reproduce the same crash; this needs a camofox-side fix (or an
 atsform.py `combobox_pick` mode that refuses option-click and always forces the
 freetext-commit path) before either posting can be pushed to a real submission.
+
+## 2026-10-05 retry (fresh profile `lane4_*`): not attempted - Cloudflare interstitial
+A brand-new browser profile opening `revolut.com/careers/` sits on Cloudflare "Just a moment..." for 10s+ with
+`innerText` length 27 and never renders the job list. Without a warmed profile the careers site is unreachable, and
+the option-click tab crash above is still unfixed. Do not drive Revolut from a fresh profile; use the shared profile
+that already holds the totaljobs/Revolut session, and only after `atsform.combobox_pick` can force the freetext path.

@@ -487,3 +487,32 @@ tab, no LinkedIn-specific issue observed) rather than blocking all progress on o
 recovering. Revisit LinkedIn after a longer cooldown (30+ min) if it's still needed.
 
 ## (add further gaps here as they're discovered)
+
+## Teamtailor careers sites: CV upload + submit read-backs lie (verified 2026-10-05, IMP Software + SunGod)
+`atsform.py apply` reports `FAIL upload 'Upload CV': NONE` and `atsform submit` prints a stale
+`BLOCKED - validation errors: Required. By submitting...` even though both worked: Teamtailor swaps the hidden
+`<input type=file>` for its own chip ("dz-xxx.pdf" shown, a 2nd upload then says "can not upload any more files")
+and the submit navigates to `/applications/<id>/thanks/...` ("Thanks for applying"). Trust the screenshot + the
+URL, not the read-back. Phone widget defaulted correctly to United Kingdom (+44) on both tenants.
+Date input `candidate_answers_attributes_N_date` needs the native value setter; `atsform fill` misses it.
+
+## amazon.jobs "passport" account migration (verified 2026-10-05)
+A logged-out `/applicant/jobs/<id>/apply` redirects to `passport.amazon.jobs`: email -> "transition your account" ->
+Continue -> legal first/last name -> emailed 6-digit code (`scripts/fetch_verification_code.py --sender amazon`) ->
+NEW password (old csv password failed the rules; rotate + update `ats-credentials.csv` row) -> lands on the wizard.
+`amazon_apply.py` cannot click "Apply now" when the button is offscreen; navigate straight to the wizard URL first
+(the script's resume branch then takes over). The wizard's "Skip & continue" (SMS step) needs a dispatched mouse
+sequence; `rclick` returns False. The script's select answers can mis-bind (both job-specific selects defaulted to
+No) - read the Review page before submit. Answer map fixed: previously-applied=Yes, former government employee.
+
+## Fresh browser profile clears several "walls" (2026-10-05, lane4)
+A new `CFX_USER` profile (own cookies and fingerprint) cleared walls that the shared profile kept hitting: the Ashby
+"possible spam" flag (Lendable, Linear, Bjak), the Adzuna ApplyIQ reCAPTCHA grid regenerating, and Adzuna cookie dialogs.
+Retry those Blocked rows from a clean profile before calling them structural. It does NOT help with Cloudflare
+"Just a moment" on revolut.com (a cold profile never passes) or the doorsopen.co invisible reCAPTCHA (still NO-CHANGE).
+Engine hazards seen in the same run: (1) `pipeline.py --own-tab` for an unauthenticated WTTJ profile leaked 6 login tabs
+and pushed the engine over its tab budget, after which EVERY click timed out (`cfx.py check-engine` false) while
+evaluate/press still worked; closing tabs did not fix it, `sudo -n docker compose restart camofox-browser` did (it clears
+profile cookies, so re-login). (2) A one-shot python `claim_tab` does not protect a tab: keep a live process heartbeating,
+or use a separate `CFX_USER` for sourcing and applying. (3) Sourcing and applying in the same profile can evict the apply tab.
+

@@ -1,0 +1,13 @@
+{
+ "cv": "hcompany-product-designer.pdf",
+ "company": "H Company",
+ "role": "Product Designer - London",
+ "url": "https://jobs.ashbyhq.com/hcompany/c27805ef-a751-403c-9589-dee0904c1a66/application",
+ "source": "adzuna->Ashby",
+ "defaults": true,
+ "toggles": {
+  "same position within the last 3 months": "No",
+  "require visa sponsorship": "No",
+  "located in the US, EU or the UK": "Yes"
+ }
+}

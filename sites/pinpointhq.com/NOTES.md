@@ -31,3 +31,23 @@ the genuine blocking gap. Logged `Blocked` both times rather than force a wrong 
 Worth a `probe_widget.py`-style investigation before a third sighting, per the doctrine that
 a stuck widget is a capability gap to debug, not a structural limit — two sightings isn't
 yet the fork/build trigger, but is worth flagging for a focused follow-up session.
+
+## ✅ RESOLVED recipe — Disturbia Brand Designer submitted 2026-10-05 (supersedes the "capability gap" above)
+Reached via Adzuna `/jobs/land/ad/<id>` (read the "Apply for this job" href, `cfx.navigate` it) ->
+`<co>.pinpointhq.com/postings/<uuid>/applications/new`. Whole form drivable with plain JS, no atsform:
+- Fields are addressed by `name` (`application_form[application][first_name|last_name|email|phone|
+  linkedin_url|address1|town|postcode]`; answers `...[answers_attributes][N][number_answer|text_answer|
+  boolean_answer]`). Pick the setter by tag (`HTMLTextAreaElement` vs `HTMLInputElement` prototype) —
+  wrong prototype throws, surfaced as eval 500.
+- **Country `<select>` defaults to United States and shows a US-state select. Set Country = United Kingdom
+  FIRST (value + `change`); the state select then disappears and `town`/`postcode` are plain text.**
+- Yes/No = `input[type=radio][value=true|false]` named `...[answers_attributes][N][boolean_answer]`;
+  `.click()` works.
+- D&I selects are native `<select id$=_Gender|_Ethnicity|…>`: set `.value` of the option with that exact text
+  + `change`. Option lists can omit a truthful choice (Ethnicity had no Mixed) -> choose Prefer Not To Say.
+- Uploads: `POST /tabs/<t>/upload` with `selector=input[name="application_form[application][cv]"]` (and the
+  `[answers_attributes][N][document]` portfolio input) + bare basename in `uploads/`. The input is then
+  REPLACED by a hidden ActiveStorage blob id (value length ~130) — that is the success signal; `files.length`
+  reads 0/absent afterwards, ignore it.
+- Submit = the `SUBMIT APPLICATION` `<button>` `.click()`; success URL `/applications/thanks?token=…`
+  "Your application was received successfully".

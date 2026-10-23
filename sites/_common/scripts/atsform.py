@@ -1505,6 +1505,8 @@ def upload(target, filename):
       for (const lab of labs) {{
         const f = files.find(fi => lab.compareDocumentPosition(fi) & Node.DOCUMENT_POSITION_FOLLOWING);
         if (f && f.id) return 'input[id="'+f.id+'"]';
+        // id-less file inputs (Eightfold / elcompanies.com, 2026-10-15): tag and address it
+        if (f) {{ f.setAttribute('data-ats-upload', '1'); return 'input[data-ats-upload="1"]'; }}
       }}
       return '';
     }})()
@@ -2857,7 +2859,7 @@ def apply(config_path, do_submit=False):
             cur_url = cfx.current_url()
         except Exception:  # noqa: BLE001
             cur_url = ""
-        hit = precheck.already_applied(url=cur_url or cfg.get("url"),
+        hit = precheck.already_applied(url=cfg.get("url") or cur_url,  # cfg url first: the tab may still show the PREVIOUS posting
                                        company=cfg.get("company"), role=cfg.get("role"))
         if hit and precheck.is_applied(hit[0]):
             print(f"SKIP_ALREADY_APPLIED {cfg.get('company')} | {cfg.get('role')} — "

@@ -24,7 +24,8 @@ disguise phrasing is found on THIS board; the two boards' signal shapes differ (
 vs. body language) so each driver keeps its own detector, per NOTES.md's guidance to extend
 in place rather than fork.
 
-Usage: python3 tj_apply.py <job_url> [<job_url> ...] [--dry]
+Usage: python3 tj_apply.py <job_url> [<job_url> ...] [--dry] [--answers answers.json]
+  (--answers: {"question substring": "truthful answer"} for role-specific screeners)
   (job_url = full https://www.totaljobs.com/job/... URL, as sourced by feed.py)
 """
 import re
@@ -90,8 +91,33 @@ def _scrape_meta():
     return (m.get("role") or "", m.get("company") or "")
 
 
+def _external_url():
+    """On the UNVERIFIED 'Did all go well?' page, click 'Company website' and report the
+    employer/agency URL it opens (new tab), closing the leaked tab. Read-only: lets the
+    caller route the posting to the right ATS driver instead of guessing."""
+    try:
+        before = {t.get("tabId") for t in cfx.list_tabs()}
+        ev("""(()=>{const b=[...document.querySelectorAll('button,a')].find(e=>/Company website/i.test(e.innerText));if(b)b.click();})()""")
+        time.sleep(4)
+        for t in cfx.list_tabs():
+            if t.get("tabId") not in before and "totaljobs.com" not in (t.get("url") or ""):
+                u = t.get("url")
+                try:
+                    cfx.close_tab(t["tabId"])
+                except Exception:  # noqa: BLE001
+                    pass
+                return u
+    except Exception as e:  # noqa: BLE001
+        return f"ERR:{str(e)[:60]}"
+    return "none"
+
+
 def _log_applied(url, job_id, role, company, status="Applied?"):
     role = role or f"TotalJobs posting {job_id}"
+    if not company:  # selector misses on the new layout — the URL slug always carries it
+        m = re.search(r"/job/[^/]+/(.+?)-job\d+", url or "")
+        if m:
+            company = " ".join(w.capitalize() for w in m.group(1).split("-"))
     company = company or "(unknown employer — TotalJobs)"
     try:
         r = subprocess.run(
@@ -106,7 +132,8 @@ def _log_applied(url, job_id, role, company, status="Applied?"):
 
 def click_apply():
     return ev("""(function(){
-      var b=[...document.querySelectorAll('button,a')].find(x=>x.innerText.trim()==='Apply');
+      var b=[...document.querySelectorAll('button,a')].find(x=>x.innerText.trim()==='Apply')
+          ||[...document.querySelectorAll('button,a')].find(x=>x.innerText.trim()==='Continue application');
       if(b){b.click();return 'clicked';}
       return 'none';
     })()""")
@@ -135,6 +162,127 @@ def _screening_questions_text():
       if (idx < 0) return '';
       return all.slice(idx, idx + 800);
     })()""") or ""
+
+
+ANSWERS = {}   # per-run question-substring -> answer map (--answers file.json); checked BEFORE the bank
+
+
+def _map_answer(q):
+    ql = (q or "").lower()
+    for k, v in ANSWERS.items():
+        if k.lower() in ql:
+            return v
+    return None
+
+
+def _answer_text_questions():
+    """Fill EMPTY free-text screeners (notice period, salary expectation, 'why are you suited',
+    convictions…) on the Smart Apply review page. Answer source, in order: the per-run
+    --answers map (role-specific text the caller wrote truthfully), then the shared screener
+    bank. Any empty required text field with no answer is returned (apply() then refuses) —
+    nothing is invented here. Returns '' when every empty text field got an answer."""
+    import json as _json
+    import screener  # noqa: E402
+    raw = ev("""(function(){
+      var h=[...document.querySelectorAll('h1,h2,h3,h4,p,span,div')].find(function(x){return x.childElementCount===0&&x.innerText&&x.innerText.trim()==='Additional questions'});
+      if(!h) return '[]';
+      var els=[...document.querySelectorAll('textarea,input[type=text],input[type=number],input:not([type])')]
+        .filter(function(e){return e.offsetParent!==null && !e.value
+          && (h.compareDocumentPosition(e) & Node.DOCUMENT_POSITION_FOLLOWING)});
+      return JSON.stringify(els.map(function(e,i){
+        e.setAttribute('data-tjq',String(i));
+        var lab=(e.labels&&e.labels[0])?e.labels[0]:null;
+        for(var a=e,k=0;!lab&&a&&k<5;k++,a=a.parentElement){var p=a.previousElementSibling; while(p&&!p.innerText.trim()) p=p.previousElementSibling; if(p) lab=p;}
+        return {i:i,num:e.type==='number',q:(lab?lab.innerText:'').split('\\n')[0].replace(/\\*\\s*$/,'').trim()};
+      }));
+    })()""")
+    try:
+        fields = _json.loads(raw) if isinstance(raw, str) else []
+    except ValueError:
+        fields = []
+    missing = []
+    for f in fields:
+        q = f.get("q") or ""
+        ans = _map_answer(q)
+        if ans is None and q:
+            hit = screener.lookup(q)
+            ans = hit["answer"] if hit else None
+        if ans is None:
+            missing.append(q or "(unlabelled text field)")
+            continue
+        if f.get("num"):   # <input type=number> rejects "£40,000" — keep the first number only
+            m = re.search(r"\d[\d,]*", str(ans))
+            if not m:
+                missing.append(q)
+                continue
+            ans = m.group(0).replace(",", "")
+        ev("""(function(){var e=document.querySelector('[data-tjq="%d"]'); if(!e) return 'none';
+          var proto=e.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;
+          Object.getOwnPropertyDescriptor(proto,'value').set.call(e,%s);
+          e.dispatchEvent(new Event('input',{bubbles:true})); e.dispatchEvent(new Event('change',{bubbles:true}));
+          e.dispatchEvent(new Event('blur',{bubbles:true})); return 'ok';})()""" % (f["i"], _json.dumps(ans)))
+        print(f"    text: {q[:70]!r} -> {str(ans)[:60]!r}")
+    return " | ".join(missing)
+
+
+def _answer_screeners_from_bank():
+    """Answer the 'Additional questions' Yes/No radios ONLY from the shared truthful screener
+    bank (sites/_common/scripts/screener.py — profile-derived rows like right-to-work,
+    sponsorship, SC eligibility). Every question must have a bank answer that matches one of
+    its options; if ANY is unknown, nothing is guessed and its text is returned so apply()
+    refuses (same no-blind-answer contract as before — a tech-stack question like
+    'commercial Angular experience?' has no bank row and still blocks). Returns '' when all
+    questions were answered."""
+    import json as _json
+    import screener  # noqa: E402  (same dir as cfx/precheck on sys.path)
+    # The Smart Apply renderer draws each answer as <button role=radio> inside a
+    # <div role=group> labelled by the preceding <label> ("1. Do you have the right…*") — no
+    # native <input type=radio> exists (verified 2026-10-15, Mercator UI/UX Designer). Groups
+    # are addressed by index; native radio groups are handled too for older templates.
+    GROUPS_JS = """(function(){
+      var gs=[...document.querySelectorAll('[role=group],[role=radiogroup],fieldset')]
+        .filter(function(g){return g.querySelector('[role=radio],input[type=radio]')
+          && !g.parentElement.closest('[role=group],[role=radiogroup],fieldset')});
+      return gs;
+    })()"""
+    raw = ev("""(function(){
+      var gs=%s;
+      return JSON.stringify(gs.map(function(g){
+        var lab=null, id=g.getAttribute('aria-labelledby');
+        if(id) lab=document.getElementById(id.split(' ')[0]);
+        if(!lab) lab=g.querySelector('label,legend');
+        for(var a=g,k=0;!lab&&a&&k<4;k++,a=a.parentElement){var p=a.previousElementSibling; while(p&&!p.innerText.trim()) p=p.previousElementSibling; if(p) lab=p;}
+        var q=(lab?lab.innerText:'').split('\\n')[0].replace(/\\*\\s*$/,'').trim();
+        var rs=[...g.querySelectorAll('[role=radio],input[type=radio]')];
+        return {q:q,opts:rs.map(function(r){var l=r.labels&&r.labels[0];return (r.tagName==='INPUT'?(l?l.innerText:r.value):r.innerText).trim()})};
+      }));
+    })()""" % GROUPS_JS)
+    try:
+        groups = _json.loads(raw) if isinstance(raw, str) else []
+    except ValueError:
+        groups = []
+    if not groups:
+        return "(could not read the screening questions)"
+    plan, missing = [], []
+    for gi, g in enumerate(groups):
+        hit = screener.lookup(re.sub(r"^\d+\.\s*", "", g["q"])) if g["q"] else None
+        ans = _map_answer(g["q"]) or (hit or {}).get("answer", "")
+        oi = next((i for i, o in enumerate(g["opts"]) if o.strip().lower() == ans.strip().lower()), None)
+        if oi is None:
+            missing.append(g["q"] or f"(unlabelled group {gi})")
+        else:
+            plan.append((gi, oi, g["opts"][oi], g["q"]))
+    if missing:
+        return " | ".join(missing)
+    for gi, oi, opt, q in plan:
+        ev("""(function(){var g=%s[%d]; var r=[...g.querySelectorAll('[role=radio],input[type=radio]')][%d];
+          if(!r) return 'none'; ((r.labels&&r.labels[0])||r).click(); return 'clicked';})()""" % (GROUPS_JS, gi, oi))
+        print(f"    screener: {q[:70]!r} -> {opt}")
+        time.sleep(0.4)
+    left = ev("""(function(){var gs=%s; return gs.filter(function(g){
+        return ![...g.querySelectorAll('[role=radio],input[type=radio]')].some(function(r){
+          return r.checked||r.getAttribute('aria-checked')==='true'})}).length})()""" % GROUPS_JS)
+    return "" if left == 0 else f"({left} radio group(s) did not commit)"
 
 
 def apply(url, dry=False):
@@ -169,10 +317,23 @@ def apply(url, dry=False):
                          or "Application sent" in str(body_after_apply)
                          or "confirmation/success" in str(href_after_apply))
     if not already_terminal:
+        # Smart Apply renders client-side; on a slow load the first read is just the header
+        # (just the account initial + first name), which used to fall through to a STUCK verdict (2026-10-15: 7/33 rows).
+        # Poll until the review form (or a terminal page) has actually rendered.
+        for _ in range(8):
+            if any(s in str(body_after_apply) for s in ("Send application", "Additional questions",
+                                                        "Application summary", "Did all go well",
+                                                        "Application sent")):
+                break
+            time.sleep(2)
+            body_after_apply = ev("document.body.innerText") or ""
         qtext = _screening_questions_text()
         if qtext:
-            return (f"[{job_id}] BLOCKED — role-specific screening question(s) on the "
-                     f"review form, never blind-answered: {qtext[:250]}")
+            unanswered = " | ".join(x for x in (_answer_text_questions(),
+                                                _answer_screeners_from_bank()) if x)
+            if unanswered:
+                return (f"[{job_id}] BLOCKED — screening question(s) with no truthful bank "
+                        f"answer, never blind-answered: {unanswered[:250]}")
         r2 = click_send_application()
         if not r2 or "clicked" not in str(r2):
             time.sleep(3)
@@ -193,14 +354,19 @@ def apply(url, dry=False):
     # short sleep can read the interstitial and misreport STUCK on a genuinely-submitted
     # application (found live 2026-09-25). Poll up to ~15s for either terminal signal.
     final, href = "", ""
-    for _ in range(6):
+    for _ in range(10):
         time.sleep(2.5)
         final = ev("document.body.innerText") or ""
         href = ev("location.href") or ""
-        if "Application sent" in str(final) or "confirmation/success" in str(href):
+        if "Application sent" in str(final):
             break
+        # confirmation/PENDING ("This should only take a few seconds") and a still-blank
+        # confirmation/success both flip to "Application sent!" a few seconds later (JKR
+        # 108142055, 2026-10-15 was misreported STUCK) — keep polling through them.
         if ("Sending your application" not in str(final)
-                and "Preparing your application" not in str(final)):
+                and "Preparing your application" not in str(final)
+                and "only take a few seconds" not in str(final)
+                and "confirmation/" not in str(href)):
             break  # settled on something else — stop polling, report what we see
     # ⛔ NEITHER "Did all go well with your application?" NOR a bare confirmation/success
     # URL / "Application summary" page is a reliable submit signal on its own (found live
@@ -219,16 +385,22 @@ def apply(url, dry=False):
         return f"[{job_id}] SUBMITTED (url={href})"
     if ("Did all go well" in str(final) or "Application summary" in str(final)
             or "confirmation/success" in str(href)):
+        ext = _external_url()
         return (f"[{job_id}] UNVERIFIED — confirmation-shaped page reached but no "
                 f"'Application sent!' banner; cross-check the job listing ('Already "
                 f"applied'?) and account Applications list before logging Applied "
-                f"(url={href})")
+                f"(url={href}) EXTERNAL={ext}")
     return f"[{job_id}] STUCK (href={href} body={str(final)[:150]})"
 
 
 if __name__ == "__main__":
     args = sys.argv[1:]
     dry = "--dry" in args
+    if "--answers" in args:
+        import json as _json
+        i = args.index("--answers")
+        ANSWERS.update(_json.load(open(args[i + 1], encoding="utf-8")))
+        del args[i:i + 2]
     urls = [a for a in args if a != "--dry"]
     for u in urls:
         print(apply(u.strip(), dry=dry))

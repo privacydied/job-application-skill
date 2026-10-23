@@ -143,3 +143,9 @@ early-exit condition to also keep polling through "Preparing your application". 
 interstitial wording turns up STUCK-but-actually-fine again, add its literal string here
 rather than loosening the terminal-state trust criteria (which stays "Application sent!"
 only, per the section above).
+
+## Verifying tj_apply results (2026-10-05)
+Real submit = confirmation page with "Application sent!" + job page shows "Already applied" (Tenerity DME).
+Revolut/Depop/Millennium/OLIVER returned the "Did all go well?" page with an "Apply on company website"
+button: NOT submitted, job page still shows Apply. Click that button (JS click) to read the employer URL
+(Depop -> etsy.wd5 Workday). Clicking Apply spawns leaked `application/external/cv-download` tabs: close them.

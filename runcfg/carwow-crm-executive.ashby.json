@@ -1,0 +1,20 @@
+{
+ "cv": "carwow-crm.pdf",
+ "company": "Carwow",
+ "role": "CRM Executive",
+ "url": "https://jobs.ashbyhq.com/carwow/11e22c5b-eab7-4b8c-b6db-79cddf678110/application",
+ "source": "linkedin->Ashby",
+ "defaults": true,
+ "fill": {
+  "What appeals to you most about working at Carwow": "Carwow takes a big, stressful purchase and makes it simple, and CRM is where that promise either holds or breaks: the right message at the right point in someone's car-changing journey. I'm a hands-on growth marketer and designer. At Gramrphone I owned lifecycle and retention, segmenting users, building onboarding and re-engagement journeys, and A/B testing messaging and design; the onboarding redesign lifted downloads-to-installs six-fold. I also design my own emails and landing pages, so I can take a campaign from brief to send to results without waiting on anyone, which suits a CRM Executive role at a brand with Carwow's reach.",
+  "high-growth tech scale-up": "I've spent most of my career in startups, where I owned growth and design end to end with small teams, moved fast, tested everything and measured the results. I'm comfortable with ambiguity, like taking ownership, and as someone who can both design and write front-end code I can unblock myself rather than waiting in a queue.",
+  "Where are you located": "London",
+  "notice period": "Available immediately",
+  "expected salary": "\u00a332,000-\u00a338,000",
+  "What visa are you currently on": "None. I'm a UK citizen and will never require sponsorship.",
+  "commit to the location": "Yes, I'm London-based and happy with 3 days a week in the office."
+ },
+ "toggles": {
+  "without sponsorship": "Yes"
+ }
+}

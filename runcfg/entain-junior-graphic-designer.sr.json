@@ -1,0 +1,13 @@
+{
+ "url": "https://jobs.smartrecruiters.com/entain/744000155938794",
+ "cv": "family-design.pdf",
+ "fill": {
+  "first-name-input": "Jane",
+  "last-name-input": "Doe",
+  "email-input": "you@example.com",
+  "confirm-email-input": "you@example.com"
+ },
+ "pick": {
+  "spl-form-element_10": "London, England, United Kingdom"
+ }
+}

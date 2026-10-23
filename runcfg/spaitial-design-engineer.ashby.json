@@ -1,0 +1,21 @@
+{
+ "cv": "spaitial-design-engineer.pdf",
+ "company": "SpAItial",
+ "role": "Design Engineer",
+ "url": "https://jobs.ashbyhq.com/spaitial/30cbc173-3cc7-4275-9bfe-a1e13c84341a/application",
+ "source": "totaljobs->Ashby",
+ "defaults": true,
+ "location": "London",
+ "fill": {
+  "Please share a portfolio showing a design system": "https://example.com. The Fifteen project there (fifteen.example.com) has an in-house design-system package that I built: design tokens, generated multi-theme stylesheets (light/dark plus per-theme typography) and reusable React components, consumed across a TypeScript monorepo. On the NHS COVID-19 App I designed within, and extended patterns for, the GOV.UK Design System.",
+  "Please share one shipped web product and one shipped mobile": "Web: Fifteen (fifteen.example.com), an isochrone map of London that shows everything within a 15-minute walk. I designed it end to end and implemented it myself: React 18 + Vite on MapLibre GL, a self-hosted PMTiles vector basemap, H3 spatial indexing and the design-system package above. Mobile: the NHS COVID-19 App (Test & Trace), where I was an Interaction Designer at UKHSA, prototyping and designing app journeys within the GOV.UK Design System and its accessibility standards. The engineering teams shipped those journeys to millions of users. At Gramrphone I also designed the mobile player interface and redesigned onboarding, which made onboarding four times faster.",
+  "Please share a brief example of how you worked with engineers": "At Gramrphone I took the onboarding redesign from research with musicians, through Figma prototypes, to release with the engineers. I paired with them on the build, reviewed implementation against the prototypes and adjusted flows where technical constraints required it. The shipped version made onboarding four times faster and improved downloads-to-installs throughput six-fold. On the NHS COVID-19 App I worked in a fast-moving agile team, handing prototypes to engineering, reviewing builds and iterating across releases with colleagues across government agencies."
+ },
+ "radios": {
+  "Are you willing to relocate?": "Yes - London Only"
+ },
+ "toggles": {
+  "Right to work in the UK?": "Yes",
+  "Right to work in Germany?": "No"
+ }
+}

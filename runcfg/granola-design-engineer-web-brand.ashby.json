@@ -1,0 +1,19 @@
+{
+ "cv": "granola-de-resume.pdf",
+ "company": "Granola",
+ "role": "Design Engineer (Web & Brand)",
+ "url": "https://jobs.ashbyhq.com/granola/559ae443-4595-48d3-9cb8-580439762d19/application",
+ "source": "Adzuna",
+ "defaults": true,
+ "fill": {
+  "What should we absolutely know about you": "A designer who ships code: six years in product and interaction design, three years in React, TypeScript and HTML/CSS, and I designed and built my own London isochrone map (Fifteen) end to end.",
+  "Why Granola": "I like products that are quiet and careful, and I think a product website should feel as considered as the product. I design and build in the same hand, in React and TypeScript, with a designer's eye for type, layout and hierarchy. I have built a design-system package with tokens and themes, and I care about performance, SEO and accessibility from my NHS COVID-19 App work. I would enjoy owning the site and shaping how visitors first meet Granola.",
+  "salary expectations": "60000",
+  "notice period": "Immediately",
+  "How did you hear about us": "Adzuna"
+ },
+ "toggles": {
+  "Old Street office 5 days a week": "Yes",
+  "require visa sponsorship": "No"
+ }
+}

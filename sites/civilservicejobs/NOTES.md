@@ -360,3 +360,53 @@ same as a cover letter. `tal_eform.py`'s auto-walk will click through Section 2 
 empty spec and land on a Declaration page listing every unfilled page under "problems that need
 to be fixed" with no Submit control rendered — that is NOT a bug, it is working as designed
 (the final submit is correctly gated on real content).
+
+## S1 walk can skip the Diversity page (2026-10-09, HMICFRS Social Media Manager; fix UNVERIFIED live)
+`tal_eform.py` walked Guidance -> Eligibility -> Personal -> **Declaration** and `NO_ADVANCE`d with
+"problems that need to be fixed: Diversity monitoring" - the Diversity page (`/page/4`) had been skipped, not failed.
+Fix applied to `walk()` (`_revisit_unfilled`): on that symptom it goes back to page 4 once, fills it, and continues. Manual
+equivalent that worked: navigate `/page/4`, run the spec fills, Continue, then tick the declaration and Submit on `/page/5`.
+S2 for that role was 4 pages: CV (99856/99863 + name-blind tick 217326) -> PS (72158 + tick 217348) -> ONE behaviour
+(22232, 250 words, STAR) -> Declaration (205967 + 76575). Confirmed "Application received" in the Applications list.
+
+## Civil Service Fast Stream portal — account + initial application (2026-10-10)
+
+Separate system: `apply-civil-service-fast-stream.service.gov.uk`. Reached from a Fast Stream
+advert's "Apply at advertiser's site" button, NOT from CSJ's TAL eform.
+
+Driver: `sites/civilservicejobs/scripts/fast_stream.py` (stages `signup`, `verify`, `status`).
+Field dump helper: `sites/civilservicejobs/scripts/fs_inspect.py` (read-only).
+Credential row: `ats-credentials.csv` site `apply-civil-service-fast-stream.service.gov.uk`.
+
+Verified flow:
+1. Sign-up needs FIVE ticks/fields: first, last, email x2, password x2 (9+ chars, upper,
+   lower, digit), route radio "Civil Service Fast Stream", terms checkbox `agree`, AND the
+   statements checkbox `faststreamEligible`. Missing the second tick shows "Confirm that you
+   understand and agree..." and does not submit.
+2. Activation: 7-character code emailed to the account address. Enter in `#activation`, then
+   "Activate account". The code is single-use. `fetch_verification_code.get_code()` records
+   every code it returns, so a second call for the same code waits forever. Use "Resend code"
+   first, then fetch a fresh code (`digits=7`, `company="fast stream"`, `sender="any"`).
+3. Dashboard tasks: 1 Apply (personal details, schemes, disability, diversity, check, submit);
+   2 online tests (locked until step 1 is submitted; the applicant does these himself);
+   3 scheme-specific questions; 4 assessment centre.
+4. Personal details page (`/application/details/continue`) fields: `firstName`, `lastName`,
+   `preferredName`, `dateOfBirth.day/month/year`, `outsideUk`, `address.line1..4`, `postCode`,
+   `phone`, and the radio `civilServiceExperienceDetails.applicable` (Yes/No). Setting text
+   fields via the native value setter + input/change events works.
+   Radio question: "Are you a civil servant, or have you been on an internship?"
+
+HARD STOPS: the two online tests (applicant only); the final submit (applicant only).
+
+### Fast Stream personal details — verified answers and traps (2026-10-10)
+
+- Session drops after a page save. Re-run `fast_stream.py signin`, or submit via the page's own
+  button. Text fields set with `atsform.fill` did NOT bind on the sign-in page; the native value
+  setter + input/change events does.
+- Civil servant question: the answer "Yes" forces a type. Types offered are only "I am currently a
+  civil servant", EDIP, SIP/SDIP, other internship. A former civil servant (left) has no matching
+  type, so the "I confirm that none of these apply" box (`civilServantEligible`) is the path. The
+  page then rejects "Yes" with no type chosen.
+- Fast Pass question (`fastPassReceived`) is required. Answered "No".
+- Schemes page (`/application/schemes`): up to 3, in order (`schemes[]`), plus `orderAgreed` and
+  `eligible` radios. Cyber Security = `CyberSecurity`. The applicant chooses the schemes.

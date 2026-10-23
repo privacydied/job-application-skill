@@ -101,22 +101,21 @@ account row now exists in `ats-credentials.csv` (`parliament.uk (UK Parliament M
    `BU_PREVIOUS`/`BU_UPDATE`/`BU_NEXT` — no `BU_SUBMIT`). Clicking Next here returns to the
    Application Summary page, which is the same page an incomplete draft shows.
 
-### ⚠️ UNRESOLVED — no confirmable "submitted" signal (2026-09-24)
-After every one of the 7 sections shows **"Mandatory fields complete"** (readable per-link via
-the a11y snapshot title attr, not visible as plain text) and Declaration's Next is clicked, the
-**My Applications list still shows the vacancy under "In progress applications" with an "Update"
-button** — never a distinct "Submitted"/"Applications you have submitted" section, no
-confirmation banner, no confirmation email checked (would need IMAP). The page's own copy
-("select the corresponding Update button" to "update **or submit**") suggests Update IS the
-single re-entrant action for both editing and submitting, and this vendor may simply not
-surface a separate post-submit state — but this is NOT verified. **Logged `Applied?`
-(unconfirmed), never `Applied`, per the no-confirmation-no-Applied rule.** Before trusting a
-future PDS/Commons/Lords MHR submission as `Applied`, verify via: (a) a confirmation email in
-the applicant inbox (`fetch_verification_code.py` can poll for one), or (b) re-opening
-"My applications" after some delay to see if the entry ever migrates out of "In progress", or
-(c) directly asking the recruitment team's contact address whether an application was received.
-Do not re-drive this exact application (re-submitting risks a duplicate); if support confirms
-receipt, flip the tracker row to `Applied` with that confirmation as `--proof`.
+### Submit = Review application -> Apply -> Confirm (verified 2026-10-09, Lords Committee Content Officer, ref APP002740)
+The Declaration page's Next only returns to the Application Summary; that is NOT the submit. The real
+submit is hidden until **every** page shows "Mandatory fields complete" on the summary (hover/snapshot title
+text; Diversity Monitoring also demands a DOB `dd/mm/yyyy` text and Place of birth text, easy to miss):
+1. Summary -> **Review application** (ETREC115GF) -> a visible **Apply** button appears (it drives the hidden
+   `BU_REAL_APPLY` submit).
+2. A modal "Are you sure you want to submit?" -> **Confirm** (click it by snapshot ref; a JS click on the
+   text does not fire).
+3. Success page: "Application successfully submitted ... Reference ID APP00xxxx" - capture as proof.
+The earlier "Applied? (unconfirmed)" PDS Interaction Designer row (2026-09-24) was almost certainly never
+submitted for this reason (its vacancy is now closed, so it cannot be completed).
+Lords (`hrhol`) and Commons/PDS (`hrhoc`) are SEPARATE accounts: the hrhoc login is "Invalid login" on hrhol.
+Criterion Responses = 4 boxes of 100-500 words; the criteria text lives only in the attached JD .docx, which
+needs the session cookie (a 1.2 MB docx cannot be returned through `cfx.sh eval`), so map the advert's
+"You'll have" bullets onto the four boxes.
 
 ### Footgun: fresh `cfx.ensure_tab`/side-tab work can silently swap `hrhoc` → `hrhol`
 Opening a second tab (e.g. to re-read the JD without losing the application draft) and later

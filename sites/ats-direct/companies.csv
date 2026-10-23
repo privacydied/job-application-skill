@@ -38,6 +38,11 @@ fullstory,ashby,FullStory,data|design
 airtable,greenhouse,Airtable,saas|design
 
 # ── music / audio — his standout differentiator (§10) ────────────────────────
+soundcloud71,greenhouse,SoundCloud,music
+focusrite,workable,Focusrite,music
+output,ashby,Output,music
+epidemic-sound,ashby,Epidemic Sound,music
+resident-advisor,workable,Resident Advisor,music
 spotify,lever,Spotify,music|design
 splice,greenhouse,Splice,music
 musixmatch,lever,Musixmatch,music
@@ -916,3 +921,165 @@ younited,lever,Younited,fintech
 zerotier,lever,ZeroTier,devops|security
 zilliz,lever,Zilliz,ai|devtools
 zoox,lever,Zoox,ai|research
+
+# ── added 2026-10-05: design-led London/remote product + fintech/music/creative-tech (slugs verified live) ──
+zilch,ashby,Zilch,fintech
+marshmallow,ashby,Marshmallow,fintech
+mixcloud,workable,Mixcloud,music
+tldraw,ashby,tldraw,design|devtools
+raycast,ashby,Raycast,design|devtools
+chromatic,ashby,Chromatic,design|devtools
+beamery,ashby,Beamery,saas
+faculty,ashby,Faculty,ai|data
+goodlord,ashby,Goodlord,saas
+humaans,ashby,Humaans,saas
+jellyfish,ashby,Jellyfish,agency
+loveholidays,ashby,loveholidays,travel|consumer
+moneybox,ashby,Moneybox,fintech
+motorway,ashby,Motorway,consumer
+mollie,ashby,Mollie,fintech
+multiverse,ashby,Multiverse,saas
+nothing,greenhouse,Nothing,consumer
+posthog,ashby,PostHog,devtools|design
+synthesia,ashby,Synthesia,ai|saas
+seneca,ashby,Seneca,saas
+snyk,ashby,Snyk,security
+supabase,ashby,Supabase,devtools
+elevenlabs,ashby,ElevenLabs,ai|music
+tractable,ashby,Tractable,ai
+backmarket,ashby,Back Market,ecommerce|consumer
+strava,ashby,Strava,consumer
+runway,ashby,Runway,ai|design
+reach,ashby,Reach,media
+oyster,ashby,Oyster,saas
+whoop,ashby,Whoop,consumer
+hive,lever,Hive,consumer
+
+# ── 2026-10-05 lane3 additions (verified live non-empty listing) ─────────────
+moo,lever,MOO,design|ecommerce
+carwow,ashby,Carwow,consumer|design
+octoenergy,lever,Octopus Energy,energy|climate
+loop-earplugs,ashby,Loop Earplugs,consumer|design
+oviva,ashby,Oviva,health
+reply,lever,Reply,agency|design
+cfoinsights,greenhouse,CFO Insights,fintech|agency
+brevo,lever,Brevo,saas|design
+substack,ashby,Substack,media|design
+patreon,ashby,Patreon,media|music
+sylvera,ashby,Sylvera,climate|data
+sweep,ashby,Sweep,climate|saas
+ocadogroup,greenhouse,Ocado Group,ecommerce|design
+lottie,ashby,Lottie,health
+beam,greenhouse,Beam,purpose|fintech
+thought-machine,ashby,Thought Machine,fintech|saas
+wayflyer,ashby,Wayflyer,fintech
+bynder,ashby,Bynder,saas|design
+gamma,ashby,Gamma,ai|design
+zapier,ashby,Zapier,saas|devtools
+n8n,ashby,n8n,devtools|ai
+clickup,ashby,ClickUp,saas|design
+bubble,ashby,Bubble,devtools|design
+heygen,greenhouse,HeyGen,ai|design
+chargepoint,greenhouse,ChargePoint,energy|climate
+
+# ── 2026-10-09 lane8 additions (verified live non-empty listing) ─────────────
+zoe,ashby,ZOE,health|design
+what3words,ashby,what3words,consumer|design
+vitl,ashby,Vitl,consumer|health
+fender,greenhouse,Fender,music
+focal,ashby,Focal,music|ai
+ditto,ashby,Ditto Music,music
+luminate,greenhouse,Luminate,music|data
+anima,ashby,Anima,design|devtools
+checkly,ashby,Checkly,devtools|design
+method,greenhouse,Method,design|agency
+calm,greenhouse,Calm,health|consumer
+bink,recruitee,Bink,fintech
+kroo,workable,Kroo,fintech
+fundingcircle,ashby,Funding Circle,fintech
+beauhurst,greenhouse,Beauhurst,saas|data
+yapily,workable,Yapily,fintech
+bowerswilkins,smartrecruiters,Bowers & Wilkins,music|consumer
+gousto,smartrecruiters,Gousto,consumer|design
+lyst,smartrecruiters,Lyst,ecommerce|design
+zoopla,workable,Zoopla,consumer
+fantasy,lever,Fantasy,agency|design
+codeandtheory,greenhouse,Code and Theory,agency|design
+xero,ashby,Xero,fintech|saas
+immersivelabs,ashby,Immersive Labs,security|saas
+trading212,ashby,Trading 212,fintech
+shawbrook,smartrecruiters,Shawbrook Bank,fintech
+elliptic,ashby,Elliptic,fintech|security
+moonpay,lever,MoonPay,fintech
+mirakl,greenhouse,Mirakl,saas|ecommerce
+ledger,ashby,Ledger,fintech|consumer
+paxos,ashby,Paxos,fintech
+circle,ashby,Circle,fintech
+alchemy,ashby,Alchemy,devtools|fintech
+cube,ashby,Cube,saas|fintech
+sunday,ashby,Sunday,fintech|consumer
+harvey,ashby,Harvey,ai|saas
+legora,ashby,Legora,ai|saas
+gitbook,ashby,GitBook,devtools|design
+mintlify,ashby,Mintlify,devtools|design
+headway,ashby,Headway,consumer|design
+suno,ashby,Suno,music
+sofarsounds,lever,Sofar Sounds,music
+voicemod,ashby,Voicemod,music
+oscar,greenhouse,Oscar,linkedin-sourced
+fuse,ashby,Fuse Energy,linkedin-sourced
+aios,ashby,AIOS,linkedin-sourced
+propel,ashby,Propel,linkedin-sourced
+drive,greenhouse,Drive,linkedin-sourced
+fonio,ashby,fonio.ai,linkedin-sourced
+roku,greenhouse,Roku,linkedin-sourced
+fyxer,ashby,Fyxer,linkedin-sourced
+source,lever,Source,linkedin-sourced
+teton,ashby,Teton,linkedin-sourced
+new,greenhouse,New Look,linkedin-sourced
+david,greenhouse,David Charles Associates Limited,linkedin-sourced
+nexus,greenhouse,Nexus Black,linkedin-sourced
+clearstreet,greenhouse,Clear Street,linkedin-sourced
+david,greenhouse,David Gill Gallery,linkedin-sourced
+voy,greenhouse,Voy,linkedin-sourced
+kernel,ashby,Kernel,linkedin-sourced
+teya,ashby,Teya,linkedin-sourced
+capital,lever,Capital Group,linkedin-sourced
+1,greenhouse,Group 1 Automotive UK,linkedin-sourced
+plaud,ashby,Plaud,linkedin-sourced
+magentic,ashby,Magentic,linkedin-sourced
+algo1,ashby,algo1,linkedin-sourced
+pulse,ashby,Pulse Group,linkedin-sourced
+thgingenuity,greenhouse,THG Ingenuity,linkedin-sourced
+9fin,ashby,9fin,tech
+aibidia,ashby,Aibidia,tech
+bigblue,lever,Bigblue,tech
+circuithub,ashby,CircuitHub,tech
+cloudbees,ashby,CloudBees,tech
+coram-ai,ashby,Coram AI,tech
+edra,ashby,Edra,tech
+eucalyptus,ashby,Eucalyptus,tech
+eucalyptus,greenhouse,Eucalyptus,tech
+folio,ashby,FOLIO,tech
+fin,ashby,Fin,tech
+granola,ashby,Granola,tech
+moss,ashby,Moss,tech
+neko-health,ashby,Neko Health,tech
+perk,ashby,Perk,tech
+preply,ashby,Preply,tech
+quilter,ashby,Quilter,tech
+taktile,ashby,Taktile,tech
+vmlenterprisesolutions,greenhouse,VML Enterprise Solutions,tech
+vantage,ashby,Vantage,tech
+verda,ashby,Verda,tech
+version1,smartrecruiters,Version 1,tech
+wpp-enterprise-solutions,greenhouse,WPP Enterprise Solutions,tech
+writer,ashby,WRITER,tech
+reservoir,ashby,Reservoir,music
+algoriddim,ashby,Algoriddim,music
+universalaudio,greenhouse,Universal Audio,music
+antares,ashby,Antares,music
+hearcom,greenhouse,Hear.com,music
+too-lost,lever,Too Lost,music
+catalog,ashby,Catalog,music
+elyos,ashby,Elyos AI,tech

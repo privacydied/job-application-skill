@@ -1,0 +1,16 @@
+{
+ "cv": "algo1-pd.pdf",
+ "company": "algo1",
+ "role": "Product Designer (UI/UX)",
+ "url": "https://jobs.ashbyhq.com/algo1/7a340ae2-7ce1-479e-a2f0-788b99111515/application",
+ "source": "linkedin->Ashby",
+ "defaults": true,
+ "fill": {
+  "portfolio": "https://example.com",
+  "years of experience do you have with design systems": "About 4 years: working within the NHS/GOV.UK design system on the NHS COVID-19 App, plus building my own token-based design system (React/TypeScript) for Fifteen."
+ },
+ "toggles": {
+  "UK Visa Sponsorship": "No",
+  "based in London (in-person)": "Yes"
+ }
+}

@@ -1,0 +1,21 @@
+{
+ "cv": "healthtech1-product-designer.pdf",
+ "company": "Healthtech-1",
+ "role": "Product Designer",
+ "url": "https://jobs.ashbyhq.com/healthtech-1/a19c81bb-897d-4db1-bddb-dc72c03aa48f/application",
+ "source": "adzuna->Ashby",
+ "defaults": true,
+ "fill": {
+  "What excites you about working in the health sector": "Healthcare is where design decisions have the most direct effect on people's lives. On the NHS COVID-19 App I saw how a clearer screen or a simpler step changed whether someone booked a test or gave up. Fixing access to the NHS, and making the tools staff use every day faster and calmer, is meaningful work I want to keep doing at Healthtech-1.",
+  "What sparks joy in work and life": "Making things: music (I'm half of a West London alt-hip-hop duo, and I design our artwork and branding), building my own tools and side projects like Fifteen, a map of London, and watching a real user get through a flow that used to trip them up.",
+  "What do you want to achieve in the next 10 years": "Grow into a design lead who still ships, on products that make public services work better for people, and build a body of work I'm proud of in health and civic tech.",
+  "Portfolio": "https://example.com"
+ },
+ "toggles": {
+  "work in the office at least 4 days": "Yes",
+  "visa sponsorship": "No"
+ },
+ "radios": {
+  "pronouns": "He/ Him"
+ }
+}

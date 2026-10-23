@@ -138,3 +138,42 @@ selector" family as the other Workday nav buttons — treat `createAccountSubmit
 identically to `pageFooterNextButton` from now on, not as a separate mystery.** If it still
 silently stalls after using `click_selector` specifically, then escalate to `Blocked` per
 the workaround above; don't burn time on a raw `.click()` first.
+
+## Etsy/Depop Workday (2026-10-05, Product Designer 12-month FTC) — verified submit, hard lessons
+- **Only entries typed in the CURRENT page visit survive Save and Continue.** Autofill-parsed Work Experience
+  entries (and any entry edited only via native setter) were silently dropped on save/back-forward; the
+  draft also accumulated 12 duplicate entries. Reliable recipe: Apply Manually, delete all entries, then add
+  every entry in ONE visit and save once.
+- Native-setter does NOT commit `<textarea>` (Role Description, questionnaire answers) or date inputs. Focus the
+  element with JS (`el.focus()`), press Backspace once, then `cfx.press` each character. Month "01" needs
+  `0` then `1`. A half-typed date shows "Invalid Date" and makes every later trusted click time out.
+- Add Another: use JS `.click()` after `scrollIntoView`; trusted click can time out. Next/Submit: trusted
+  `click_selector` works when no invalid date is on the page.
+- If every click on every tab times out (`cfx.py check-engine` says click endpoint broken) restart the
+  container: `cd /volume1/docker/playwright && sudo -n docker compose restart camofox-browser`
+  (`cfx.py restart-engine` only runs `docker start` and does nothing on a running container).
+- Submit lands on Candidate Home (`/jobTasks/completed/application`); proof = "Interest in <Company>!" email
+  from the tenant's `@myworkday.com` plus the My Applications row.
+- Depop is reached from a Totaljobs listing via "Apply on company website" -> etsy.wd5 Depop_Careers.
+
+## Global Media Group (thisisglobal.wd3) Create Account + Application Questions (2026-10-05) - verified submit
+- Create Account stalled with native-setter fill + trusted click. What worked: type email/password/verify with
+  `/type` `mode:keyboard` (real keystrokes), then `cfx.sh click-xy <x> <y>` on the button centre. The call returned
+  HTTP 500 but the page had advanced to My Information. A `click_filter` div overlays `createAccountSubmitButton`.
+  Check the page, do not trust the error.
+- Workday dropdown buttons (`button[aria-haspopup=listbox]`): open with `cfx.sh click <ref>` from `snap`, then tag
+  the `li[role=option]` with an id via eval and `cfx.click_selector('#id')`. The click may time out but still commit.
+- Multiselect (Race/Ethnicity): click the input, type the word, press Enter to filter, then click the option.
+- My Experience can be skipped when Work Experience is not starred: CV upload only (`/upload` `path` = bare file in uploads/).
+- Social Network LinkedIn rejects a normal profile URL ("Invalid LinkedIn URL"); leave it empty.
+
+## Accenture (accenture.wd103) sign-in works now; Workday dropdown recipes (2026-10-05) - verified submit
+- The old "email verification never arrived" wall is gone: Apply Manually -> Sign In With Email using the csv row signed
+  straight in. Re-try the earlier Accenture Blocked rows with that account.
+- "How Did You Hear About Us?" is a hierarchical multiselect. Typing a name in its search box and pressing Enter
+  filters to a match ("Indeed" works). The list has no Adzuna; pressing Enter on a no-match search selects the FIRST item
+  of the open sub-list, so never press Enter on a search with "No matches found".
+- Work Experience is required here: type Job Title / Company / month / year with `/type` `mode:keyboard`
+  (ids `workExperience-<N>--jobTitle`, `--startDate-dateSectionMonth-input`, ...; N is not 1). Save advanced fine.
+- Dropdown buttons: `cfx.sh click <ref>` from a fresh snap, retry once if the option list is empty, then tag the
+  `li[role=option]` with an id and `cfx.click_selector`. Checkbox with hidden input: scrollIntoView then JS `.click()`.

@@ -85,12 +85,15 @@ ANSWERS = [
     (r"area.*of study|area\(s\) of study", _af("area_of_study", "")),
     (r"school name", _af("school", "")),
     (r"bachelor.?s degree.*(design|hci)|degree.*above.*(design|hci)", "Yes"),
-    (r"previously applied to amazon|previously been employed by amazon", "No"),
+    # TRUTH: the applicant HAS applied to Amazon before (many tracker rows), so "previously
+    # applied" is Yes; he has never been EMPLOYED by Amazon. (Was a blanket "No" — wrong.)
+    (r"previously applied to amazon", "Yes"),
+    (r"previously been employed by amazon", "No"),
     (r"non-competition agreement", "No"),
     (r"immigration.*support or sponsorship|need.*sponsorship", "No"),
-    # Jane was a CONTRACTOR/product designer on NHS work, NOT a direct civil servant, so
-    # the honest answer is NEVER a (direct) government employee (also avoids the cascade).
-    (r"direct employee of any government", "No, I was NEVER a government employee"),
+    # TRUTH (applicant-profile.md): Interaction Designer at UK Health Security Agency (DHSC),
+    # Mar 2020 - Aug 2022 = a FORMER (publicly funded) government employee. "NEVER" is false.
+    (r"direct employee of any government", "Yes, I am a FORMER government employee"),
     (r"matter related to amazon|suspended, debarred|future government|"
      r"restriction|reside in|permanent resident in any other", "No"),
     (r"sanctioned countries", "No"),

@@ -512,6 +512,53 @@ def build(slug, jid, eu=False, out=None):
                 answer = "Yes"
             cfg["fill"][label[:60]] = answer
 
+    # DEMOGRAPHIC QUESTIONS (2026-10-15, LiveScore User Researcher). Greenhouse serves the
+    # company's own demographic block under `demographic_questions` (NOT `questions`), and some
+    # tenants mark gender/ethnicity/age REQUIRED. gh_apply's generic EEO filler did not bind
+    # them, so the submit bounced on three "This field is required." errors. Answer them here
+    # from the gitignored apply-defaults.json `applicant` block (the user's standing disclose
+    # instruction: answer gender/ethnicity/orientation/transgender/veteran/disability; age ->
+    # prefer-not), closed-set validated against the real option labels by pick_option.
+    try:
+        with open(os.path.join(ROOT, "sites", "_common", "apply-defaults.json"), encoding="utf-8") as f:
+            appl = (json.load(f) or {}).get("applicant") or {}
+    except Exception:  # noqa: BLE001 — no config = leave demographics to a human
+        appl = {}
+    _decline = re.compile(r"don.?t wish|prefer not|decline|rather not", re.I)
+    for q in ((data.get("demographic_questions") or {}).get("questions") or []):
+        label = (q.get("label") or "").strip()
+        opts = [{"label": a.get("label", "")} for a in (q.get("answer_options") or [])]
+        if not label or not opts:
+            continue
+        low = label.lower()
+        want = None
+        if re.search(r"transgender|gender identity.*(same|match)|sex assigned", low):
+            want = appl.get("transgender") or "No"
+        elif re.search(r"\bage\b|how old", low):
+            want = next((o["label"] for o in opts if _decline.search(o["label"])), None)
+        elif re.search(r"ethnic|race", low):
+            eth = (appl.get("ethnicity") or "").split()[0:1]
+            want = next((o["label"] for o in opts if eth and eth[0].lower() in o["label"].lower()), None)
+        elif re.search(r"orientation", low):
+            so = (appl.get("sexual_orientation") or "").split("/")[0].strip()
+            want = next((o["label"] for o in opts if so and so.lower()[:6] in o["label"].lower()), None)
+        elif re.search(r"disab|illness|infirmity|health condition", low):
+            want = appl.get("disability") or "No"
+        elif re.search(r"veteran|armed forces", low):
+            want = appl.get("veteran") or "No"
+        elif re.search(r"gender|identify as|\bsex\b", low):
+            want = appl.get("gender")
+        if not want:
+            if q.get("required"):
+                unanswered.append(f"{label[:70]}  [demographic options: {[o['label'] for o in opts][:6]}]")
+            continue
+        chosen = pick_option(opts, want, label)
+        if not chosen and str(want).lower() in ("male", "female"):
+            chosen = pick_option(opts, {"male": "Man", "female": "Woman"}[str(want).lower()], label)
+        if chosen:
+            cfg["combo"][label[:60]] = chosen
+        elif q.get("required"):
+            unanswered.append(f"{label[:70]}  [demographic options: {[o['label'] for o in opts][:6]}]")
     os.makedirs(CFG_DIR, exist_ok=True)
     slugrole = re.sub(r"[^a-z0-9]+", "-", role.lower()).strip("-")[:44] or "role"
     path = out or os.path.join(CFG_DIR, f"{slug}-{slugrole}.json")

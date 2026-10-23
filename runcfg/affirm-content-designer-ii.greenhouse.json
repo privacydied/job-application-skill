@@ -1,0 +1,17 @@
+{
+  "cv": "family-content.pdf",
+  "company": "Affirm",
+  "role": "Content Designer II",
+  "url": "https://job-boards.greenhouse.io/affirm/jobs/8008481003",
+  "source": "Greenhouse",
+  "defaults": true,
+  "eeo": false,
+  "cover": "affirm-content-designer-ii-cover.txt",
+  "fill": {},
+  "combo": {
+    "require visa sponsorship": "No",
+    "How did you first learn about Affirm": "Job board",
+    "previously been employed at Affirm": "I have not previously been employed at Affirm"
+  },
+  "no_submit": false
+}

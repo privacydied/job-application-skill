@@ -46,3 +46,24 @@ Workable handoff).
   plain "Accept" button in the DOM — it's a non-blocking banner, just click past/around
   it) and retry.
 - Confirmation heading after submit: `Application submitted: <Role>`.
+
+## Native ApplyIQ driver — `scripts/apply.py` (verified live 2026-10-23: Mercor x2, Square One)
+- Two Adzuna apply link shapes on `/details/<id>`: `.../details/<id>/apply?aztt=…` = NATIVE
+  ApplyIQ form (drivable); `/jobs/land/ad/<id>?aztt=…` = external redirect to the employer /
+  CV-Library / Reed / jobs-in-football etc. (follow it, then use that board's driver — Reed is
+  excluded). `apply.py <id>` reports `EXTERNAL` for the latter and never drives it.
+- `apply.py <id> [--cv family-design.pdf] [--answers a.json] [--portfolio dz-portfolio.pdf]
+  [--submit]`: without `--submit` it fills + lists every field/answer and STOPS; with it, solves the
+  reCAPTCHA checkbox (`recaptcha.py click`), uses a TRUSTED click on "Submit Application"
+  (a JS `.click()` bounced), waits for `Application submitted`, writes `confirmation.txt`, and
+  logs `Applied` with proof. Saved CVs live in the Adzuna account (`select[name=cvId]`), picked
+  by filename — no per-application upload.
+- Unknown employer screeners are never guessed: the driver prints `UNRESOLVED` and exits 7.
+  Opinion/personal essays ("3 words that describe you", "how has AI changed your work"), SC/DV
+  vetting questionnaires and nationality-history blocks are the applicant's own — log Blocked/Skipped.
+- Some employers add a REQUIRED unnamed `input[type=file]` (Costello Medical "portfolio of work –
+  if a file, upload here") whose label is empty ("Please choose a file for"). `--portfolio` attaches
+  `uploads/dz-portfolio.pdf` to it, but Costello still bounced "Please review the required fields"
+  after the attach (2 attempts) — left Blocked; likely needs a human-trusted file pick.
+- The screener bank answered `salary expectation` with 65000 for a £28–33k Digital Designer role:
+  pass the advertised band in `--answers` rather than trusting the bank on pay questions.

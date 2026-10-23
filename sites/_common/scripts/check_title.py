@@ -48,8 +48,8 @@ TARGET_ROLES = os.path.join(_REFS, "target-roles.md")
 if not os.path.exists(TARGET_ROLES) and os.path.exists(os.path.join(_REFS, "target-roles.example.md")):
     TARGET_ROLES = os.path.join(_REFS, "target-roles.example.md")
 
-SENIORITY_WORDS = ("senior", "lead", "principal", "staff", "director", "head", "manager",
-                    "vp", "vice president", "chief", "founding")
+SENIORITY_WORDS = ("senior", "sr", "snr", "lead", "principal", "staff", "director", "head",
+                    "manager", "vp", "vice president", "chief", "founding")
 
 # DISCIPLINE FALSE-COGNATE GUARD (real gap found live 2026-07-15): "Design Engineer"
 # is Tier A (Jane's literal positioning), but LinkedIn returns literal

@@ -1,0 +1,27 @@
+{
+ "company": "Est\u00e9e Lauder Companies",
+ "role": "Digital Designer - 12 month Fixed Term Contract",
+ "url": "https://careers.elcompanies.com/careers/apply?pid=1168275658291",
+ "upload": {
+  "Upload your resume": "elc-digital-designer.pdf"
+ },
+ "fill": {
+  "#Position_Specific_Questions_q_address": "Flat 3, The Forge Building, 22 Wharf Road",
+  "#Position_Specific_Questions_q_city": "London",
+  "#Position_Specific_Questions_q_zip": "[postcode]",
+  "#Position_Specific_Questions_q_cust_salaryExpect": "40000",
+  "#Position_Specific_Questions_q_cust_pwebsite": "https://example.com",
+  "#Position_Specific_Questions_q_cust_mostrecent": "CryptoKnowledge",
+  "#Position_Specific_Questions_q_cust_currentjobtitle": "UX Designer",
+  "#Position_Specific_Questions_q_cust_institution": "University of the Arts London",
+  "#Position_Specific_Questions_q_cust_areaofstudy": "BA Information & Interface Design",
+  "#Contact_Information_firstname": "Jane",
+  "#Contact_Information_lastname": "Doe",
+  "#Contact_Information_email": "you@example.com",
+  "#Email_Verification_verify_email_question": "you@example.com",
+  "#Contact_Information_phone": "07804605448",
+  "#Position_Specific_Questions_q_cellPhone": "+44 7700 900000"
+ },
+ "radios": {},
+ "force": false
+}

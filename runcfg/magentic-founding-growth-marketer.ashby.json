@@ -1,0 +1,18 @@
+{
+ "cv": "magentic-growth.pdf",
+ "company": "Magentic",
+ "role": "Founding Growth Marketer",
+ "url": "https://jobs.ashbyhq.com/magentic/036ab5ae-1ed9-4525-a734-a1ed3b6448dd/application",
+ "source": "linkedin->Ashby",
+ "defaults": true,
+ "fill": {
+  "notice period": "Available immediately",
+  "compensation expectations": "\u00a350,000-\u00a360,000 base, flexible depending on the overall package and equity.",
+  "recent project": "As Head of Growth and Design at Gramrphone, a music-tech startup, I owned growth end to end with a very small team. I mapped the funnel from acquisition through onboarding to retention, set up the analytics, and ran a programme of A/B tests on landing pages, onboarding and lifecycle messaging. The biggest win was redesigning onboarding: it became four times faster and downloads-to-installs rose six-fold. Because I design and write front-end code myself, I could ship experiments the same day rather than waiting on engineering. Before that, at CryptoKnowledge, I built the brand, website and content and ran the Facebook Ads funnels that filled the course, optimising CPA week by week. That's the founding-marketer pattern I'd bring to Magentic: find the channel that works, build the assets and measure everything."
+ },
+ "toggles": {
+  "visa sponsorship": "No",
+  "based in the UK or Ireland": "Yes",
+  "office 3-4 days": "Yes"
+ }
+}

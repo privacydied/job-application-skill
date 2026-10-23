@@ -341,6 +341,16 @@ def opt(argv, name, default=None):
 
 def main():
     argv = sys.argv[1:]
+    if {"-h", "--help"} & set(argv):
+        # Guard: an unknown flag used to fall through and START DRIVING the queue (a bare
+        # `--help` submitted LinkedIn Easy-Apply forms). Print usage and exit instead.
+        print(__doc__)
+        return 0
+    known = {"--refresh", "--force", "--dry-run", "--max", "--resume", "--boards", "--ats"}
+    bad = [a for a in argv if a.startswith("-") and a not in known]
+    if bad:
+        print(f"apply_queue: unknown option(s) {bad} — refusing to drive. See --help.", file=sys.stderr)
+        return 2
     refresh = "--refresh" in argv
     force = "--force" in argv
     dry_run = "--dry-run" in argv

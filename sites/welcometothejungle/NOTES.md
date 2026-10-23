@@ -176,3 +176,16 @@ with `cfx.goto` and retry, rather than proceeding.
 Fix to make in `apply.py start`: verify the post-navigation host and the presence of the modal
 before printing IN-PLATFORM, and return non-zero when `Progress` is `?` AND `Send enabled` is
 `None` (currently both-unknown is reported as success).
+
+## 2026-10-05 findings (Lendable / IMP / NEC / zaizi drives)
+- **`apply.py dismiss-promo` (and `start`'s auto-dismiss) can click the WTTJ NAV LOGO instead of the modal X** — its
+  "first svg in the ancestor" climb lands on the header logo, which navigates to `uk.welcometothejungle.com`
+  (marketing host) and drops the whole apply modal. Workaround: re-`cfx.goto` `/jobs/<id>/apply` (answers persist
+  server-side) and close the promo with a trusted `cfx.sh click-xy` on the dialog's X (top-right of the white card).
+- `apply.py start` bounced to the marketing host on every call after a pending **"Did you apply?"** toast; clear it with
+  `apply.py resolve-applied no|yes` FIRST, then `cfx.goto` the job, then click the page's `Apply` button with a
+  dispatched mouse sequence (see `/tmp`-free one-liner in `_react_click`).
+- On the `/apply` page a saved section renders READ-ONLY (react-selects absent -> `pick` says SELECT_NF). Click the
+  section's pencil (a button at the right of the section heading, x~875) with `click-xy` to re-open it.
+- In-platform Send for ATS-backed jobs still returns EXTERNAL_FALLBACK (Lendable -> Ashby). Ashby on Lendable flags
+  the submit as spam (known wall) and the CV-autofill race can blank radios/salary on a 2nd attempt.

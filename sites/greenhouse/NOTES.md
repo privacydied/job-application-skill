@@ -198,3 +198,12 @@ POSITION in the visible option list, and `.click()` that one directly — same t
 times this has been hit live. Worth promoting into a named `atsform` helper
 (`set_checkbox_group_by_position`) next time this recurs a third time, per the
 no-divergent-duplicate rule; two live sightings isn't yet the fork trigger.
+
+## Mixpanel Production Designer (2026-10-05) - react-select values that "revert" were bank answers that are not real options
+`gh_apply.py` filled combos from the screener bank (`Company careers site`, `Yes`), which are NOT in the option list, so
+`combobox_pick` fell back to free text and the value was lost on re-render. The probe (`scripts/probe_widget.py "<label>"`)
+showed the widget opens fine. Fix: read the real labels from the keyless API
+(`boards-api.greenhouse.io/v1/boards/<slug>/jobs/<id>?questions=true`) and commit each with
+`atsform.py pick "<label>" "<exact option>"` (EEO too: `No`, `I am not a protected veteran`, `Two or More Races`), re-read the
+`.select__single-value` of every control, then `atsform.py submit "Submit application"`. Also fill the required
+LinkedIn / Portfolio text boxes that the config missed.

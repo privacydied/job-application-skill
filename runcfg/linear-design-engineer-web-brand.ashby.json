@@ -1,0 +1,18 @@
+{
+ "cv": "dz-sungod-design-engineer.pdf",
+ "company": "Linear",
+ "role": "Design Engineer (Web & Brand)",
+ "url": "https://jobs.ashbyhq.com/linear/ea0b5868-6d7a-46fa-99d8-207cd19357a6",
+ "source": "ats-direct",
+ "defaults": true,
+ "location": "London",
+ "fill": {
+  "Twitter": "https://x.com/janedoe",
+  "Cover letter": "I am applying for the Design Engineer (Web & Brand) role at Linear because it sits where I already work: design and code shipped together, with craft in the foreground for a developer tool. I'm extremely good at the seam between design and implementation. I design in Figma and then build in HTML/CSS/JS and Node — so I prototype in the real medium rather than describing it, and I can tell when an interaction is going to feel wrong because of how it has to be built. Working that way means handoff stops being a negotiation; I hand over something engineers can argue with concretely.\n\nThe thing I could genuinely teach is accessibility as a craft rather than a checklist. On the NHS COVID-19 App I worked inside the GOV.UK Design System on the A11Y project, and I learned that WCAG conformance and actual usability come apart constantly — you can pass every automated check and still ship something unusable with VoiceOver. I can teach how to test with real assistive tech, how to write a focus order that makes sense, how to build components that degrade well, and — most usefully — how to make the accessible version the default one rather than a variant someone has to remember to add. It reliably makes the product better for everyone, which is the argument that actually lands with teams.\n\nThe other thing I'd bring is research literacy. Five years of running usability sessions and growth experiments means I'm comfortable being wrong in public and changing a design because the evidence said so.",
+  "Projects": "gearo.app: price-comparison engine across 12+ marketplaces, owned end to end (UX/product design, Node.js and Postgres back end, scraping and normalisation pipeline). fifteen.example.com: London isochrone map built as a TypeScript monorepo (React 18, Vite, MapLibre GL, in-house design-system package with design tokens and multi-theme stylesheets). discord-llm-bot: self-hosted agentic Discord assistant with tool use. Code and design work at https://example.com (design at /design, code at /code)."
+ },
+ "toggles": {
+  "EU equivalent timezone": "Yes"
+ },
+ "submit": false
+}
