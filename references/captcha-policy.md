@@ -43,12 +43,16 @@ any other CAPTCHA on CSJ, is still the full halt.**
 
 ## Sanctioned exception 3 — Cloudflare Turnstile checkbox (auto-solve, 2026-11-05)
 
-`python3 sites/_common/scripts/turnstile.py [sitekey]` — same class of sanctioned
-auto-solve as reCAPTCHA v2. Finds the `challenges.cloudflare.com` iframe, attaches
-via CDP `Target.attachToTarget`, clicks the checkbox div, polls for success
-(hidden `[name*=turnstile]` token or verified state). Works for the checkbox +
-invisible/compact Turnstile. If it fails (fingerprint distrust, timeout, no
-iframe target) → fall through to the hCaptcha halt procedure below.
+`python3 sites/_common/scripts/turnstile.py` — same class of sanctioned
+auto-solve as reCAPTCHA v2. The challenge iframe is in a CLOSED shadow root (invisible
+to `querySelectorAll('iframe')` and to cfx `frameSelector`), so it reads the visible
+`.cf-turnstile` / `[data-sitekey]` host box, sends ONE trusted `cfx.sh click-xy` at the
+checkbox position, and polls for a NEW `cf-turnstile-response` token (never page text).
+Returns `PASS`, `PASS:already-solved` (token pre-existed: non-interactive widgets
+self-solve, so it does not click), or `FAIL:<reason>`; it never raises. Verified live
+2026-11-05 on peet.ws/turnstile-test/managed.html (4/4 passes, 5–15s). Invisible
+Turnstile with no host box returns FAIL. On FAIL (fingerprint distrust, no token,
+no host box) → fall through to the hCaptcha halt procedure below.
 
 ## Everything else (hCaptcha / …) — the halt procedure
 

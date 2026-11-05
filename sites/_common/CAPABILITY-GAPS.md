@@ -68,14 +68,18 @@ is bind-mounted into the container at `/uploads` — only files placed there are
 
 ## Cloudflare Turnstile — sanctioned auto-solve via `turnstile.py` (2026-11-05), fingerprint distrust still possible
 
-`python3 sites/_common/scripts/turnstile.py` finds the `challenges.cloudflare.com`
-iframe, attaches via CDP `Target.attachToTarget`, clicks the checkbox, polls for the
-hidden `[name*=turnstile]` token. This is now sanctioned auto-solve like reCAPTCHA v2.
+`python3 sites/_common/scripts/turnstile.py` reads the visible `.cf-turnstile` host box
+(the real iframe is in a closed shadow root, unreachable by `frameSelector`), sends one
+trusted `click-xy` at the checkbox, and waits for a NEW `cf-turnstile-response` token.
+Verified live on a managed demo (4/4). This is now sanctioned auto-solve like reCAPTCHA v2.
 
-**Known residual limitation:** if Turnstile distrusts camofox's fingerprint, the
-checkbox may never render (iframe body stays empty) or the click returns
-"Verification failed". In that case `turnstile.py` returns `FAIL:<reason>` and the
-driver falls through to the halt procedure (log `Blocked`, VNC handoff).
+**Known residual limitation:** if Turnstile distrusts camofox's fingerprint, Cloudflare may
+issue no token after the click, and invisible widgets have no host box to click. In that
+case `turnstile.py` returns `FAIL:<reason>` and the driver falls through to the halt
+procedure (log `Blocked`, VNC handoff). **Not yet tested against a production site's widget.**
+The 4/4 pass above is on Cloudflare-style *demo* pages, which are lenient; the Workable
+finding below (same browser, real production widget) is the counter-evidence, so expect
+`FAIL:clicked but no token` on strict production sites until proven otherwise.
 
 Confirmed on FE Fundinfo's Workable application (`apply.workable.com`): scripted click →
 no-op (expected, Turnstile blocks synthetic events). A live human click via noVNC

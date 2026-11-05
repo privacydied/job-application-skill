@@ -320,7 +320,7 @@ def _final_submit(job, company, role, dry):
             ts = f"FAIL:{type(e).__name__}"
         print(f"  talent: turnstile.py -> {ts}")
         time.sleep(2)
-        if ts == "PASS" and _send_enabled():
+        if ts.startswith("PASS") and _send_enabled():
             print("  talent: Turnstile passed via turnstile.py (in-browser)")
         elif _solve_turnstile_via_service():
             print("  talent: Turnstile solved via solver service (autonomous)")
