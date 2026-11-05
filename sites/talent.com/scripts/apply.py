@@ -50,6 +50,7 @@ import cfx        # noqa: E402
 import atsform    # noqa: E402
 import screener   # noqa: E402
 import precheck   # noqa: E402  (mandatory pre-submit dedup gate)
+import turnstile  # noqa: E402  (sanctioned in-browser Turnstile checkbox click)
 
 VNC = "http://nasirjones:6080/vnc.html"
 _CONF_RE = (r"application (sent|submitted|complete|received)|thank you for|has been sent|"
@@ -258,9 +259,10 @@ def _turnstile_sitekey():
 
 def _solve_turnstile_via_service():
     """OPTIONAL autonomous Turnstile solve via a 2captcha-compatible solver (key from
-    CAPTCHA_API_KEY / TWOCAPTCHA_KEY). Turnstile CANNOT be solved in-browser here — camofox is
-    fingerprinted (clicks return "Verification failed") and the sitekey is usually DOM-shielded — so
-    a solver service is the only headless path, and even it needs the sitekey to be extractable.
+    CAPTCHA_API_KEY / TWOCAPTCHA_KEY). Fallback AFTER turnstile.py (the in-browser click) has been
+    tried once: camofox is fingerprinted (clicks may return "Verification failed") and the sitekey
+    is usually DOM-shielded — so a solver service is the only other headless path, and even it needs
+    the sitekey to be extractable.
     This wiring means: the instant a key is provisioned AND the sitekey surfaces, the whole flow is
     fully autonomous. Returns True iff a token was obtained + injected (Send became enabled)."""
     key = os.environ.get("CAPTCHA_API_KEY") or os.environ.get("TWOCAPTCHA_KEY") or ""
@@ -303,14 +305,24 @@ def _solve_turnstile_via_service():
 def _final_submit(job, company, role, dry):
     if dry:
         return "DRY_READY (at Turnstile/Send)"
-    # Cloudflare Turnstile gate. Per references/external-ats-bypass.md, this is the SAME class of
-    # HARD BLOCKER as Indeed SmartApply: unsolvable via camofox (fingerprinted; clicks return
-    # "Verification failed"; the sitekey is DOM-shielded). Policy (captcha-policy.md): NEVER auto-
-    # click it — that compounds the risk score. So: (1) try a solver service IF one is provisioned
-    # (fully autonomous); else (2) classify a clean Blocked — no long hang — and record a cooldown
-    # so hermes routes the role to the user's own device, exactly like Indeed. It is NOT a crash.
+    # Cloudflare Turnstile gate. Policy (captcha-policy.md "Sanctioned exception 3"): try the
+    # sanctioned in-browser checkbox click ONCE via turnstile.py. On camofox's fingerprint the
+    # checkbox may never render / clicks return "Verification failed" — then (2) try a solver
+    # service IF one is provisioned (fully autonomous); else (3) classify a clean Blocked — no long
+    # hang — and record a cooldown so hermes routes the role to the user's own device. NOT a crash.
+    # NB: talent.com is also on precheck.EXCLUDED_SOURCES (user decree) — that is independent of
+    # whether this gate can be passed.
     if _turnstile_present() and not _send_enabled():
-        if _solve_turnstile_via_service():
+        ts = "FAIL:not attempted"
+        try:
+            ts = turnstile.click()
+        except Exception as e:  # noqa: BLE001
+            ts = f"FAIL:{type(e).__name__}"
+        print(f"  talent: turnstile.py -> {ts}")
+        time.sleep(2)
+        if ts == "PASS" and _send_enabled():
+            print("  talent: Turnstile passed via turnstile.py (in-browser)")
+        elif _solve_turnstile_via_service():
             print("  talent: Turnstile solved via solver service (autonomous)")
         else:
             try:
@@ -321,9 +333,9 @@ def _final_submit(job, company, role, dry):
             except Exception:  # noqa: BLE001
                 pass
             print(f"\nTALENT_TURNSTILE_WALL — {company or job} | {role}: Cloudflare Turnstile "
-                  f"(unsolvable via camofox — same as Indeed SmartApply). Filled to review; needs "
+                  f"(turnstile.py: {ts}; camofox fingerprint distrusted). Filled to review; needs "
                   f"the user's own device, or set CAPTCHA_API_KEY. VNC: {VNC}", file=sys.stderr)
-            return ("TURNSTILE_WALL (Blocked — Cloudflare Turnstile, unsolvable via camofox; "
+            return (f"TURNSTILE_WALL (Blocked — Cloudflare Turnstile, turnstile.py {ts}; "
                     "apply on user device or set CAPTCHA_API_KEY)")
     # send + verify
     _ev("""(function(){[...document.querySelectorAll('input[type=checkbox]')].filter(function(e){return e.offsetParent&&!e.checked;}).forEach(function(c){c.click();});var b=[...document.querySelectorAll('button,input[type=submit]')].filter(function(e){return e.offsetParent&&!e.disabled;}).find(function(x){return /send application/i.test(x.innerText||x.value||'');});if(b)b.click();return 'ok';})()""")

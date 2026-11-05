@@ -192,8 +192,10 @@ def load_tracker():
 
 
 # ⛔ PERMANENTLY EXCLUDED SOURCES (user decree 2026-07-20; Indeed + Reed restated 2026-08-15).
-# talent.com and indeed.com are Cloudflare Turnstile / SmartApply walls the run cannot pass
-# honestly; reed.co.uk is excluded by the same decree and by this run's standing instruction.
+# talent.com and indeed.com are excluded sources: both sat behind a Cloudflare Turnstile /
+# SmartApply wall. (turnstile.py now attempts the Turnstile checkbox, but the exclusion itself is
+# the user's standing decree and is NOT lifted by that — do not drop these from the list.)
+# reed.co.uk is excluded by the same decree and by this run's standing instruction.
 #
 # This list already existed — in scripts/convertible_pool.py, which is GITIGNORED and is an
 # ANALYSIS tool. So the ban was advisory, enforced only where nothing applies. Meanwhile
