@@ -107,7 +107,7 @@ def _host_rect():
         if not r:
             return None
         x, y, w, h, vh = r
-        painted = min(vh, _PAINTED_H)
+        painted = vh if vh <= _PAINTED_H else _PAINTED_H
         if y >= 0 and y + h <= painted:
             return x, y, w, h
         if attempt == 2:

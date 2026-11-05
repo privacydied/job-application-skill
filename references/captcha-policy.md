@@ -55,10 +55,9 @@ self-solve, so it does not click), or `FAIL:<reason>`; it never raises.
 (peet.ws managed 4/4, 2captcha test-key demo). **NOT shown to work on any production
 site.** Two production-grade cases both failed: (a) a real full-page "Just a moment"
 challenge never clears (fingerprint distrust, same as the Workable note), and (b) a
-login page whose widget sits at y=800 could not be tested at all, because this engine
-reports `innerHeight` 1021 but paints/clicks only ~720px and nothing scrolls it
-(`scrollY` stays 0), so the click would land in dead space — the script refuses and says
-so. Treat `FAIL` as the expected outcome on strict sites and fall through to the halt
+login page (scrapingcourse.com) whose widget auto-verifies and sits on "Verifying..." with no
+checkbox to click. (A viewport bug that once made lower-page widgets unclickable was fixed on
+2026-11-05 via `CAMOFOX_WINDOW`; see CAPABILITY-GAPS.md.) Treat `FAIL` as the expected outcome on strict sites and fall through to the halt
 procedure below.
 
 ## Everything else (hCaptcha / …) — the halt procedure

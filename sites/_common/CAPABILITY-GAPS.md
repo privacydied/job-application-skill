@@ -77,11 +77,14 @@ Verified live on a managed demo (4/4). This is now sanctioned auto-solve like re
 - **Fingerprint distrust:** a real Cloudflare full-page "Just a moment" challenge
   (turnstile.zeroclover.io) sat unresolved for 40s+; the Workable noVNC clicks below failed
   the same way. `turnstile.py` returns `FAIL` cleanly.
-- **Unreachable widgets:** this engine reports `innerHeight` 1021 but paints and delivers
-  clicks in only ~720px; `scrollIntoView`, `scrollTo`, wheel scroll and `End` all leave
-  `scrollY` at 0. A widget below y≈720 (e.g. scrapingcourse.com login, widget at y=800)
-  cannot be clicked, so the script returns `FAIL:...below the 720px painted area` instead
-  of clicking dead space. Root cause is the viewport/window mismatch, not Turnstile.
+- **Unreachable widgets (FIXED 2026-11-05):** the engine used to report `innerHeight` 1021 but
+  paint only ~720px, with no scrolling, so lower-page widgets were unclickable. Cause: Camoufox's
+  random per-launch window. `compose.yaml` now sets `CAMOFOX_WINDOW=1280x720` (opt-in env read in
+  `server.js`), giving a 1280x659 viewport that scrolls normally (wheel scroll moves `scrollY`).
+  Remove that env line and recreate the container to revert to the random window.
+- **Auto-verifying widgets:** on scrapingcourse.com's login the widget never shows a checkbox; it
+  sits on "Verifying..." (spinner) indefinitely, so there is nothing to click. Same distrust as the
+  full-page challenge, not a click problem.
 - Invisible Turnstile has no host box to click.
 - **No production success demonstrated.** The 4/4 and test-key passes are demo pages, which
   are lenient. Expect `FAIL` on strict sites until proven otherwise.
