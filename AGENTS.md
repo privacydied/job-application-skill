@@ -98,7 +98,10 @@ sites/<board>/scripts/           BOARD-SPECIFIC scripts: feed.py (sourcing) + an
 sites/<board>/NOTES.md           board-specific verified quirks
 sites/_common/scripts/           SHARED primitives used by many scripts:
                                  cfx.py (camofox driver), atsform.py, jd.py,
-                                 precheck.py, screener.py, make-pdf.sh, …
+                                 precheck.py, screener.py, make-pdf.sh,
+                                 recaptcha.py (reCAPTCHA v2 auto-solve),
+                                 turnstile.py (Cloudflare Turnstile auto-solve),
+                                 tilevision.py (reCAPTCHA grid tile OCR) …
 references/*.md                  deep playbooks
 templates/ uploads/ applications/  assets & generated per-application artifacts
 tests/                           test_core.py

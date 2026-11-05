@@ -56,48 +56,29 @@ run from 6→8 applied via SThree's sthree.com ATS, no Indeed email login.)
   way. If signup says the email is taken and no cred is on file, treat as a hard stop
   needing user input — NOT a retry-able create.
 
-## ⛔ Indeed "Apply with Indeed" → SmartApply = Cloudflare Turnstile WALL (HARD BLOCKER)
-Do NOT attempt Indeed's own ATS. Clicking **"Apply with Indeed"** routes to
+## Indeed "Apply with Indeed" → SmartApply = Cloudflare Turnstile (auto-solve 2026-11-05)
+Clicking **"Apply with Indeed"** routes to
 `smartapply.indeed.com/beta/indeedapply/...` (Indeed's SmartApply multi-step wizard:
 resume-selection → questions → review → submit). On camofox this lands on Indeed's
 **"Additional Verification Required"** page (Cloudflare Turnstile interstitial —
 `document.title == "Just a moment..."`, body reads "Additional Verification Required"
-+ a Ray ID). **This is the SAME unsolvable-via-camofox Turnstile the memory note
-warns about.** It is a HARD BLOCKER:
-  * Log the role `Blocked` with reason "Indeed Cloudflare Turnstile — unsolvable via
-    camofox (user device needed)".
-  * Do NOT loop/retry — fast retries compound the risk score (see SKILL.md Turnstile
-    cooldown note).
-  * Notify the user: these 5 roles (Digital Content Editor / DevOps / Cloud Native
-    DevOps / Platform Engineer / IT Technician, all `uk.indeed.com/viewjob?jk=...`)
-    need to be applied **on their own device**, then I log them.
++ a Ray ID). **Sanctioned auto-solve (2026-11-05):** `python3 sites/_common/scripts/turnstile.py`
+finds the `challenges.cloudflare.com` iframe, clicks the checkbox via CDP,
+polls for the hidden token. If it fails (fingerprint distrust, timeout, no iframe) →
+fall through to `Blocked` with VNC handoff.
 This is DIFFERENT from "Apply on company site" (which is fine — external ATS, no
-Indeed ATS involved). The split matters: when Indeed postings surface, prefer
-"Apply on company site" roles; treat "Apply with Indeed" as a wall, not a flow to
-automate. (LinkedIn Easy Apply is the volume path; Indeed SmartApply is not.)
+Indeed ATS involved). (LinkedIn Easy Apply is the volume path.)
 
-## ⛔ talent.com "Quick Apply" → 3-step form → Cloudflare Turnstile WALL (SAME as Indeed)
+## talent.com "Quick Apply" → 3-step form → Cloudflare Turnstile (auto-solve 2026-11-05)
 talent.com's "Quick Apply" is a talent.com-HOSTED form (account OTP login → 3-step
 Contact/CV/Questions wizard), and `sites/talent.com/scripts/apply.py` drives ALL of
 it autonomously — emailed-OTP login, CV upload, phone/address/salary, cover letter,
-employer screener radios. But the final **"Send application"** on step 3 is gated by a
-**Cloudflare Turnstile** — the identical unsolvable-via-camofox wall as Indeed
-SmartApply. Verified 2026-07-20: camofox is fingerprinted (even `cfx.sh click-xy`'s
-interpolated-movement trusted click returns "Verification failed"), the sitekey is
-DOM-shielded (no `[data-sitekey]`, no `challenges.cloudflare.com?k=` iframe, no `0x…`
-token in the HTML — so an external solver can't even be handed the sitekey), and
-`window.turnstile` is undefined. It is a HARD BLOCKER, handled like Indeed:
-  * `apply.py` fills everything to the review page, then returns
-    `TURNSTILE_WALL (Blocked — …)` and records a `record-captcha-fail talent.com`
-    cooldown. It does NOT hang or crash — it classifies a clean `Blocked`.
-  * Log the role `Blocked`, reason "talent.com Cloudflare Turnstile — unsolvable via
-    camofox (user device needed)". Do NOT loop/retry (compounds the risk score).
-  * OPTIONAL full autonomy: `apply.py` has a `_solve_turnstile_via_service()` wired to
-    a 2captcha-compatible API — set **`CAPTCHA_API_KEY`** in `.jobenv` and IF the
-    sitekey ever surfaces, the whole flow completes headlessly. Until then, the final
-    click is the user's, on their own device (or one VNC click: {VNC in the driver}).
-Bottom line: talent.com is drivable end-to-end EXCEPT the Turnstile, exactly like
-Indeed. Treat the Turnstile as a wall, not a flow to automate.
+employer screener radios. The final **"Send application"** on step 3 is gated by a
+**Cloudflare Turnstile**. **Sanctioned auto-solve (2026-11-05):** the driver calls
+`python3 sites/_common/scripts/turnstile.py` to click the checkbox via CDP and
+poll for the token. If turnstile.py fails (fingerprint distrust, timeout, no iframe) →
+`apply.py` logs `Blocked` with reason `"TURNSTILE_WALL"` and returns exit code 3
+(CAPTCHA wall) for VNC handoff.
 
 ## Operational pitfall — clicking "Apply on company website" on LinkedIn
 The JD page has MULTIPLE buttons; a naive `cfx.click_and_follow(ref=...)` (or

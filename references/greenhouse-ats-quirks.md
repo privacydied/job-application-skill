@@ -30,7 +30,8 @@ no "I'm not a robot" box). That is **reCAPTCHA v3** (invisible background risk t
 no user challenge). It is NOT a CAPTCHA halt and NOT something to solve or hold for.
 Do not stop the loop for it. Contrast:
   - visible reCAPTCHA **v2** checkbox/invisible badge/image-grid → auto-solve via `recaptcha.py` (happy path)
-  - **Turnstile / hCaptcha** → FULL immediate halt + hand to user (VNC)
+  - **Turnstile** → sanctioned auto-solve via `turnstile.py`; falls to halt on failure
+  - **hCaptcha** → FULL immediate halt + hand to user (VNC)
   - `grecaptcha-badge` (v3) → ignore, just submit
 
 ## Net pre-submit check for Greenhouse

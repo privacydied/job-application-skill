@@ -114,7 +114,7 @@ to a normal cold `atsform` nav in step 5.
 
 The cfx pacing/jitter/orientation dwells are **deliberate anti-detection wall-clock**,
 not waste (see ENDPOINT-CAPABILITIES.md). A faster action cadence that trips one
-Turnstile costs a full-loop halt + a cooldown up to 24h — orders of magnitude more
+A failed Turnstile auto-solve costs a full-loop halt + a cooldown up to 24h — orders of magnitude more
 than it saves. If `stagetimer` shows `fill`/`source` dominating, the answer is fewer
 *actions* (batching), never faster actions. Profile before optimizing:
 `export STAGETIMER=1`, then `python3 sites/_common/scripts/stagetimer.py report`

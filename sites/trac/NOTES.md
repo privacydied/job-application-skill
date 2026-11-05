@@ -124,7 +124,7 @@ them they closed the entire NHS/UKHSA channel for weeks:
 
 1. **The CAPTCHA was never a halt.** Trac's registration CAPTCHA is **reCAPTCHA v2**, which is
    one of the two *sanctioned auto-solves* in `references/captcha-policy.md` — the halt rule is
-   for Turnstile / hCaptcha / everything else. `recaptcha.py click` cleared it first try
+   for hCaptcha / everything else (Turnstile is auto-solved by `turnstile.py`; see `captcha-policy.md`). `recaptcha.py click` cleared it first try
    (`PASSED: checkbox aria-checked=true`).
 2. **The account was never the user's to create.** SKILL.md §Hard stops: *"NOT a hard stop: ATS
    account creation … default to email/password signup with the real email + a strong generated

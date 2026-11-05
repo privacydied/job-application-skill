@@ -108,7 +108,7 @@ render PDF → fill the ATS form → submit → capture proof → `log-applicati
   Treating a Greenhouse invisible badge as a wall is a **false blocker** and the single most
   common way this loop wastes a firing. Only a *visible* checkbox/grid you cannot solve, or
   confirmed `fingerprint-distrust`, counts.
-  A genuine unsolvable CAPTCHA (Turnstile, hCaptcha, distrust-walled v2) → log that ONE posting
+  A genuine unsolvable CAPTCHA (hCaptcha, distrust-walled v2, Turnstile that fails turnstile.py) → log that ONE posting
   `Blocked`, write `holds.csv`, and **move to the next posting in `queue.jsonl`**. You end the
   turn only when NOTHING drivable remains (see §4).
   ⚠️ Known gap: reCAPTCHA v2 can hit **fingerprint-distrust** (correct solves loop, no token) —

@@ -66,7 +66,16 @@ is bind-mounted into the container at `/uploads` — only files placed there are
    `document.querySelector('input[type=file]').files[0].name` should show the real name.
 4. Clean up scratch files from `uploads/` after use — shared staging, not storage.
 
-## Cloudflare Turnstile can reject camoufox's fingerprint entirely — even a genuine human click via noVNC
+## Cloudflare Turnstile — sanctioned auto-solve via `turnstile.py` (2026-11-05), fingerprint distrust still possible
+
+`python3 sites/_common/scripts/turnstile.py` finds the `challenges.cloudflare.com`
+iframe, attaches via CDP `Target.attachToTarget`, clicks the checkbox, polls for the
+hidden `[name*=turnstile]` token. This is now sanctioned auto-solve like reCAPTCHA v2.
+
+**Known residual limitation:** if Turnstile distrusts camofox's fingerprint, the
+checkbox may never render (iframe body stays empty) or the click returns
+"Verification failed". In that case `turnstile.py` returns `FAIL:<reason>` and the
+driver falls through to the halt procedure (log `Blocked`, VNC handoff).
 
 Confirmed on FE Fundinfo's Workable application (`apply.workable.com`): scripted click →
 no-op (expected, Turnstile blocks synthetic events). A live human click via noVNC
@@ -97,13 +106,11 @@ for precedence rules and the `CFX_NO_REFERER`/`CAMOFOX_NO_REFERER` escape hatch.
 
 > ⚠️ **Capability record, not a default workflow.** The cross-origin `/click` + `click-xy`
 > fix is what *enables* the reCAPTCHA v2 auto-solve — it must NOT be used to script around
-> **non-sanctioned** CAPTCHAs (Turnstile/hCaptcha stay a hard stop, per SKILL.md). The
-> sanctioned auto-solve is `recaptcha.py` for **all reCAPTCHA v2 forms** (checkbox /
-> invisible badge / image-grid), pre-authorized by standing user directive — never for
-> Turnstile/hCaptcha. (The only other sanctioned CAPTCHA auto-solve is ALTCHA on
-> civilservicejobs.service.gov.uk — a deterministic proof-of-work checkbox handled by
-> `sites/civilservicejobs/scripts/feed.py`, user-sanctioned 2026-07-13; ALTCHA on any
-> other site is still a hard stop.)
+> **non-sanctioned** CAPTCHAs (hCaptcha stays a hard stop, per SKILL.md). The
+> sanctioned auto-solves are: `recaptcha.py` for **all reCAPTCHA v2 forms** (checkbox /
+> invisible badge / image-grid); `turnstile.py` for **Cloudflare Turnstile checkbox**
+> (clicks via CDP iframe attach); and ALTCHA on civilservicejobs.service.gov.uk
+> (`sites/civilservicejobs/scripts/feed.py`). hCaptcha and anything else = hard stop.
 
 `/click` originally only resolved `ref`/`selector` on the main frame, so a reCAPTCHA v2
 anchor checkbox (inside cross-origin `iframe[src*="recaptcha/api2/anchor"]`) was
@@ -124,9 +131,11 @@ Fixed in `server.js`'s `/click`:
 **Clicking ≠ passing.** reCAPTCHA v2 is lenient — a genuine trusted click often passes
 outright or drops to a solvable image challenge, so this fix materially helps it.
 **Cloudflare Turnstile is different** — per the fingerprint-level failure above, even a
-perfect trusted click still fails; this click fix does not address Turnstile. Diagnose
-by logo before spending time: reCAPTCHA (Google, "I'm not a robot") → worth trying;
-Turnstile (Cloudflare, "Verify you are human") → still a hard `Blocked`.
+perfect trusted click still fails; this click fix does not address Turnstile's fingerprint
+distrust. However, `turnstile.py` now auto-solves Turnstile via CDP iframe attach when the
+checkbox renders. Diagnose
+by logo before spending time: reCAPTCHA (Google, "I'm not a robot") → `recaptcha.py`;
+Turnstile (Cloudflare, "Verify you are human") → `turnstile.py` (falls to `Blocked` on failure).
 
 **Verifying pass/fail: read the real state, don't infer it (2026-07-13).** `/eval-frame`
 (mirrors `/click`'s `frameSelector`, but for reads — `page.$(frameSelector).contentFrame()`

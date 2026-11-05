@@ -41,7 +41,7 @@ behavior, update the matching row here.
 page-affecting call waits `human_pause` (~0.7–2.9s, ~1-in-6 a longer 2–6s
 "reading" pause) first, and every *navigation* adds `orientation_pause` (2.5–6s
 dwell + one idle scroll-or-hover). Root cause it fixes: 11 clicks logged ~2–3s
-apart almost to the second preceded a real Turnstile failure — Cloudflare scores
+apart almost to the second preceded a real Turnstile failure (now auto-solved by `turnstile.py`, but fingerprint distrust can still fail it) — Cloudflare scores
 the whole session's cadence, not just the challenge click. Escape hatches
 (testing only, never for real applications): `CFX_NO_PACING`/`CAMOFOX_NO_PACING`,
 `CFX_NO_KEYBOARD_TYPE`/`CAMOFOX_NO_KEYBOARD_TYPE`, `CFX_NO_IDLE_SCROLL`,

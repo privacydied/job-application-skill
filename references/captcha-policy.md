@@ -41,7 +41,16 @@ Deterministic client-side proof-of-work; auto-solved by
 `sites/civilservicejobs/scripts/feed.py solve_altcha()`. **ALTCHA on any other site, or
 any other CAPTCHA on CSJ, is still the full halt.**
 
-## Everything else (Turnstile / hCaptcha / …) — the halt procedure
+## Sanctioned exception 3 — Cloudflare Turnstile checkbox (auto-solve, 2026-11-05)
+
+`python3 sites/_common/scripts/turnstile.py [sitekey]` — same class of sanctioned
+auto-solve as reCAPTCHA v2. Finds the `challenges.cloudflare.com` iframe, attaches
+via CDP `Target.attachToTarget`, clicks the checkbox div, polls for success
+(hidden `[name*=turnstile]` token or verified state). Works for the checkbox +
+invisible/compact Turnstile. If it fails (fingerprint distrust, timeout, no
+iframe target) → fall through to the hCaptcha halt procedure below.
+
+## Everything else (hCaptcha / …) — the halt procedure
 
 1. **Stop** — leave the tab open, the form filled exactly as-is.
 2. **Message the user in that SAME turn:** company/role, site/URL, what's blocked, that
@@ -53,9 +62,10 @@ any other CAPTCHA on CSJ, is still the full halt.**
 
 Mechanics:
 - **Check for a popup tab first** — Turnstile can open as a real new tab (`cfx.sh
-  find-popup`); switch `CFX_TAB` there to point the user at it (don't click it yourself).
-- Manual VNC clicks may need a couple of tries (noVNC teleport clicks lack movement
-  telemetry) — not a license to auto-click.
+  find-popup`); switch `CFX_TAB` there and run `turnstile.py` once. Only if that
+  returns FAIL, point the user at it per the halt procedure above.
+- Manual VNC clicks (the fallback after a `turnstile.py` FAIL) may need a couple of
+  tries (noVNC teleport clicks lack movement telemetry).
 - Don't retry a failed Turnstile in a tight loop — fast retries compound the risk score.
   Log `Blocked` and let it cool off.
 - **Cooldown:** `cfx.sh check-cooldown <domain>` before opening a posting on a domain

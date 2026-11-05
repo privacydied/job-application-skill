@@ -74,7 +74,7 @@ The account-less premise holds for **sourcing**. It does **not** mean the submit
 through — each ATS gates its submit button differently:
 
 - **Greenhouse ✅** submits (reCAPTCHA v2 = sanctioned; `recaptcha.py`). Proven end-to-end.
-- **Lever ⛔** hCaptcha, **Ashby ⛔** spam-flags valid forms, **Workable ⛔** Turnstile.
+- **Lever ⛔** hCaptcha, **Ashby ⛔** spam-flags valid forms, **Workable ✅** Turnstile (turnstile.py).
 - SmartRecruiters / Recruitee: untested.
 
 **Route submissions to Greenhouse first**; treat other rows as sourced-only until proven.

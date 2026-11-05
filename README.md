@@ -100,7 +100,7 @@ key, runnable from cron or CI.
 **⚠️ Sourcing an ATS ≠ submitting to it.** All of the above are account-less to *apply*, but
 most now gate the submit button with anti-bot: **Greenhouse** submits (reCAPTCHA v2 — handled
 by `recaptcha.py`), while **Lever** (hCaptcha), **Ashby** (spam-flags valid forms) and
-**Workable** (Cloudflare Turnstile) do not. Route submissions to Greenhouse first and treat
+**Workable** (Cloudflare Turnstile — auto-solved by `turnstile.py`) do not. Route submissions to Greenhouse first and treat
 the rest as sourced-only until proven. Detail: `references/ats-apply-surface.md`.
 
 **Deliberately not built** (probed 2026-07-17, all dead — don't re-add): DWP Find a Job

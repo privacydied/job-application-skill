@@ -5,15 +5,12 @@ External ATS. Form-fill via the shared engine `../_common/scripts/atsform.py`
 Greenhouse/Lever — atsform verified on that pattern). **Not live-tested here** —
 recipe below; adjust labels from a live field dump if they differ.
 
-## ⛔ The blocker: Cloudflare Turnstile on submit
+## ⛔ Cloudflare Turnstile on submit — sanctioned auto-solve (2026-11-05)
 Workable gates final submit behind **Cloudflare Turnstile** ("Verify you are
-human"), which **rejects camoufox's fingerprint** — it fails even for a genuine
-human click via VNC (see `../_common/CAPABILITY-GAPS.md`, FE Fundinfo case). So you
-can FILL a Workable application fine, but SUBMIT is usually blocked. Expect
-`Blocked`, cite that gap. This is NOT the same as reCAPTCHA (which the new
-`frameSelector` click can reach) — Turnstile is a fingerprint problem, not a click
-problem; `recaptcha.py` does not help here. Before spending time, run `cfx.sh
-check-cooldown apply.workable.com`.
+human"). **Sanctioned auto-solve:** `python3 sites/_common/scripts/turnstile.py`
+finds the `challenges.cloudflare.com` iframe, clicks the checkbox via CDP,
+polls for the hidden token. Falls through to the halt procedure if it fails.
+Before spending time, run `cfx.sh check-cooldown apply.workable.com`.
 
 ## Reaching + filling the form
 `apply.workable.com/<company>/j/<id>/` → **Apply** → the form (or `…/j/<id>/apply`).

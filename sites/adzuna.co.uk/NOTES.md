@@ -38,7 +38,7 @@ Workable handoff).
   `g-recaptcha-response` token is not reliable on its own. A leftover `api2/bframe`
   iframe can make `recaptcha.py detect` report `challenge open: True` even when only
   the checkbox is showing (expired verification, not a real re-challenge) — trust a
-  screenshot over the raw JS state before assuming it needs re-solving. Turnstile/
+  screenshot over the raw JS state before assuming it needs re-solving. Turnstile (now auto-solved via `turnstile.py`) /
   hCaptcha stay a hard stop.
 - A persistent **cookie-settings banner** makes `click-follow` report `unhandled_dialog`
   and can appear to intercept Submit clicks — usually harmless (submit still goes
