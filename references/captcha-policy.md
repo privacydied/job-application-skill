@@ -49,10 +49,17 @@ to `querySelectorAll('iframe')` and to cfx `frameSelector`), so it reads the vis
 `.cf-turnstile` / `[data-sitekey]` host box, sends ONE trusted `cfx.sh click-xy` at the
 checkbox position, and polls for a NEW `cf-turnstile-response` token (never page text).
 Returns `PASS`, `PASS:already-solved` (token pre-existed: non-interactive widgets
-self-solve, so it does not click), or `FAIL:<reason>`; it never raises. Verified live
-2026-11-05 on peet.ws/turnstile-test/managed.html (4/4 passes, 5–15s). Invisible
-Turnstile with no host box returns FAIL. On FAIL (fingerprint distrust, no token,
-no host box) → fall through to the hCaptcha halt procedure below.
+self-solve, so it does not click), or `FAIL:<reason>`; it never raises.
+
+**Verified (2026-11-05), honest scope:** passes on Cloudflare-style *demo* pages
+(peet.ws managed 4/4, 2captcha test-key demo). **NOT shown to work on any production
+site.** Two production-grade cases both failed: (a) a real full-page "Just a moment"
+challenge never clears (fingerprint distrust, same as the Workable note), and (b) a
+login page whose widget sits at y=800 could not be tested at all, because this engine
+reports `innerHeight` 1021 but paints/clicks only ~720px and nothing scrolls it
+(`scrollY` stays 0), so the click would land in dead space — the script refuses and says
+so. Treat `FAIL` as the expected outcome on strict sites and fall through to the halt
+procedure below.
 
 ## Everything else (hCaptcha / …) — the halt procedure
 

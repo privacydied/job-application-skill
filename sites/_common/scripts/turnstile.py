@@ -42,6 +42,9 @@ _HOST = ".cf-turnstile, [data-sitekey], [data-turnstile-sitekey]"
 # The checkbox is drawn this far in from the widget's left edge (Cloudflare's standard widget lays it
 # out ~30px in, vertically centred). Capped for narrow widgets.
 _CHECKBOX_DX = 30
+# Height of the area this engine actually paints and delivers mouse events to (screenshots are
+# 1280x720 even though window.innerHeight reports 1021). A click below this lands in dead space.
+_PAINTED_H = 720
 _TOKEN_JS = ("(function(){var e=document.querySelector("
              "'[name=cf-turnstile-response],[name*=turnstile-response],[name*=cf-turnstile]');"
              "return e?(e.value||''):null;})()")
@@ -65,19 +68,54 @@ def _token():
     return _ev(_TOKEN_JS)
 
 
-def _host_rect():
-    """Scroll the widget host into view; -> (x, y, w, h) in viewport px, or None."""
+def _rect_raw():
+    """Widget host rect in viewport px as (x, y, w, h, viewport_h), or None."""
     raw = _ev("(function(){var d=document.querySelector(%r);if(!d)return '';"
-              "d.scrollIntoView({block:'center'});var r=d.getBoundingClientRect();"
-              "if(r.width<20||r.height<20)return '';"
-              "return Math.round(r.x)+' '+Math.round(r.y)+' '+Math.round(r.width)+' '+Math.round(r.height);})()" % _HOST)
+              "var r=d.getBoundingClientRect();if(r.width<20||r.height<20)return '';"
+              "return Math.round(r.x)+' '+Math.round(r.y)+' '+Math.round(r.width)+' '+Math.round(r.height)"
+              "+' '+window.innerHeight;})()" % _HOST)
     if not raw or not isinstance(raw, str):
         return None
     try:
-        x, y, w, h = (int(v) for v in raw.split())
-        return x, y, w, h
+        x, y, w, h, vh = (int(v) for v in raw.split())
+        return x, y, w, h, vh
     except ValueError:
         return None
+
+
+def _wheel(direction, amount):
+    """Real wheel-event scroll via cfx.sh (JS scrollIntoView does NOT move this engine's viewport)."""
+    sh = os.path.join(HERE, "cfx.sh")
+    try:
+        subprocess.run(["bash", sh, "scroll", direction, str(amount)], capture_output=True,
+                       text=True, timeout=40, env=dict(os.environ))
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _host_rect():
+    """Return the widget host rect (x, y, w, h) ONLY if it is inside the painted viewport, else None.
+
+    This engine reports innerHeight=1021 but paints/receives mouse events in only ~720px, and neither
+    scrollIntoView, window.scrollTo nor wheel/End scrolling moves a page whose layout "fits" that
+    taller viewport (verified: scrollY stays 0). So a widget below _PAINTED_H cannot be clicked from
+    here. Try real wheel scrolling once (works on pages that genuinely overflow); if it still isn't in
+    the painted area, return None so click() reports it instead of clicking dead space.
+    """
+    for attempt in range(3):
+        r = _rect_raw()
+        if not r:
+            return None
+        x, y, w, h, vh = r
+        painted = min(vh, _PAINTED_H)
+        if y >= 0 and y + h <= painted:
+            return x, y, w, h
+        if attempt == 2:
+            break
+        delta = y - (painted - h) // 2
+        _wheel("down" if delta > 0 else "up", max(60, min(abs(delta), 600)))
+        time.sleep(0.8)
+    return None
 
 
 def present():
@@ -110,7 +148,8 @@ def click(timeout=30):
             return "PASS:already-solved"
         rect = _host_rect()
         if not rect:
-            return "FAIL:no visible turnstile host box (invisible widget or shadow-hidden)"
+            return ("FAIL:turnstile host box missing or below the %dpx painted area "
+                    "(page cannot be scrolled in this engine)" % _PAINTED_H)
         x, y, w, h = rect
         cx = x + min(_CHECKBOX_DX, max(12, w // 6))
         cy = y + h // 2

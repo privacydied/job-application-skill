@@ -73,13 +73,18 @@ is bind-mounted into the container at `/uploads` — only files placed there are
 trusted `click-xy` at the checkbox, and waits for a NEW `cf-turnstile-response` token.
 Verified live on a managed demo (4/4). This is now sanctioned auto-solve like reCAPTCHA v2.
 
-**Known residual limitation:** if Turnstile distrusts camofox's fingerprint, Cloudflare may
-issue no token after the click, and invisible widgets have no host box to click. In that
-case `turnstile.py` returns `FAIL:<reason>` and the driver falls through to the halt
-procedure (log `Blocked`, VNC handoff). **Not yet tested against a production site's widget.**
-The 4/4 pass above is on Cloudflare-style *demo* pages, which are lenient; the Workable
-finding below (same browser, real production widget) is the counter-evidence, so expect
-`FAIL:clicked but no token` on strict production sites until proven otherwise.
+**Known residual limitations (tested 2026-11-05):**
+- **Fingerprint distrust:** a real Cloudflare full-page "Just a moment" challenge
+  (turnstile.zeroclover.io) sat unresolved for 40s+; the Workable noVNC clicks below failed
+  the same way. `turnstile.py` returns `FAIL` cleanly.
+- **Unreachable widgets:** this engine reports `innerHeight` 1021 but paints and delivers
+  clicks in only ~720px; `scrollIntoView`, `scrollTo`, wheel scroll and `End` all leave
+  `scrollY` at 0. A widget below y≈720 (e.g. scrapingcourse.com login, widget at y=800)
+  cannot be clicked, so the script returns `FAIL:...below the 720px painted area` instead
+  of clicking dead space. Root cause is the viewport/window mismatch, not Turnstile.
+- Invisible Turnstile has no host box to click.
+- **No production success demonstrated.** The 4/4 and test-key passes are demo pages, which
+  are lenient. Expect `FAIL` on strict sites until proven otherwise.
 
 Confirmed on FE Fundinfo's Workable application (`apply.workable.com`): scripted click →
 no-op (expected, Turnstile blocks synthetic events). A live human click via noVNC
