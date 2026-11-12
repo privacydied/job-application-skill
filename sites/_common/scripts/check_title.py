@@ -315,7 +315,10 @@ def _field_service_driving_role(title_l):
 
 def check_title(title):
     title_l = (title or "").lower()
-    seniority_flag = any(re.search(r"\b" + re.escape(w) + r"\b", title_l) for w in SENIORITY_WORDS)
+    # "Product Manager" is the job family, not a seniority marker (2026-11-11 PM pivot);
+    # "Senior/Lead/Head/Director ... Product Manager" still flag via the other words.
+    _sen_l = re.sub(r"\bproduct manager\b", "product_role", title_l)
+    seniority_flag = any(re.search(r"\b" + re.escape(w) + r"\b", _sen_l) for w in SENIORITY_WORDS)
     discipline_flag = (_industrial_design_engineer(title_l) or _field_service_driving_role(title_l)
                         or _ambiguous_industrial_reliability_role(title_l))
     early_career_flag = _early_career(title_l)

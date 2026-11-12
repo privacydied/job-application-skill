@@ -53,7 +53,7 @@ def _set_field(name, kind, value):
         expr = """(name, want) => {
           const matches=[...document.querySelectorAll(`[name="${name}"]`)].filter(e=>e.type==='%s');
           if(!matches.length) return 'NO_FIELD:'+name;
-          if('%s'==='checkbox'){ matches[0].click(); return 'OK'; }
+          if('%s'==='checkbox'){ if(!matches[0].checked) matches[0].click(); return matches[0].checked?'OK':'UNCHECKED'; }  /* idempotent: a blind click UNTICKS an already-ticked box (name-blind S2 confirmations) */
           const lblOf=(e)=>{ if(e.labels&&e.labels[0]) return e.labels[0].innerText; const l=e.closest('label'); if(l) return l.innerText; const sib=e.nextElementSibling; if(sib&&/label/i.test(sib.tagName)) return sib.innerText; const p=e.parentElement; const pl=p&&p.querySelector('label'); return pl?pl.innerText:''; };
           const lbls=matches.map(e=>({e,l:(lblOf(e)||'').replace(/\\s+/g,' ').trim()}));
           const hit=lbls.find(x=>x.l.toLowerCase().includes(want.toLowerCase()));

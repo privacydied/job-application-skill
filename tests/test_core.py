@@ -77,7 +77,7 @@ class TestCheckTitle(unittest.TestCase):
     def test_on_profile_tiers(self):
         self.assertTrue(check_title.check_title("Product Designer")["eligible"])
         self.assertTrue(check_title.check_title("Design Engineer")["eligible"])
-        self.assertEqual(check_title.check_title("Product Designer")["tier"], "A")
+        self.assertEqual(check_title.check_title("Product Designer")["tier"], "B")  # v2 re-tier (2026-11-11): design demoted by demand
 
     def test_seniority_flag(self):
         r = check_title.check_title("Senior Product Designer")
@@ -4122,7 +4122,7 @@ class TestEveryDeclaredTargetRoleIsMatchable(unittest.TestCase):
 
     def test_the_two_regressed_roles_match(self):
         from check_title import check_title
-        for title, tier in (("Frontend Developer", "B"), ("Service Desk Analyst", "A")):
+        for title, tier in (("Frontend Developer", "C"), ("Service Desk Analyst", "A")):
             r = check_title(title)
             self.assertTrue(r["eligible"], f"{title} is declared in target-roles.md")
             self.assertEqual(r["tier"], tier, title)

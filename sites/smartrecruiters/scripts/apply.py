@@ -340,7 +340,7 @@ def apply(config_path: str, do_submit: bool = False) -> int:
         return 1
     time.sleep(1)
     if cfg.get("cv"):
-        upload("file-input", cfg["cv"])
+        upload(cfg.get("upload_id", "file-input"), cfg["cv"])
         time.sleep(1)
     for fid, val in (cfg.get("fill") or {}).items():
         fill_text(fid, val)

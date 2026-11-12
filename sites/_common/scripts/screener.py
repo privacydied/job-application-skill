@@ -59,6 +59,9 @@ _SEED = [
     ("eligible to work", "radio", "Yes", "profile"),
     ("sponsorship", "radio", "No", "profile"),
     # relocation / location
+    # ⛔ "Are you located in OR willing to relocate to the UK?" is a YES (he lives in London);
+    # the generic relocate->No row below picked "No, and I am not willing to relocate" (Tailscale, 2026-11-11).
+    ("/located in or willing to relocate to the (uk|united kingdom)/", "radio", "Yes, I live in the UK", "profile:lives in London, UK"),
     ("willing to relocate", "radio", "No", "profile:edit for your location rules"),
     ("open to relocation", "radio", "No", "profile"),
     ("current location", "select", "London, United Kingdom", "profile"),

@@ -2689,9 +2689,16 @@ def fill_gaps_from_bank():
         data = json.loads(cfx.evaluate(_UNANSWERED))
     except (ValueError, TypeError, cfx.CfxError):
         return (0, 0)
+    # ⛔ A "generic default" row (years-of-experience catch-all = 5) is NOT a profile-backed
+    # answer: it overstated experience on a live form (FeverUp IT Support, 2026-11-11, "5+"
+    # years submitted for ~2). Treat it as no hit so the field stays empty and blocks, exactly
+    # as gen_gh_config.py already refuses it.
+    def _bank_lookup(q):
+        h = screener.lookup(q)
+        return None if h and "generic default" in (h.get("source") or "") else h
     filled = skipped = 0
     for idx, label in enumerate(data.get("texts", [])):
-        hit = screener.lookup(label)
+        hit = _bank_lookup(label)
         if not hit:
             skipped += 1
             continue
@@ -2701,7 +2708,14 @@ def fill_gaps_from_bank():
         # phrase — e.g. "Describe your right to work status" receives the literal string
         # "Yes". That is a nonsense answer a human reviewer reads, not a blocked field.
         # Choice-kind answers only belong in the radio/combo branches below.
-        if (hit.get("kind") or "text").strip().lower() in ("radio", "select", "checkbox"):
+        _k = (hit.get("kind") or "text").strip().lower()
+        # A banked `select` row whose answer is a plain VALUE ("United Kingdom", "London") is a
+        # perfectly good answer for a free-text box (Tailscale's address "Country*" is a text
+        # input the old guard left empty, so the form bounced). Only genuine CHOICE answers —
+        # yes/no/prefer-not — are nonsense typed into a text box, and radio/checkbox always are.
+        _a = (hit.get("answer") or "").strip().lower()
+        _choice_like = _a in ("yes", "no") or _a.startswith(("yes,", "no,", "prefer", "decline", "i do not", "i don"))
+        if _k in ("radio", "checkbox") or (_k == "select" and _choice_like):
             print(f"  bank SKIP {label[:46]!r}: banked answer is kind="
                   f"{hit.get('kind')!r} (a choice), not free text — left unanswered")
             skipped += 1
@@ -2721,7 +2735,7 @@ def fill_gaps_from_bank():
         # bare-string shape so a stale cached payload cannot crash a live run.
         q = entry.get("q") if isinstance(entry, dict) else entry
         sel = entry.get("sel") if isinstance(entry, dict) else None
-        hit = screener.lookup(q)
+        hit = _bank_lookup(q)
         if not hit:
             skipped += 1
             continue
@@ -2741,7 +2755,7 @@ def fill_gaps_from_bank():
             skipped += 1
     for grp in data.get("radios", []):
         q, opts = grp.get("q", ""), grp.get("opts") or []
-        hit = screener.lookup(q)
+        hit = _bank_lookup(q)
         if not hit:
             skipped += 1
             continue

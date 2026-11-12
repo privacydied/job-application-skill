@@ -97,7 +97,7 @@ def open_form(job):
     meta = json.loads(ev("""JSON.stringify({h1:(document.querySelector('h1')||{}).innerText||'',
       co:(document.querySelector('[class*=company],[class*=Company],.ui-company')||{}).innerText||'',
       t:document.title})"""))
-    href = ev("""(()=>{const a=[...document.querySelectorAll('a')].find(a=>/\\/apply\\?aztt/.test(a.href)&&/Apply for this job/i.test(a.innerText));return a?a.href:'none'})()""")
+    href = ev("""(()=>{const a=[...document.querySelectorAll('a')].find(a=>a.href.includes('?aztt=')&&/Apply for this job/i.test(a.innerText));return a?a.href:'none'})()""")
     if href == "none":
         return jid, meta, False
     cfx.goto(href)
