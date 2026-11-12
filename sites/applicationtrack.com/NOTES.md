@@ -153,3 +153,6 @@ Server-rendered classic forms (no React) — native DOM APIs work; the traps are
   per-question, submission by the user.
 - Proof: post-submit banner "Thank you, your application has been submitted" + dashboard row
   status "Under review" (screenshot both).
+
+- **2026-11-12 password rotation:** the GCHQ/MI5 tenant forced a password change at login (expiry). A new generated password was appended to `ats-credentials.csv` as `applicationtrack.com (MI5/GCHQ, rotated <date>)`; **use the LATEST applicationtrack row** (the older MI5 row is stale). Expiry lands on `.../candidate/change_password`.
+- GCHQ NCSC UCRD form (Ref 3879) has NO essay fields: Personal Details, Minimum Eligibility, OOI, Adjustments, Vetting, EO, Submit. Personal Details also needs Previous Last Name(s) + 'How long have you lived here?' (not in profile - ask user). Phone must be `+447` + 9 digits.
