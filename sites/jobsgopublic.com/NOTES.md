@@ -85,3 +85,11 @@ Until the feed learns the new geo label, drive with `feed.py --nav "https://www.
 `fa-evng-saasfaprod1.fa.ocs.oraclecloud.com/.../job/<id>`: "Apply Now" -> email + terms (no account, no code) -> a 4-step
 form whose Application Questions include "unspent criminal convictions" and "disciplinary proceedings" - the applicant's own
 declarations, so the run stops (logged Blocked). The page is snapshot-readable with `cfx.sh snap` (refs work).
+
+## Lewisham Service Designer via Oracle HCM (2026-11-13) - drafted, blocked on REFEREES
+Apply button is JS-only; real target is in the page data (efuy.fa.em3.oraclecloud.com `/hcmUI/CandidateExperience/en/sites/CX_1/job/<n>`).
+Email-only auth, no password/OTP. Single long page. Quirks: inputs are Oracle JET comboboxes - a click-pick leaves value empty; type
+the text (`/type` keyboard), then ArrowDown+Enter. Typing 'Male' matches 'Female' first - press ArrowDown twice. Yes/No are
+`button[role=radio]` pills (click by index). Education/Work History save with the ADD buttons; element ids change after each
+re-render, so re-query. **References are mandatory (2 referees, 3 years)** - not in the profile, ask the user.
+The geo_location filter on jobsgopublic search returns 0; search unfiltered and filter London in code. `m.parse`/`m.normalize` from feed.py work on `?search=&page=`.

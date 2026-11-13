@@ -94,3 +94,12 @@ applicationtrack recipe pattern; it too needs a (separate) Trac account.
 ## CAPTCHA
 ⛔ Per `references/captcha-policy.md`: full halt for any CAPTCHA except the two sanctioned
 reCAPTCHA-v2 auto-solves. Not observed on the sourcing path.
+
+## ✅ NATIVE apply works again (2026-11-13, Hillingdon CIC Associate Digital Transformation Manager, ref AR-261113-04077)
+Some adverts (e.g. employer code E0004) apply natively at `/candidate/application/<REF>/...`, not via a trust ATS. Login
+`/candidate/auth/login` (`username`+`password`, Enter). Task list = 10 sections, no referees. Plain GOV.UK-style forms, all
+`input[name=...]`: radios by value, `saveAndContinue`, then a `/check` page whose `continue` button saves. Month fields need
+2 digits (`05`). Job history: one entry per pass; wait for the table page before the next (a fast loop dropped an entry).
+Criteria = free-text boxes (5000 chars). Convictions/GIS/EEO/socio-economic pages are radio steps; final page ticks
+`declaration` and `sendApplication`. Proof = `/application-completed` page with AR- reference + email.
+Search is plain HTTP: `/candidate/search/results?keyword=..&location=London&distance=15&page=N`.
