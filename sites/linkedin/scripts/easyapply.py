@@ -56,7 +56,7 @@ import cfx  # noqa: E402
 # camofox runs in a container where the skill's uploads/ dir is mounted at /uploads,
 # and its /upload endpoint rejects any path that doesn't resolve inside /uploads. So
 # an upload target is passed as "/uploads/<basename>" (NOT the host-side path).
-UP = "/uploads"
+UP = os.environ.get("CFX_UPLOAD_DIR", "/uploads").rstrip("/")
 
 # JS prelude: resolve the shadow root that hosts the Easy Apply modal. Falls back
 # to `document` so read-only probes don't throw when the modal isn't open yet.
@@ -230,7 +230,7 @@ def cmd_upload(filename):
     if not sel:
         print("FAIL upload: no file input in modal")
         return 1
-    path = filename if filename.startswith("/uploads/") else f"{UP}/{os.path.basename(filename)}"
+    path = cfx.upload_path(filename)
     try:
         cfx.post(f"/tabs/{cfx._tab()}/upload",
                  {"userId": cfx._uid(), "selector": sel, "path": path})

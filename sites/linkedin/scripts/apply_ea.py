@@ -450,7 +450,7 @@ def main():
     def opt(flag, default=""):
         return opts[opts.index(flag) + 1] if flag in opts and opts.index(flag) + 1 < len(opts) else default
 
-    resume = opt("--resume", "/uploads/base-resume.pdf")
+    resume = opt("--resume", cfx.upload_path("base-resume.pdf"))
     source = opt("--source", "LinkedIn Easy Apply")
     notes = opt("--notes", "Easy Apply auto-submitted via apply_ea.py; resume=" + os.path.basename(resume))
     max_attempts = int(opt("--max-attempts", "3"))

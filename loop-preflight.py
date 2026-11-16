@@ -50,7 +50,6 @@ _PLACEHOLDER_NAMES = ("Jane Doe", "[Your Name]", "Your Name")
 # mirror executes rotted code. Reject it loudly instead of silently using stale scripts.
 _MIRROR_DIRS = (
     os.path.realpath(os.path.expanduser("~/job-application-shared")),
-    "/volume1/homes/pry/job-application-shared",
 )
 
 
@@ -212,7 +211,7 @@ def main():
               f"{h['role'] or 'held application'}) AND no other board is drivable "
               f"(holds are site-scoped; this verdict already means everything else is "
               f"blocked/cooling/exhausted). Do NOT source or open a browser. Remind the "
-              f"user via VNC (http://nasirjones:6080/vnc.html) and end the turn.")
+              f"user via VNC ({os.environ.get('CFX_VNC_URL', '$CFX_VNC_URL')}) and end the turn.")
         if h["url"]:
             print(f"held_url={h['url']}")
         return 11

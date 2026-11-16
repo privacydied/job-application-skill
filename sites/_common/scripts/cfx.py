@@ -200,7 +200,22 @@ def set_tab(tid: str) -> str:
 
 
 def _uid() -> str:
-    return os.environ.get("CFX_USER", "nasirjones")
+    return os.environ.get("CFX_USER", "job-apply")
+
+
+# --- deployment-specific values: ALL come from env so a fresh clone works anywhere ---------
+# CFX_UPLOAD_DIR : where the BROWSER CONTAINER sees the repo's uploads/ dir (compose mounts
+#                  <repo>/uploads at /uploads by default; see compose.example.yaml).
+# CFX_VNC_URL    : noVNC URL a human opens to solve captchas / log in on the agent's tab.
+def upload_path(name: str) -> str:
+    """Container-side path for a file staged in the repo's uploads/ dir (host paths 400)."""
+    base = os.environ.get("CFX_UPLOAD_DIR", "/uploads").rstrip("/")
+    return f"{base}/{os.path.basename(name)}"
+
+
+def vnc_url() -> str:
+    import socket
+    return os.environ.get("CFX_VNC_URL") or f"http://{socket.gethostname()}:6080/vnc.html"
 
 
 def human_pause(tier: str = "full") -> None:
@@ -927,7 +942,7 @@ def find_popup(exclude: str = None) -> list:
 # no sudo. On the real host that can never work: the repo has no `compose.yaml` (only
 # `compose.example.yaml`), the daemon socket needs root ("permission denied while trying to
 # connect to the Docker daemon socket"), and the actual compose file lives at
-# /volume1/docker/playwright/compose.yaml. So `restart-engine` — the documented recovery for
+# the host compose file (CFX_COMPOSE_FILE). So `restart-engine` — the documented recovery for
 # a wedged engine — failed 100% of the time on the one host it exists for, and did it
 # quietly: the caller only saw "Restart failed or engine never came back healthy". A real
 # wedge ("Browser session expired" + POST /tabs -> 500) therefore had NO working self-heal
@@ -937,6 +952,9 @@ def find_popup(exclude: str = None) -> list:
 # WHICH command failed and why instead of just "check your sudoers". CFX_RESTART_CMD (space-
 # separated) still wins outright when set — an explicit operator override is never second-
 # guessed. Add a host's path here rather than re-forking this logic elsewhere.
+# Compose file for `restart-engine`: CFX_COMPOSE_FILE, else <repo>/compose.yaml.
+_COMPOSE_FILE = os.environ.get("CFX_COMPOSE_FILE") or os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "compose.yaml")
 _RESTART_CMD_CANDIDATES = [
     # `start` FIRST (2026-08-15): the container's real-world failure mode here is being
     # OOM-KILLED by the host — `docker ps -a` shows "Exited (137)" — which happens when a
@@ -950,12 +968,12 @@ _RESTART_CMD_CANDIDATES = [
     ["sudo", "-n", "/usr/local/bin/docker", "start", "camofox-browser"],
     # Synology ContainerManager (this host) — matches the NOPASSWD sudoers rules verbatim.
     ["sudo", "-n", "/var/packages/ContainerManager/target/usr/bin/docker", "compose",
-     "-f", "/volume1/docker/playwright/compose.yaml", "restart", "camofox-browser"],
+     "-f", _COMPOSE_FILE, "restart", "camofox-browser"],
     # Standard Linux docker install, same compose path.
     ["sudo", "-n", "/usr/local/bin/docker", "compose",
-     "-f", "/volume1/docker/playwright/compose.yaml", "restart", "camofox-browser"],
+     "-f", _COMPOSE_FILE, "restart", "camofox-browser"],
     # Plain `docker` on PATH (works where the user is in the docker group).
-    ["docker", "compose", "-f", "/volume1/docker/playwright/compose.yaml",
+    ["docker", "compose", "-f", _COMPOSE_FILE,
      "restart", "camofox-browser"],
     # Container-name restart, no compose file needed.
     ["sudo", "-n", "/usr/local/bin/docker", "restart", "camofox-browser"],

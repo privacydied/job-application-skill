@@ -221,7 +221,15 @@ def set_toggle(question: str, answer: str) -> int:
 
 
 def reveal() -> int:
-    has_fields = cfx.evaluate("!!document.querySelector('input[name=_systemfield_name]')")
+    # Some orgs (e.g. Xero) replace the system Name field with a custom "Name (first & last)"
+    # question, so `_systemfield_name` never exists — key on email/resume system fields too.
+    _FORM = ("!!document.querySelector('input[name=_systemfield_name],input[name=_systemfield_email],"
+             "input[name=_systemfield_resume],input[id=_systemfield_email]')")
+    # Ashby is an SPA: right after nav the body can be the bare shell, so neither the form nor
+    # the Apply CTA exists yet and reveal() used to report a FALSE "no Apply CTA" (Xero,
+    # 2026-11-16). Wait for one of them to render first.
+    cfx.poll(_FORM[:-2] + ",button,a[href*=application]')", predicate=bool, timeout=10.0)
+    has_fields = cfx.evaluate(_FORM)
     if has_fields:
         print("OK: form already revealed")
         return 0
@@ -251,7 +259,7 @@ def reveal() -> int:
     # stall (same class of fix as the Yes/No toggles).
     cfx.evaluate(_JS_CLICK_TARGET)
     cfx.evaluate(_UNMARK)
-    ok = cfx.poll("!!document.querySelector('input[name=_systemfield_name]')", predicate=bool, timeout=6.0)
+    ok = cfx.poll(_FORM, predicate=bool, timeout=6.0)
     print("OK: form revealed" if ok else "FAIL: form did not render after click")
     return 0 if ok else 1
 

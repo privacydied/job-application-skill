@@ -59,7 +59,9 @@ sys.path.insert(0, _ROOT_SCRIPTS)
 # --- stub the browser layer BEFORE importing atsform/jd -----------------------
 _cfx = types.ModuleType("cfx")
 _cfx.CfxError = type("CfxError", (RuntimeError,), {})
-_cfx._uid = lambda: "nasirjones"
+_cfx._uid = lambda: "job-apply"
+_cfx.upload_path = lambda n: "/uploads/" + os.path.basename(n)
+_cfx.vnc_url = lambda: "http://vnc.invalid:6080/vnc.html"
 _cfx._tab = lambda explicit=None: "TAB"
 _cfx.evaluate = lambda *a, **k: None
 _cfx.post = lambda *a, **k: {}

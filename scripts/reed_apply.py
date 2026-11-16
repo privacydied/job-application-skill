@@ -48,7 +48,10 @@ def _scrape_meta():
     r = ev("""(function(){
       var h=document.querySelector('h1');
       var c=document.querySelector('[data-qa="posterOrganisationName"],[itemprop="hiringOrganization"] [itemprop="name"],.job-header_jobHeader__jobTitle__company,.company');
-      return JSON.stringify({role:(h?h.innerText:'').trim(),company:(c?c.innerText:'').trim()});
+      var co=(c?c.innerText:'').trim();
+      if(!co){var p=document.querySelector('[data-qa="job-posted-by"]');  // 2026-11 layout: "18 October by Robert Half"
+        if(p){var m=p.innerText.match(/\\bby\\s+(.+)$/);co=m?m[1].trim():'';}}
+      return JSON.stringify({role:(h?h.innerText:'').trim(),company:co});
     })()""", tries=3)
     try:
         m = _json.loads(r) if isinstance(r, str) else {}

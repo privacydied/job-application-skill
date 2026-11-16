@@ -40,7 +40,7 @@ sys.path.insert(0, os.path.join(ROOT, "sites", "_common", "scripts"))  # shared 
 import cfx  # noqa: E402
 
 QUEUE = sys.argv[1] if len(sys.argv) > 1 else "/tmp/ea_queue.txt"
-RESUME = "/uploads/base-resume.pdf"
+RESUME = cfx.upload_path("base-resume.pdf")
 TRACKER = os.path.join(ROOT, "application-tracker.csv")
 ENV_FILE = os.path.join(ROOT, ".jobenv.run")
 

@@ -1,0 +1,8 @@
+# Copy to .jobenv (gitignored) and `source` it before driving. Nothing here is required
+# if your camofox runs on localhost with the stock compose.example.yaml.
+export CFX_URL="http://localhost:9377"           # camofox REST API
+export CFX_USER="job-apply"                      # browser profile/session key (any stable name)
+# export CFX_KEY="..."                           # bearer token if the server sets one
+# export CFX_UPLOAD_DIR="/uploads"               # where the CONTAINER sees <repo>/uploads
+# export CFX_VNC_URL="http://<host>:6080/vnc.html"  # noVNC link shown when a human is needed
+# export CFX_COMPOSE_FILE="/path/to/compose.yaml"   # used by `cfx.py restart-engine`

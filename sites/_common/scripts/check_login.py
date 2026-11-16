@@ -13,7 +13,7 @@ Per board it navigates a known URL, reads a bundle of logged-in vs wall signals,
 classifies:
   logged_in  — a logged-in signal is present → OK to source
   wall       — a login-required board shows a sign-in wall and no logged-in signal →
-               HARD STOP (message the user + VNC http://nasirjones:6080/vnc.html, wait)
+               HARD STOP (message the user + VNC $CFX_VNC_URL, wait)
   guest_ok   — a guest-browsable board (Indeed) loaded fine → OK to source
   blocked    — a guest board is bot-walled (Cloudflare/CAPTCHA) → treat per SKILL
   unknown    — ambiguous; screenshot and decide by eye (don't assume walled)
@@ -268,7 +268,7 @@ def main():
           file=sys.stderr)
     if walled:
         print(f"HOLD: {', '.join(walled)} need login — message the user "
-              f"(http://nasirjones:6080/vnc.html), continue login-free boards meanwhile.",
+              f"({cfx.vnc_url()}), continue login-free boards meanwhile.",
               file=sys.stderr)
         return 11
     return 0 if not other else 1

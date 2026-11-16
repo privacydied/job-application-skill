@@ -22,11 +22,12 @@ Requires: sites/_common/scripts/cfx.py on PYTHONPATH (run from the skill root).
 """
 import argparse
 import json
+import os
 import subprocess
 import sys
 import time
 
-_ROOT = "/var/services/homes/pry/.hermes/skills/productivity/job-application"
+_ROOT = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
 sys.path.insert(0, f"{_ROOT}/sites/_common/scripts")
 import cfx  # noqa: E402
 

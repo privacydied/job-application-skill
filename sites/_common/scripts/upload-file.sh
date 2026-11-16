@@ -5,7 +5,7 @@
 #
 #   upload-file.sh <file-input-ref> <path-to-file> [--keep]
 #
-# Env (same as cfx.sh): CFX_KEY (bearer), CFX_TAB (target tab), CFX_USER (default nasirjones).
+# Env (same as cfx.sh): CFX_KEY (bearer), CFX_TAB (target tab), CFX_USER (default job-apply).
 # The <file-input-ref> is the snapshot ref of the <input type=file> to fill.
 set -euo pipefail
 
@@ -15,7 +15,7 @@ KEEP=""; [ "${3:-}" = "--keep" ] && KEEP=1
 
 : "${CFX_KEY:?Set CFX_KEY to the CAMOFOX_ACCESS_KEY bearer token}"
 : "${CFX_TAB:?Set CFX_TAB to the target tab id}"
-UID_="${CFX_USER:-nasirjones}"
+UID_="${CFX_USER:-job-apply}"
 U="${CFX_URL:-http://localhost:9377}"
 A="Authorization: Bearer $CFX_KEY"
 

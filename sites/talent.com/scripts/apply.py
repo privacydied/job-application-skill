@@ -52,7 +52,7 @@ import screener   # noqa: E402
 import precheck   # noqa: E402  (mandatory pre-submit dedup gate)
 import turnstile  # noqa: E402  (sanctioned in-browser Turnstile checkbox click)
 
-VNC = "http://nasirjones:6080/vnc.html"
+VNC = cfx.vnc_url()
 _CONF_RE = (r"application (sent|submitted|complete|received)|thank you for|has been sent|"
             r"successfully applied|we.?ve received|your application (has|is|was)")
 

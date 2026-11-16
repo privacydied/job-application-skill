@@ -49,7 +49,7 @@ import journal  # noqa: E402  (H.8 — the resume substrate)
 _here = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.abspath(os.path.join(_here, "..", "..", ".."))
 BLOCKERS = os.path.join(_ROOT, "blockers.jsonl")
-VNC = "http://nasirjones:6080/vnc.html"
+VNC = os.environ.get("CFX_VNC_URL") or f"http://{__import__('socket').gethostname()}:6080/vnc.html"
 KINDS = ("login", "captcha", "account", "sms", "other")
 
 

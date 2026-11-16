@@ -33,7 +33,7 @@ import cfx        # noqa: E402
 import httpfeed   # noqa: E402  (creds_row — the sanctioned credential source)
 
 PW_URL = "https://profile.theguardian.com/signin/password"
-VNC = "http://nasirjones:6080/vnc.html"
+VNC = cfx.vnc_url()
 
 
 def _ev(js, tries=6):

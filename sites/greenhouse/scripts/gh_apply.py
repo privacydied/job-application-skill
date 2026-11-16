@@ -387,7 +387,7 @@ def main():
         print(f"CV_MISSING {cv!r} is not staged in uploads/ — falling back to base-resume.pdf")
         cv = "base-resume.pdf"
     try:
-        _upload_and_verify("#resume", f"/uploads/{cv}")
+        _upload_and_verify("#resume", cfx.upload_path(cv))
     except Exception as e:  # noqa: BLE001
         print(f"RESUME_UPLOAD_FAIL {e}")
         return 4
@@ -395,7 +395,7 @@ def main():
     cover = cfg.get("cover")
     if cover:
         try:
-            atsform.upload("#cover_letter", f"/uploads/{cover}")
+            atsform.upload("#cover_letter", cfx.upload_path(cover))
         except Exception as e:  # noqa: BLE001
             print(f"COVER_UPLOAD_WARN {e}")
 

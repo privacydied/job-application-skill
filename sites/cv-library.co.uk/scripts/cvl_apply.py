@@ -30,6 +30,7 @@ reed_apply.py / tj_apply.py).
 Usage: python3 cvl_apply.py <job_id_or_url> [<job_id_or_url> ...] [--dry]
   (job_id = the numeric CV-Library posting id, e.g. 225601445, or the full URL)
 """
+import json
 import re
 import subprocess
 import sys
@@ -39,6 +40,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.join(HERE, "..", "..", "_common", "scripts"))
 import cfx  # noqa: E402
 import precheck  # noqa: E402
+import screener  # noqa: E402
 
 LOGAPP = os.path.join(HERE, "..", "..", "_common", "scripts", "log-application.py")
 
@@ -120,10 +122,56 @@ def click_one_click_apply():
     return ev("""(function(){
       var ot=document.querySelector('#onetrust-consent-sdk');
       if(ot) ot.remove();
-      var b=[...document.querySelectorAll('button,a')].find(x=>/1.?Click Apply|^Apply$/i.test((x.innerText||'').trim()));
+      var b=[...document.querySelectorAll('button,a')].find(x=>x.offsetParent&&/1.?Click Apply|^Apply$|^Apply Now$/i.test((x.innerText||'').trim()));
       if(b){b.click();return 'clicked:'+b.innerText.trim();}
       return 'none';
     })()""")
+
+
+def _click_text(txt):
+    return ev("(function(){var b=[].slice.call(document.querySelectorAll('button')).filter("
+              "function(x){return x.offsetParent&&x.innerText.trim()===" + json.dumps(txt) + "})[0];"
+              "if(!b)return 'none';b.click();return 'clicked'})()")
+
+
+def _two_step_flow(job_id):
+    """CV-Library's 2026-11 "Apply Now" flow (/job/apply/<id>): Step 1 = CV on file (+ optional
+    cover letter) -> Next; Step 2 = per-job Yes/No screening radios -> "Submit application".
+    Every radio group is answered ONLY from the shared screener bank (screener.lookup); any
+    unanswerable question returns BLOCKED and nothing is submitted. Returns a verdict string to
+    stop on, or None to let the caller's Applied check run."""
+    if "Step 1 of 2" in str(ev("document.body.innerText") or ""):
+        _click_text("Next")
+        time.sleep(5)
+    groups = ev("""(function(){var seen={},out=[];
+      [].slice.call(document.querySelectorAll('input[type=radio]')).forEach(function(r){
+        if(seen[r.name]||!r.offsetParent)return; seen[r.name]=1;
+        var c=r.closest('fieldset')||r.parentElement; while(c&&c.querySelectorAll('input[type=radio][name="'+r.name+'"]').length<2)c=c.parentElement;
+        var opts=[].slice.call(document.querySelectorAll('input[type=radio][name="'+r.name+'"]')).map(function(o){
+          var l=(o.labels&&o.labels[0])?o.labels[0].innerText.trim():(o.value||'');return [o.id,l]});
+        var q=(c?c.innerText:'').split('\\n')[0].replace(/\\*$/,'').trim();
+        out.push({name:r.name,q:q,opts:opts});});
+      return JSON.stringify(out)})()""")
+    try:
+        groups = json.loads(groups or "[]")
+    except Exception:  # noqa: BLE001
+        groups = []
+    unknown = []
+    for g in groups:
+        hit = screener.lookup(g["q"])
+        ans = (hit or {}).get("answer", "").strip().lower()
+        oid = next((i for i, l in g["opts"] if l.strip().lower() == ans), None) if ans else None
+        if not oid:
+            unknown.append(g["q"][:90])
+            continue
+        ev("(function(){var o=document.getElementById(" + json.dumps(oid) + ");o.click();return o.checked})()")
+        print(f"  [{job_id}] screener '{g['q'][:60]}' -> {hit['answer']} ({hit['source']})")
+    if unknown:
+        return f"[{job_id}] BLOCKED — screening question(s) with no truthful bank answer: {' | '.join(unknown)}"
+    if _click_text("Submit application") != "clicked":
+        return f"[{job_id}] STUCK (no 'Submit application' button)"
+    time.sleep(7)
+    return None
 
 
 def apply(arg, dry=False):
@@ -137,12 +185,20 @@ def apply(arg, dry=False):
     cfx.navigate(url)
     time.sleep(3)
     body = ev("document.body.innerText") or ""
-    if "Already applied" in str(body) or "Applied" == str(body).strip()[:7]:
+    if "Already applied" in str(body) or "Applied" == str(body).strip()[:7] or "Apply Again" in str(body):
         return f"[{job_id}] SKIP already-applied (page shows Applied)"
     if _COURSE_SIGNUP_RE.search(str(body)):
         return f"[{job_id}] SKIP course-signup (JD reads as a training-course pitch, not a real job)"
     role, company = _scrape_meta()
-    r = click_one_click_apply()
+    href = ev("(function(){var a=document.querySelector('a[href*=\"/job/apply/\"]');return a?a.href:''})()")
+    if href and str(href).startswith("http"):
+        # 2026-11 layout: "Apply Now" is an <a> to /job/apply/<id>; a JS .click() on it does
+        # not reliably navigate in camofox, so go there directly.
+        cfx.navigate(str(href))
+        time.sleep(5)
+        r = "clicked:nav"
+    else:
+        r = click_one_click_apply()
     if not r or "clicked" not in str(r):
         time.sleep(3)
         r = click_one_click_apply()
@@ -150,6 +206,16 @@ def apply(arg, dry=False):
         return f"[{job_id}] NO APPLY BUTTON ({r})"
     time.sleep(4)
     final = ev("document.body.innerText") or ""
+    for _ in range(5):  # "Apply Now" is a link to /job/apply/<id> — the nav can take >4s
+        if "Complete your application" in str(final) or "Applied" in str(final):
+            break
+        time.sleep(2)
+        final = ev("document.body.innerText") or ""
+    if "Complete your application" in str(final):
+        res = _two_step_flow(job_id)
+        if res:
+            return res
+        final = ev("document.body.innerText") or ""
     if "Applied" in str(final) or "Apply Again" in str(final):
         _log_applied(url, job_id, role, company, status="Applied?")
         return f"[{job_id}] SUBMITTED"

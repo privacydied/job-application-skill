@@ -356,7 +356,7 @@ def main():
     dry_run = "--dry-run" in argv
     max_n = opt(argv, "--max")
     max_n = int(max_n) if (max_n and max_n.isdigit()) else None
-    resume = opt(argv, "--resume", "/uploads/base-resume.pdf")
+    resume = opt(argv, "--resume", cfx.upload_path("base-resume.pdf"))
     boards = opt(argv, "--boards")
     only_boards = boards.split(",") if boards else None
     ats_arg = opt(argv, "--ats")

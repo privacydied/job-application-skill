@@ -204,7 +204,7 @@ def main():
     for label, value in d.items():
         atsform.fill(label, value, quiet_notfound=True)
 
-    err = _upload_cv(cfg.get("cv", "/uploads/base-resume.pdf"))
+    err = _upload_cv(cfg.get("cv") or cfx.upload_path("base-resume.pdf"))
     if err:
         print(f"CV_UPLOAD_FAIL {err}")
         return 1

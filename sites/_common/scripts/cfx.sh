@@ -132,8 +132,8 @@ case "$1" in
 esac
 KEY="${CFX_KEY:-}"
 TAB="${CFX_TAB:-}"
-UID_="${CFX_USER:-nasirjones}"
-U="http://localhost:9377"
+UID_="${CFX_USER:-job-apply}"
+U="${CFX_URL:-http://localhost:9377}"
 A="Authorization: Bearer $KEY"
 
 # Randomized pre-action delay so page-affecting actions (click/type/press/

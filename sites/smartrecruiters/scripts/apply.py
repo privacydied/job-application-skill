@@ -271,7 +271,7 @@ def upload(field_id: str, basename: str) -> int:
     sel = f'input[id="{field_id}"] >> nth=0'
     try:
         res = cfx.post(f"/tabs/{cfx._tab()}/upload",
-                        {"userId": cfx._uid(), "selector": sel, "path": f"/uploads/{basename}"})
+                        {"userId": cfx._uid(), "selector": sel, "path": cfx.upload_path(basename)})
         print(res)
         if res.get("ok"):
             return 0
@@ -279,7 +279,7 @@ def upload(field_id: str, basename: str) -> int:
         print(f"plain /upload failed: {e}; trying /uploadViaChooser")
     try:
         res = cfx.post(f"/tabs/{cfx._tab()}/uploadViaChooser",
-                        {"userId": cfx._uid(), "trigger": sel, "path": f"/uploads/{basename}"})
+                        {"userId": cfx._uid(), "trigger": sel, "path": cfx.upload_path(basename)})
         print(res)
         return 0 if res.get("ok") else 1
     except cfx.CfxError as e:
