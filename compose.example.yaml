@@ -120,8 +120,12 @@ services:
       - camofox-traces:/root/.camofox/traces
       # Read-only upload staging dir: files here appear in the container at /uploads/<name>
       # so the browser process can attach them to <input type=file> forms. Point this at
-      # THIS skill's uploads/ directory (absolute path on your host):
-      - /absolute/path/to/job-application/uploads:/uploads:ro
+      # THIS skill's uploads/ directory. Default ./uploads works when compose.yaml sits at the
+      # repo root (the normal setup); override with UPLOADS_DIR=/abs/path (e.g. in .env) if the
+      # compose file lives elsewhere or the browser runs on another host.
+      # The server resolves every upload `path` under ITS /uploads, so THIS mount is the only
+      # thing that decides where files come from — CFX_UPLOAD_DIR just names it client-side.
+      - ${UPLOADS_DIR:-./uploads}:/uploads:ro
       # Optional: bind-mount your server.js over the image copy for live edits without rebuild.
       - ./camofox-browser/server.js:/app/server.js:ro
     healthcheck:

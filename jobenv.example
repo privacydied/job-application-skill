@@ -6,3 +6,6 @@ export CFX_USER="job-apply"                      # browser profile/session key (
 # export CFX_UPLOAD_DIR="/uploads"               # where the CONTAINER sees <repo>/uploads
 # export CFX_VNC_URL="http://<host>:6080/vnc.html"  # noVNC link shown when a human is needed
 # export CFX_COMPOSE_FILE="/path/to/compose.yaml"   # used by `cfx.py restart-engine`
+# NOTE: CFX_UPLOAD_DIR only names the path the *server* sees. Which host dir that is comes from
+# the compose volume (`${UPLOADS_DIR:-./uploads}:/uploads:ro`). If uploads 400 / "file not found",
+# the container is still mounting an old path: `docker compose up -d --force-recreate camofox-browser`.

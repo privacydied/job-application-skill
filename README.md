@@ -199,7 +199,7 @@ secrets or paths). Copy and fill it in:
 ```bash
 cp compose.example.yaml compose.yaml
 cp camofox-browser.env.example camofox-browser.env   # then set CAMOFOX_ACCESS_KEY / VNC_PASSWORD
-$EDITOR compose.yaml                                  # set your uploads path + (optional) VPN
+$EDITOR compose.yaml                                  # uploads mount defaults to ./uploads; set UPLOADS_DIR only if compose.yaml is not at the repo root; + optional VPN
 docker compose up -d
 ```
 
