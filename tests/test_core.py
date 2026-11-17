@@ -3350,6 +3350,41 @@ class TestPipelineFeedSpec(unittest.TestCase):
             self.assertIn(slug, pipeline.FEEDS, f"{slug} missing from FEEDS")
 
 
+class TestPipelineAlwaysWritesQueue(unittest.TestCase):
+    """pipeline.py must never exit (budget / SIGTERM from `timeout`) without writing its
+    queue: a stop request cuts sourcing short and falls through to merge->precheck->write."""
+
+    def setUp(self):
+        import pipeline
+        self.pl = pipeline
+        self._saved = (pipeline._BUDGET, pipeline._T0)
+
+    def tearDown(self):
+        self.pl._STOP.clear()
+        self.pl._BUDGET, self.pl._T0 = self._saved
+
+    def test_budget_triggers_stop(self):
+        import time as _t
+        self.pl._STOP.clear()
+        self.pl._BUDGET, self.pl._T0 = 10.0, _t.time() - 8   # 8s of 10s used
+        self.assertTrue(self.pl._should_stop(0.5))  # 8s >= 50% of 10s
+        self.assertTrue(self.pl._STOP.is_set())
+
+    def test_no_budget_never_stops_on_time(self):
+        self.pl._STOP.clear()
+        self.pl._BUDGET = None
+        self.assertFalse(self.pl._should_stop(0.7))
+
+    def test_stop_skips_feed_but_funnel_has_handlers(self):
+        self.pl._STOP.set()
+        posts, err = self.pl._run_feed_once(["true"], "x", 5)
+        self.assertEqual(posts, [])
+        self.assertIn("stop", err)
+        src = open(self.pl.__file__).read()
+        self.assertIn("_install_stop_handlers()", src)
+        self.assertIn("signal.SIGTERM", src)
+
+
 class TestNoHandRolledFunnel(unittest.TestCase):
     """The 'never hand-write a harvester' rule had a loophole: it forbade re-implementing the
     *fetch* layer while explicitly endorsing `feed.py --nav`, so a bash sweep that LOOPS the

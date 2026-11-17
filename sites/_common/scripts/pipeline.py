@@ -26,7 +26,7 @@ WHAT IT DOES (all in code, no model in the loop):
 
 USAGE (needs a live tab on the browser-driving path — CFX_KEY/CFX_TAB in env):
   CFX_KEY=… CFX_TAB=… python3 pipeline.py [--target N] [--no-screen]
-      [--screen-limit N] [--force] [--boards linkedin,indeed] [-o queue.jsonl]
+      [--screen-limit N] [--budget SECS] [--force] [--boards linkedin,indeed] [-o queue.jsonl]
       [--min-queue N] [--http-concurrent] [--http-workers N]
 
   --min-queue N       demand-driven gate: skip sourcing entirely if queue.jsonl already
@@ -49,8 +49,10 @@ Exit codes: 0 WORK (queue written; may be empty) · 10 SLEEP · 11 HOLD · 12 DO
 import inspect
 import json
 import os
+import signal
 import subprocess
 import sys
+import threading
 import time
 from datetime import datetime
 
@@ -319,6 +321,48 @@ def _parse_feed_stdout(out):
     return []
 
 
+# ── STOP / BUDGET: the funnel can NEVER exit without writing its queue ─────────────────
+# A 40-min `timeout` used to SIGTERM the process mid-sourcing and throw away every card
+# already fetched (queue.jsonl untouched, ~5,700 TotalJobs cards lost). Now SIGTERM/SIGINT and
+# a wall-clock budget just set _STOP: sourcing stops starting new feeds (and kills the one in
+# flight), screening stops, and the run falls through to merge -> precheck -> WRITE the queue
+# with whatever was gathered. `--budget SECS` (env PIPELINE_BUDGET, default 1500) bounds the
+# whole run; sourcing gets 70% of it, screening the rest.
+_STOP = threading.Event()
+_T0 = time.time()
+_BUDGET = None            # total seconds, None = unbounded
+_STOP_REASON = ""
+
+
+def _request_stop(reason):
+    global _STOP_REASON
+    if not _STOP.is_set():
+        _STOP_REASON = reason
+        _STOP.set()
+        print(f"pipeline: STOP requested ({reason}) — finishing with what is gathered; "
+              f"queue will still be written", file=sys.stderr)
+
+
+def _should_stop(phase_frac=1.0):
+    """True once a stop was requested or `phase_frac` of the budget is spent."""
+    if _STOP.is_set():
+        return True
+    if _BUDGET and (time.time() - _T0) >= _BUDGET * phase_frac:
+        _request_stop(f"budget {_BUDGET:.0f}s x{phase_frac:.2f} reached")
+        return True
+    return False
+
+
+def _install_stop_handlers():
+    def _h(signum, _frm):
+        _request_stop(signal.Signals(signum).name)
+    for s in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+        try:
+            signal.signal(s, _h)
+        except (ValueError, OSError):  # not main thread / unsupported
+            pass
+
+
 def _tab_dead():
     """True if the shared CFX_TAB no longer resolves (camofox restarted / tab closed) —
     the 410/500 'Tab not found' flake that silently zeroes a board's feed."""
@@ -330,11 +374,22 @@ def _tab_dead():
 
 
 def _run_feed_once(cmd, board, timeout, env=None):
-    try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
-                           env=env if env is not None else os.environ, cwd=_ROOT)
-    except subprocess.TimeoutExpired:
-        return [], f"{board} feed timed out after {timeout}s"
+    if _STOP.is_set():
+        return [], f"{board} skipped (stop requested)"
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                            env=env if env is not None else os.environ, cwd=_ROOT)
+    t_end = time.time() + timeout
+    while True:
+        try:
+            out, errtxt = proc.communicate(timeout=1)
+            break
+        except subprocess.TimeoutExpired:
+            if time.time() >= t_end or _should_stop(0.7):
+                proc.kill()
+                proc.communicate()
+                return [], (f"{board} feed timed out after {timeout}s" if time.time() >= t_end
+                            else f"{board} feed cut short (stop/budget)")
+    p = subprocess.CompletedProcess(cmd, proc.returncode, out, errtxt)
     posts = _parse_feed_stdout(p.stdout or "")
     for x in posts:
         if isinstance(x, dict):
@@ -516,9 +571,12 @@ def _run_funnel(target=None, no_screen=False, screen_limit=40, force=False,
         scrub = _scrubbed_env()
         print(f"  sourcing {len(http_clear)} HTTP board(s) off-tab, "
               f"{http_workers}-way concurrent...", file=sys.stderr)
+        def _guarded(s):
+            if _should_stop(0.7):
+                return s["board"], [], "skipped (stop/budget)", 0.0
+            return _source_one(s, force, env=scrub)
         with ThreadPoolExecutor(max_workers=max(1, http_workers)) as ex:
-            for board, posts, err, secs in ex.map(
-                    lambda s: _source_one(s, force, env=scrub), http_clear):
+            for board, posts, err, secs in ex.map(_guarded, http_clear):
                 per_board[board] = per_board.get(board, 0) + len(posts)
                 all_posts.extend(posts)
                 if err:
@@ -545,6 +603,9 @@ def _run_funnel(target=None, no_screen=False, screen_limit=40, force=False,
     # sourcing loop here and the in-process JD screening in step 4.
     own_tab_id = os.environ.get("_PIPELINE_OWN_TAB") or None
     for s in tab_clear:
+        if _should_stop(0.7):
+            errors.append(f"{s['board']} skipped (stop/budget)")
+            continue
         board, posts, err, secs = _source_one(s, force)
         per_board[board] = per_board.get(board, 0) + len(posts)
         all_posts.extend(posts)
@@ -585,6 +646,9 @@ def _run_funnel(target=None, no_screen=False, screen_limit=40, force=False,
         for i, c in enumerate(survivors):
             if i >= screen_limit:
                 c["_screen_skipped"] = "screen-limit"
+                continue
+            if _should_stop(1.0):
+                c["_screen_skipped"] = "stop-budget"   # queued UNSCREENED, never dropped
                 continue
             url = c.get("url")
             if not url:
@@ -764,6 +828,18 @@ def main():
                     return default
         return default
 
+    global _BUDGET, _T0
+    _T0 = time.time()
+    _b = opt("--budget", None, float)
+    if _b is None and os.environ.get("PIPELINE_BUDGET"):
+        try:
+            _b = float(os.environ["PIPELINE_BUDGET"])
+        except ValueError:
+            _b = None
+    _BUDGET = _b if _b is not None else 1500.0
+    if _BUDGET <= 0:
+        _BUDGET = None
+    _install_stop_handlers()
     only_boards = opt("--boards", None)
     result, code = run(
         target=opt("--target", None, int),
