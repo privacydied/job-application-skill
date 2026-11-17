@@ -590,6 +590,10 @@ def _write_tab_env(path: str, tab_id: str) -> bool:
     try:
         body = ('export CFX_KEY="%s"\nexport CFX_USER="%s"\nexport CFX_URL="%s"\n'
                 'export CFX_TAB="%s"\n' % (os.environ.get("CFX_KEY", ""), _uid(), U, tab_id))
+        # Deployment settings must survive the rewrite (else a re-sourced env silently loses them).
+        for _k in ("CFX_UPLOAD_MODE", "CFX_UPLOAD_DIR", "CFX_VNC_URL", "CFX_COMPOSE_FILE"):
+            if os.environ.get(_k):
+                body += 'export %s="%s"\n' % (_k, os.environ[_k])
         tmp = path + ".tmp"
         with open(tmp, "w") as f:
             f.write(body)

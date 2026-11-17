@@ -39,7 +39,8 @@ API (params confirmed against the docs page, 2026-07-17):
         &resultsToTake=<n ≤100>&resultsToSkip=<n>            ← paging
     -> {"results":[…], "ambiguousLocations":[…], "totalResults":N}
 
-⚠️ UNVERIFIED-LIVE: the per-row JSON *field names* below (jobId/jobTitle/employerName/…)
+✅ VERIFIED LIVE 2026-11-17 with a real key (30 London queries -> 2.6k postings; field names
+below normalise correctly). Original caveat, kept for history: the per-row JSON *field names* below (jobId/jobTitle/employerName/…)
 come from Reed's published docs, which list them in prose ("Job Id", "Employer Name") rather
 than as a JSON sample. They could not be confirmed against a real response because no
 `reed-api` key exists in ats-credentials.csv yet — every keyless call returns HTTP 401 with
