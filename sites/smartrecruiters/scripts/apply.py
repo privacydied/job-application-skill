@@ -334,9 +334,13 @@ def submit(slug: str = None) -> int:
     rc = _click_spl_button("Submit")
     if rc != 0:
         return rc
-    time.sleep(2.5)
-    body = cfx.evaluate("document.body.innerText.slice(0,500)") or ""
-    ok = "submitted" in str(body).lower() or "application submitted" in str(body).lower()
+    ok, body = False, ""
+    for _ in range(10):    # the confirmation can take several seconds to render
+        time.sleep(2)
+        body = cfx.evaluate("document.body.innerText.slice(0,600)") or ""
+        if "submitted" in str(body).lower():
+            ok = True
+            break
     if slug:
         out_dir = os.path.join(ROOT, "applications", slug)
         os.makedirs(out_dir, exist_ok=True)
