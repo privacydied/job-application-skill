@@ -2859,7 +2859,7 @@ def _bank_option_fallback(q, ans, opts):
     ql = q.lower()
     # User rule (2026-11-17): ALWAYS answer "where did you hear about us" with the job board.
     if _HEAR_Q_RE.search(q):
-        for rx in (r"job ?board|job ?site|jobs? website", r"careers? (site|page|website)|company (web)?site|website",
+        for rx in (r"job ?board|job ?site|jobs? website|linkedin|indeed|glassdoor", r"careers? (site|page|website)|company (web)?site|website",
                    r"^other\b|other \("):
             hit = next((o for o in opts if re.search(rx, o, re.I)), None)
             if hit:
