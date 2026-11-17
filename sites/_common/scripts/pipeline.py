@@ -192,6 +192,22 @@ FEEDS = {
 # ── family classifier (for per-family resume bases, Tier 2) ──────────────────
 # Ordered: first hit wins. Keyed on lowercased title substrings.
 _FAMILY_RULES = [
+    # 2026-11-17 role additions (target-roles §25-28). First hit wins, so these sit ABOVE the
+    # generic rules: "AI Red Team Tester" must not fall to qa ("tester"), "Systems Engineer"
+    # must not fall to design, etc. Mapping: DC/ICT/asset/AV -> support; NOC/IAM/systems/LLMOps
+    # -> devops; AI evaluation/red teaming -> ai; GIS/scraping/web perf -> engineering;
+    # music metadata/catalogue -> content.
+    ("ai",         ("ai evaluat", "llm evaluat", "ai quality", "ai red team", "red teaming", "red teamer",
+                    "ai safety")),
+    ("support",    ("data centre", "data center", "smart hands", "ict support", "ict technician",
+                    "it support officer", "systems support officer", "it asset", "deployment technician",
+                    "imaging technician", "audio visual", "audio-visual", "av technician", "av support")),
+    ("devops",     ("noc analyst", "noc technician", "noc engineer", "network operations", "llmops",
+                    "ai infrastructure", "iam analyst", "identity and access", "access management",
+                    "systems engineer", "monitoring engineer", "observability")),
+    ("engineering", ("gis technician", "mapping technician", "geospatial", "map data", "web scraping",
+                     "data acquisition", "data collection", "web performance", "site performance")),
+    ("content",    ("music metadata", "music data", "music content", "music catalogue", "catalogue coordinator")),
     ("research",  ("user research", "ux research", "researcher", "usability", "design research")),
     ("content",   ("content design", "content strateg", "ux writer", "service design", "content designer")),
     ("qa",        ("qa ", "quality assur", "test analyst", "software tester", "accessibility test",
