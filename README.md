@@ -225,6 +225,54 @@ Notes:
   export CFX_KEY=$(grep CAMOFOX_ACCESS_KEY camofox-browser.env | cut -d= -f2)
   ```
 
+### Windows without Docker (native camofox-browser)
+
+Use this if you're on Windows and can't or won't run Docker. You run the upstream server directly.
+
+1. **Clone the upstream project.** The npm package `@askjo/camofox-browser` lists `https://github.com/jo-inc/camofox-browser` as its repository. Confirm that on the npm page before cloning, then:
+   ```powershell
+   git clone https://github.com/jo-inc/camofox-browser.git camofox-browser
+   cd camofox-browser
+   ```
+
+2. **Apply the inline-upload patch** from this repo (`camofox-patches/inline-upload.patch`). Check first, then apply:
+   ```powershell
+   git apply --check ..\job-application\camofox-patches\inline-upload.patch
+   git apply ..\job-application\camofox-patches\inline-upload.patch
+   ```
+   ⚠️ **As of writing, this patch does not apply cleanly to any published `@askjo/camofox-browser` version (1.0.12 through 1.19.0).** Against 1.19.0, 3 of 5 hunks fail. If `--check` fails, the upstream `server.js` has moved on. Don't force it. Port the two changes by hand: (a) the upload routes (`/tabs/:id/upload`, `/uploadViaChooser`) get their own larger JSON body parser, and (b) `cleanupTabUploads(tabId)` runs when a stuck tab is destroyed.
+
+3. **Install dependencies and the Camoufox browser binary.** `npm install` runs a postinstall that downloads the Camoufox binary. If that step warns, fetch it manually:
+   ```powershell
+   npm install
+   npm run fetch-bin
+   ```
+   Already have a Camoufox build? Set `CAMOUFOX_EXECUTABLE=C:\path\to\camoufox.exe` before `npm install` and when starting the server, and the download is skipped.
+
+4. **Set the environment** (PowerShell; the names come from the upstream `server.js`):
+   ```powershell
+   $env:CAMOFOX_OS = "windows"                 # fingerprint OS; some bot managers reject Linux fingerprints
+   $env:CAMOFOX_PORT = "9377"                  # must match CFX_URL below
+   $env:CAMOFOX_ACCESS_KEY = "<your key>"      # gates every route; use the same value as CFX_KEY
+   ```
+
+5. **Run the browser server with bun:**
+   ```powershell
+   bun server.js
+   ```
+   Upstream's own `npm start` is `node server.js`. Use bun only if you have it installed.
+
+6. **Point the skill at it** (in the job-application repo):
+   ```powershell
+   $env:CFX_URL = "http://localhost:9377"
+   $env:CFX_KEY = "<same as CAMOFOX_ACCESS_KEY>"
+   $env:CFX_USER = "<your session user>"
+   $env:CFX_UPLOAD_MODE = "auto"               # same host → path mode, no inline upload needed
+   ```
+   Check that it's up: `curl http://localhost:9377/health`.
+
+Your browser server then runs on this machine. The skill doesn't care whether it's in a container.
+
 ---
 
 ## Hardcoded defaults you may want to edit
