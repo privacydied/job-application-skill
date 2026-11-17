@@ -254,15 +254,19 @@ Use this if you're on Windows and can't or won't run Docker. You run the upstrea
    $env:CAMOFOX_OS = "windows"                 # fingerprint OS; some bot managers reject Linux fingerprints
    $env:CAMOFOX_PORT = "9377"                  # must match CFX_URL below
    $env:CAMOFOX_ACCESS_KEY = "<your key>"      # gates every route; use the same value as CFX_KEY
+   $env:CAMOFOX_INTERACTIVE = "desktop"        # visible Camoufox window on the Windows desktop
+   $env:ENABLE_VNC = ""                        # keep unset/empty: upstream's VNC plugin is Linux/X11-only (Xvfb + x11vnc)
    ```
 
-5. **Run the browser server with bun:**
+5. **Expose the Windows desktop over VNC.** Upstream's VNC plugin won't run on Windows, so the remote view comes from a Windows VNC server instead. Install one (TightVNC, UltraVNC or RealVNC), set a password, and let it listen on the desktop. Browse to the Camofox window through that VNC client. Keep that server bound to the LAN or a VPN, never the open internet. `CAMOFOX_INTERACTIVE=desktop` is meant for a person on the same machine, so don't publish the REST port (9377) beyond localhost.
+
+6. **Run the browser server with bun:**
    ```powershell
    bun server.js
    ```
    Upstream's own `npm start` is `node server.js`. Use bun only if you have it installed.
 
-6. **Point the skill at it** (in the job-application repo):
+7. **Point the skill at it** (in the job-application repo):
    ```powershell
    $env:CFX_URL = "http://localhost:9377"
    $env:CFX_KEY = "<same as CAMOFOX_ACCESS_KEY>"
