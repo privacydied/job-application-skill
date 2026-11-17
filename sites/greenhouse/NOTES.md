@@ -207,3 +207,22 @@ showed the widget opens fine. Fix: read the real labels from the keyless API
 `atsform.py pick "<label>" "<exact option>"` (EEO too: `No`, `I am not a protected veteran`, `Two or More Races`), re-read the
 `.select__single-value` of every control, then `atsform.py submit "Submit application"`. Also fill the required
 LinkedIn / Portfolio text boxes that the config missed.
+
+## Localhost camofox: tab DESTROYED mid-form by a slow combobox click (2026-11-17) — FIXED
+- Symptom: `HTTP 404 Tab not found` / `410` halfway through `gh_apply` (veteran-status / country
+  react-select). Server log: `destroying timed-out tab … reason: operation_timeout` — the click
+  fallback chain (timeout → force → DOM → mouse) ran past the server's 30s `HANDLER_TIMEOUT_MS`,
+  and the server kills the whole tab, wiping the filled form.
+- Fix: `HANDLER_TIMEOUT_MS=90000` in `camofox-browser.env`, then recreate the container
+  (`docker compose -f compose.yaml up -d camofox-browser`; env_file changes are NOT picked up by
+  `restart`). Verified: Coinbase form survived the same combobox and submitted.
+- The Greenhouse security-code gate mails the address typed in the form. Only the gmail `imap`
+  row is readable here, so for code-gated forms set `"fill": {"Email": "<gmail address>"}` in the
+  gitignored applications/_cfg config (Coinbase: code fetched + typed, confirmed).
+- `"phone country"` react-select labelled `Country*` sits next to Phone and is REQUIRED on EU boards
+  (Man Group); add `"combo": {"Country": "United Kingdom"}` → commits "United Kingdom +44".
+
+
+## 2026-11-17 run learnings (Jane)
+- Greenhouse's emailed 8-char security code goes to the applicant's **Outlook** address; the only IMAP row that works reads **Gmail**. Outlook basic auth is disabled (`LOGIN FAIL: Basic authentication is disabled.`), so CODE_MISSING is a genuine block, not a driver bug. Do not change the form email away from the real contact address.
+- Mandatory "own words / no AI" attestation → terminal Blocked (apply-prompt §5); prior art references/driver-redrive-guard-and-ai-attestation.md.

@@ -416,6 +416,12 @@ def main():
 
     how = commit_code(page, code)                          # rule 4
     if not how:
+        try:
+            print("OTP_DOM " + str(page.js(
+                "JSON.stringify({inputs:[...document.querySelectorAll('input')].map(i=>({id:i.id,type:i.type,len:i.value.length,max:i.maxLength,vis:i.offsetParent!==null})),"
+                "btn:[...document.querySelectorAll('button')].map(b=>({id:b.id,t:b.innerText.slice(0,18),dis:b.disabled}))})")), flush=True)
+        except Exception as e:  # noqa: BLE001
+            print("OTP_DOM_ERR " + str(e)[:80])
         print("VERIFY_DISABLED")
         return 4
     print("DIGITS_COMMITTED via " + how, flush=True)

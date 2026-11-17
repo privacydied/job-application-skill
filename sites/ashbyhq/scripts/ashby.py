@@ -265,12 +265,30 @@ def reveal() -> int:
 
 
 def _upload_to(selector: str, filename: str, label: str) -> int:
+    # camofox >= 1.19 setInputFiles()s the FIRST input[type=file] on the page and ignores
+    # `selector` when one exists, so a form with an earlier file input (Ashby's "autofill"
+    # box) gets the CV in the wrong field. Park every OTHER file input as type=text for the
+    # duration of the call, then restore them.
+    _park = (f"(()=>{{const t=document.querySelector({_js(selector)});let n=0;"
+             "document.querySelectorAll('input[type=file]').forEach(i=>{if(i!==t){i.setAttribute('data-parked','1');"
+             "i.setAttribute('type','text');n++;}});return n;})()")
+    _unpark = ("(()=>{document.querySelectorAll('input[data-parked]').forEach(i=>{"
+               "i.setAttribute('type','file');i.removeAttribute('data-parked');});return 1;})()")
+    try:
+        cfx.evaluate(_park)
+    except Exception:  # noqa: BLE001
+        pass
     try:
         cfx.post(f"/tabs/{cfx._tab()}/upload",
                  {"userId": cfx._uid(), "selector": selector, "path": filename})
     except cfx.CfxError as e:
         print(f"FAIL upload ({label}): {e}")
         return 1
+    finally:
+        try:
+            cfx.evaluate(_unpark)
+        except Exception:  # noqa: BLE001
+            pass
     time.sleep(1.5)
     got = cfx.evaluate(f"(()=>{{const f=document.querySelector({_js(selector)});return f&&f.files[0]?f.files[0].name:'NONE';}})()")
     # f.files[0].name is only the BASENAME; `filename` may be a full path, so compare

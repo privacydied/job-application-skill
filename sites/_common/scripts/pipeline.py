@@ -356,7 +356,10 @@ def _should_stop(phase_frac=1.0):
 def _install_stop_handlers():
     def _h(signum, _frm):
         _request_stop(signal.Signals(signum).name)
-    for s in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+    # Windows CPython has no SIGHUP; only register signals the platform defines.
+    for s in (signal.SIGTERM, signal.SIGINT, getattr(signal, "SIGHUP", None)):
+        if s is None:
+            continue
         try:
             signal.signal(s, _h)
         except (ValueError, OSError):  # not main thread / unsupported

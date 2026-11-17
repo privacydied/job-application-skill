@@ -145,3 +145,15 @@ An unanswered "in the office 3 days" radio is fixed with `ashby.py set-radio "of
 - `input[type=url]` portfolio field: re-type it with real keystrokes before submit if the validator says it is missing.
 - Country combobox ("Which country are you currently based in") lists "UK" not "United Kingdom"; type `Uk`, ArrowDown, Enter.
 - Several submits in a row can trip the spam flag once; the form wipes. Re-run the whole fill and it passes (attempt 2).
+
+## Required "How did you hear about this job?" combobox is invisible to `check` (Neko Health, 2026-11-17)
+- `ashby.py check` reported `errors:[]` / nothing empty, but the form had a required
+  `input[role=combobox]` "How did you hear about this job?*" left blank (Submit stayed greyed).
+  Always screenshot before submit. Fix that worked: clear the input via the native value setter,
+  focus+click to open, read `[role=option]`, then mousedown+click the exact option
+  (Neko: "Neko Website" — truthful for an ATS-direct posting). Then bare `ashby.py submit`.
+- `apply-defaults` EEO fill picks the applicant's disclosed gender; when a run says optional EEO =
+  "Prefer not to say", set `"eeo": false` in the config and pick the form's own decline option
+  ("I prefer not to answer") with `ashby.py set-radio`.
+- `submit` printed `UNCLEAR` while the page already showed "Success — Thanks for applying!"; read
+  `document.body.innerText` for the success text before treating UNCLEAR as a failure.

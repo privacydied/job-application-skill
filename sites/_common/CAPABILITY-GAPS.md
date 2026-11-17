@@ -537,3 +537,15 @@ evaluate/press still worked; closing tabs did not fix it, `sudo -n docker compos
 profile cookies, so re-login). (2) A one-shot python `claim_tab` does not protect a tab: keep a live process heartbeating,
 or use a separate `CFX_USER` for sourcing and applying. (3) Sourcing and applying in the same profile can evict the apply tab.
 
+
+## Windows host: PDF render + resume master (2026-11-17)
+- `make-pdf.sh` needs a Playwright container (ws://localhost:3006) and `ip route`; neither exists on
+  the Windows/MSYS host. It now falls back to a local browser `--headless --print-to-pdf`
+  (system `msedge.exe` first — the bundled Hermes chromium-1208 hangs headless here with a sandbox
+  "cannot access executable" + GPU crash loop). Verified: 3 tailored CVs rendered, pdftotext OK.
+- `tailor.py` needs a `*-resume.html` master at the skill root; it was missing (only the PDF CV in
+  uploads/). `jane-doe-resume.html` (gitignored by `*resume*.html`) was built from
+  applicant-profile.md + the PDF CV and is now the master.
+- A second Hermes TUI session driving the same camofox userId will take over whatever tab is in
+  `.jobenv.run` (cfx.py init syncs it). Mint a private tab with `cfx.ensure_tab(persist=False)`,
+  keep its id outside the pointer files, and export CFX_TAB from there.

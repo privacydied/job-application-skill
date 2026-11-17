@@ -140,6 +140,17 @@ A sourcing run is not finished when feeds stop: `queue.jsonl` still needs to be
   `applied_today >= target` (default 10), so a legitimate "source more" run otherwise exits
   with `verdict=DONE` and zero cards. Do not "fix" this by resetting the tracker — raise the
   target for that run and leave the applied history alone.
+- When the user asks for **N fresh postings / N jobs in the queue**, N is the queue depth,
+  not the pipeline's `--target` and not the applied count. Count `queue.jsonl` lines at the
+  start and at the end; `loop-preflight.py` reporting `DONE` is an applications gate and does
+  not mean the sourcing goal is met. Raise `--target` only far enough to keep that gate open,
+  and keep sourcing until the queue actually holds N rows.
+- Once every board in `pipeline.FEEDS` already has a `searches.csv` row, growing a short queue
+  means adding NEW query rows (board + query, blank `nav` where the feed builds its own
+  request) from the unused families in `references/target-roles.md` on boards that already
+  yield. Re-running the same board/query hits its cooldown key and returns nothing; a new
+  title string is a new key. Source HTTP-only and browser-bound boards in two serialized
+  passes, and report zero-yield/account-gated boards as blocked rather than padding the count.
 - A run that reports `screen_capped > 0` has queued rows with `jd: null` and
   `screen_skipped: 'screen-limit'`. Finish them with the canonical `jd.screen_one` /
   `jd.compact` loop (`python3 scripts/rescreen_queue.py`, with the browser tab live)

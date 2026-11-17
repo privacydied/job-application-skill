@@ -561,7 +561,7 @@ def build(slug, jid, eu=False, out=None):
         elif re.search(r"\bage\b|how old", low):
             want = next((o["label"] for o in opts if _decline.search(o["label"])), None)
         elif re.search(r"ethnic|race", low):
-            eth = (appl.get("ethnicity") or "").split()[0:1]
+            eth = (appl.get("ethnicity_greenhouse") or appl.get("ethnicity") or "").split()[0:1]
             want = next((o["label"] for o in opts if eth and eth[0].lower() in o["label"].lower()), None)
         elif re.search(r"orientation", low):
             so = (appl.get("sexual_orientation") or "").split("/")[0].strip()

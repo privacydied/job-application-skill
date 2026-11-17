@@ -2429,7 +2429,14 @@ def fill_eeo(config=None):
         # category without broadening the claim: both name the same census group. Only ever a
         # FALLBACK, so a form using the full phrasing still binds exactly.
         candidates = [val]
-        # ⛔ DROP THE APPLICANT'S OWN PARENTHETICAL (2026-08-17). Profile values carry a
+        # Greenhouse's closed-set ethnicity select offers "Other ethnic group" rather than
+        # the profile's free-text ethnicity value (configured per applicant). Try it FIRST
+        # for the broad group only; closed-set validation means a form without that literal
+        # option simply falls through to the canonical profile value, never a wrong option.
+        _eg = a.get("ethnicity_greenhouse")
+        if _eg and val == a.get("ethnicity"):
+            candidates.insert(0, _eg)
+        # ⛔ DROP THE APPLICANT'S OWN PARENTHETICAL (2026-08-17).
         # clarifying suffix the employer's option list never has: ethnicity_sub is
         # "Any other Mixed/Multiple background (Caribbean & North African)" while the form
         # offers "Any other Mixed/Multiple ethnic background". Exact match fails, and the

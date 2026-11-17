@@ -67,3 +67,22 @@ Workable handoff).
   after the attach (2 attempts) — left Blocked; likely needs a human-trusted file pick.
 - The screener bank answered `salary expectation` with 65000 for a £28–33k Digital Designer role:
   pass the advertised band in `--answers` rather than trusting the bank on pay questions.
+
+## `/jobs/land/ad/<id>` needs its `?aztt=` query + AWS-WAF-style human check (2026-11-17, localhost camofox)
+- Stripping the query from a `/jobs/land/ad/<id>?aztt=…` href lands on **"Page not found"** — always
+  follow the FULL href (query included), never `href.split('?')[0]`.
+- ~14 back-to-back land/ad navigations in one process tripped an orange **"Let's confirm you are
+  human — Begin"** interstitial (AWS WAF CAPTCHA style; no Turnstile/reCAPTCHA iframe). It is NOT on
+  the sanctioned auto-solve list → hard halt + VNC. Pace land/ad follows (one per posting, inside
+  that posting's drive), don't bulk-classify them.
+- Classify native vs external from the `/details/<id>` page instead (no WAF hit there): native
+  ApplyIQ = `/details/<id>/apply` link; external = `/land/ad/<id>?aztt=…`. 2 of 16 queue rows were
+  native (JUARA IT, Zipwater) — those need the Adzuna website login, and there is currently NO
+  `adzuna.co.uk` row in ats-credentials.csv (only `adzuna-api`). Adzuna verification mail must go to an
+  IMAP-readable mailbox (only the gmail `imap` row is live; the outlook row is disabled).
+
+
+## 2026-11-17 run learnings (Jane)
+- Most queue rows' "Apply for this job" link is `/jobs/land/ad/<id>?aztt=...` — an EXTERNAL redirect (CV-Library, devitjobs.uk, etc.), not native ApplyIQ. `apply.py` reports NOFORM and lands on the third-party board; those need that board's own account/driver.
+- Only `/jobs/details/<id>/apply?aztt=...` is the native ApplyIQ form; it requires a logged-in Adzuna session (email/password account, not Google SSO).
+- Live JD can contradict queue metadata: 5964344754 was tagged "London, UK" but landed on a Greenhouse req in **London, Ontario, Canada** — always read the destination before driving.

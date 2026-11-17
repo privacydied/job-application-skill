@@ -68,3 +68,14 @@ Tests: `tests/test_core.py::TestReedLoginFreshCode`.
 - `reed_apply.py` waits 9 s before Apply now. `LOOP-END` on a healthy session = a
   posting-specific wall; inspect the modal.
 - Local-browser file attach: `references/local-apply-fallback.md`.
+
+### Local-browser apply lane (validated fallback)
+When the camofox Reed path is unavailable, drive Easy Apply in a local Edge/Chrome with a
+persistent profile and remote debugging: launch once with `--remote-debugging-port=<port>` and
+a stable user-data dir, connect with Playwright `connect_over_cdp`, and sign in with
+`scripts/reed_login.py --cdp http://localhost:<port>`. For each queued Reed URL: dismiss the
+cookie banner, click the first visible `Apply now`, click `Submit application` in the
+`[role=dialog]` that contains that button, then verify on `account/jobs/applications` that the
+application count rose and the employer is listed before logging with `--proof`. Recheck the
+account page after every small batch; a fresh sign-in is required when a modal reports
+"Session expired". Do not create a second Reed account to work around session expiry.

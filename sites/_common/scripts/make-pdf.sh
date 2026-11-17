@@ -28,6 +28,46 @@ WORK="${PW_WORK:-/tmp/pw-work}"
 
 [ -f "$APP_DIR/$HTML" ] || { echo "ERROR: $APP_DIR/$HTML not found" >&2; exit 2; }
 
+# LOCAL-CHROME FALLBACK (Windows host, 2026-11-17): there is no Playwright container on
+# this machine (ws://localhost:3006 refuses), and `ip route` does not exist under MSYS, so
+# the container path below can never run here. A local Chromium renders the self-contained
+# HTML straight from disk with --print-to-pdf. Used when $CHROME_BIN is set, or when the
+# Playwright WS port is closed and a known local Chromium exists.
+_pdf_verify() {
+  [ -s "$OUT" ] || { echo "ERROR: no PDF produced at $OUT" >&2; exit 3; }
+  if command -v pdftotext >/dev/null 2>&1; then
+    CHARS="$(pdftotext "$OUT" - 2>/dev/null | tr -d '[:space:]' | wc -c)"
+    [ "$CHARS" -gt 0 ] || { echo "ERROR: $OUT has NO extractable text — not ATS-safe" >&2; exit 3; }
+    echo "PDF: $OUT ($(wc -c < "$OUT") bytes, $CHARS extractable chars via pdftotext)"
+  else
+    echo "PDF: $OUT ($(wc -c < "$OUT") bytes; pdftotext unavailable — text not verified)"
+  fi
+}
+if [ -z "${CHROME_BIN:-}" ]; then
+  _pwport="$(echo "$PW_WS" | sed -n 's#.*:\([0-9][0-9]*\)/*$#\1#p')"
+  if ! (exec 3<>"/dev/tcp/127.0.0.1/${_pwport:-3006}") 2>/dev/null; then
+    # Edge FIRST: the bundled Hermes chromium-1208 hangs headless on this host (sandbox
+    # "cannot access executable" + GPU/network-service crash loop, never writes the PDF);
+    # the system msedge.exe renders the same file in ~4s.
+    for c in "/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" \
+             "/c/Program Files/Google/Chrome/Application/chrome.exe" \
+             "$(command -v chromium 2>/dev/null)" "$(command -v google-chrome 2>/dev/null)"; do
+      [ -n "$c" ] && [ -x "$c" ] && { CHROME_BIN="$c"; break; }
+    done
+  fi
+fi
+if [ -n "${CHROME_BIN:-}" ]; then
+  _abs() { (cd "$(dirname "$1")" && printf '%s/%s' "$(pwd -W 2>/dev/null || pwd)" "$(basename "$1")"); }
+  IN_ABS="$(_abs "$APP_DIR/$HTML")"
+  mkdir -p "$(dirname "$OUT")"; touch "$OUT"; OUT_ABS="$(_abs "$OUT")"; rm -f "$OUT"
+  timeout 60 "$CHROME_BIN" --headless=new --disable-gpu --no-pdf-header-footer --no-first-run \
+    --user-data-dir="$(_abs "${TMPDIR:-/tmp}")/mkpdf-profile-$$" \
+    --print-to-pdf="$OUT_ABS" "file:///$IN_ABS" >/dev/null 2>&1 || true
+  _pdf_verify
+  python3 "$SELF_DIR/stagetimer.py" record pdf "$SECONDS" "$APP_DIR" 2>/dev/null || true
+  exit 0
+fi
+
 # LAN IP the browser container can actually reach (host localhost is invisible to it).
 # Use the source IP of the default route — robust against the many docker-bridge IPs.
 LAN_IP="$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src"){print $(i+1); exit}}')"

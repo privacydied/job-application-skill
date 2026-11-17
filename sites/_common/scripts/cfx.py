@@ -275,6 +275,14 @@ def _inline_upload_body(body: dict) -> dict:
              uploads/ dir (the NAS setup)."""
     p = body.get("path")
     mode = os.environ.get("CFX_UPLOAD_MODE", "auto").lower()
+    if p and "content_base64" not in body:
+        # camofox >= 1.19 only accepts ABSOLUTE container paths inside its uploads dir; older
+        # servers resolved a bare name under /uploads. Normalise bare names so both work.
+        def _abs(x):
+            return x if str(x).startswith("/") else upload_path(x)
+        body = dict(body)
+        body["path"] = [_abs(x) for x in p] if isinstance(p, list) else _abs(p)
+        p = body["path"]
     if not p or "content_base64" in body or mode == "path":
         return body
     local = _local_upload_file(p)
