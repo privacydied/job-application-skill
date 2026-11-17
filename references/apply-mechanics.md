@@ -121,3 +121,16 @@ whole queue and let the driver self-heal/bail; never pad with off-profile rows.
   "register your interest" / "does not represent a live vacancy" before tailoring; log `Skipped`.
 - **Never pad the count** with off-profile/senior/wrong-location roles. Pool exhausted for the
   day → report the real count + the cooldown window/new-board options.
+
+## Remote upload mode (before any local-browser fallback)
+When the client and camofox server are on different hosts, `POST /upload` needs the
+server-side inline-upload patch. Set `CFX_UPLOAD_MODE=inline` (`auto` also detects a remote
+`CFX_URL`) and prove it with a real attach before a run. `CFX_UPLOAD_DIR` only names the
+path the server sees; it cannot change the server's bind mount. The patched server and its
+apply recipe live in `camofox-patches/` in the repo.
+
+## Proof path for close_out
+Save every confirmation artifact as `applications/<company>-<role>/confirmation.png`
+(slugified company + role), which is the path `close_out.py` reconciles. A custom prefix
+such as `reed-.../` leaves the screenshot on disk but reports `NO_ARTIFACT` conflicts; copy
+it to the expected slug before reporting counts.

@@ -119,3 +119,48 @@ than it saves. If `stagetimer` shows `fill`/`source` dominating, the answer is f
 *actions* (batching), never faster actions. Profile before optimizing:
 `export STAGETIMER=1`, then `python3 sites/_common/scripts/stagetimer.py report`
 (stages: source / screen / tailor-exec / pdf / fill).
+
+Standing preference for this applicant's runs: a role whose submit is blocked by a
+CAPTCHA or a CAPTCHA-service error is SKIPPED (record the reason) and the run continues
+to the next role. Do not hold the turn for a human solver or spend repeated attempts on
+the grid; sanctioned auto-solves are used only where the policy already allows them.
+
+## Sourcing-run cleanup — the queue is the deliverable
+
+A sourcing run is not finished when feeds stop: `queue.jsonl` still needs to be
+**screened, location-checked, and ATS-filtered** before it is handed to the apply lane.
+
+- A board absent from `searches.csv` is unreachable by the pipeline. To onboard many boards at
+  once, add one row per board (`board, query, nav`; blank `nav` where the feed builds its own
+  request), then source in two serialized passes — `--http-concurrent --boards <HTTP-only set>`
+  first, `--own-tab --boards <browser-bound set>` second. Classify the sets from
+  `HTTP_ONLY_BOARDS` in `pipeline.py`; never run both passes concurrently against one queue.
+- A sourcing request that overrides the day's applied-count cap must pass an explicit
+  `--target` larger than today's Applied count. `search_plan` returns DONE when
+  `applied_today >= target` (default 10), so a legitimate "source more" run otherwise exits
+  with `verdict=DONE` and zero cards. Do not "fix" this by resetting the tracker — raise the
+  target for that run and leave the applied history alone.
+- A run that reports `screen_capped > 0` has queued rows with `jd: null` and
+  `screen_skipped: 'screen-limit'`. Finish them with the canonical `jd.screen_one` /
+  `jd.compact` loop (`python3 scripts/rescreen_queue.py`, with the browser tab live)
+  before any apply pass. A capped row is not a screened row.
+- `precheck` keeps remote rows whose own verdict says the role is region-restricted
+  outside the UK. Drop those at cleanup — `remote` alone is not workable from London.
+  Re-check location and language fields (US/APAC/India-only, Spanish-only weekend
+  shifts) before leaving a role in the apply queue.  API feeds also emit bare postcodes and small non-London towns that pass the screen; run an
+  explicit location gate before handing the queue to the apply lane: keep rows whose location
+  contains London, matches a London postcode prefix (N/NW/SE/SW/E/EC/WC/W/HA/IG/RM/EN/TW/KT/
+  BR/DA/SM/CR/UB/WD), or whose JD signals `london: true`. A bare `remote: true` is not enough.
+- A broad new tier phrase needs a discipline guard in the **same** change that adds it.
+  `Repair Technician` also matches vehicle bodywork / appliance / furniture roles;
+  add a narrow domain-modifier guard to `check_title.py` and verify one in-domain and
+  one out-of-domain sample before sourcing, or the queue fills with off-profile work.
+  Compound over-matches need the same guard: `build engineer` matches `software engineer
+  in build engineering`, and `maintenance engineer` matches `software maintenance
+  engineer`. Exclude the software-engineering reading in `check_title.py`, not in the
+  driver, so every lane sees the same screen.
+- When the user asks to skip email-code / OTP ATS, exclude those rows **at source time**,
+  not at apply time. Greenhouse gates submission behind an emailed verification code
+  (`references/greenhouse-verification-gate.md`); dropping the rows from the active
+  queue is the only reliable way to keep the apply lane from hitting that wall. State
+  the exclusion explicitly in the handoff so the user can reverse it later.

@@ -274,6 +274,32 @@ _FIELD_SERVICE_RE = re.compile(r"\bfield service\b")
 _FIELD_SERVICE_MOD_RE = re.compile(
     r"\b(" + "|".join(re.escape(w) for w in _FIELD_SERVICE_MODIFIER) + r")\b", re.I)
 
+# "Repair Technician" is a genuine IT title (computer/laptop/Apple repair) but the bare
+# phrase also matches vehicle/body/appliance repair. Guard the unambiguous non-IT domains.
+_NON_IT_REPAIR_MODIFIER = (
+    "smart repair", "bodyshop", "body repair", "panel repair", "paint repair",
+    "automotive", "vehicle", "motorcycle", "appliance", "watch repair",
+    "jewellery repair", "jewelry repair", "furniture repair", "upholstery",
+    "shoe repair", "dent repair", "windscreen",
+)
+_NON_IT_REPAIR_RE = re.compile(
+    r"\b(" + "|".join(re.escape(w) for w in _NON_IT_REPAIR_MODIFIER) + r")\b", re.I)
+
+
+def _non_it_repair_role(title_l):
+    """True for non-IT repair roles that match the 'repair technician' tier phrase."""
+    if "repair technician" not in title_l and "repair engineer" not in title_l:
+        return False
+    return bool(_NON_IT_REPAIR_RE.search(title_l or ""))
+
+
+def _software_engineering_role(title_l):
+    """Software engineering roles are not the hardware/IT-support profile. The tier parser
+    matches 'build engineer' inside 'build engineering' and 'maintenance engineer' inside
+    'software maintenance engineer', so exclude those explicitly."""
+    return any(s in title_l for s in ("software engineer", "software developer",
+                                      "software maintenance", "mlops engineer"))
+
 
 # "Reliability Engineer" / "Site Performance Engineer" / "Performance Engineer" are
 # ambiguous: same bare phrase covers software Site-Reliability-Engineering (on-profile)
@@ -320,7 +346,8 @@ def check_title(title):
     _sen_l = re.sub(r"\bproduct manager\b", "product_role", title_l)
     seniority_flag = any(re.search(r"\b" + re.escape(w) + r"\b", _sen_l) for w in SENIORITY_WORDS)
     discipline_flag = (_industrial_design_engineer(title_l) or _field_service_driving_role(title_l)
-                        or _ambiguous_industrial_reliability_role(title_l))
+                       or _ambiguous_industrial_reliability_role(title_l) or _non_it_repair_role(title_l)
+                       or _software_engineering_role(title_l))
     early_career_flag = _early_career(title_l)
     best = None  # (tier, phrase) -- prefer the highest tier (A > B > C) on multiple matches
     for phrase, tier in parse_target_roles():

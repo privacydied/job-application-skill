@@ -32,7 +32,9 @@ lists reappear outside `check_title.py`.
 
 | I need to… | Use (single source of truth) | Never do instead |
 |---|---|---|
+| Re-login a dead Reed session (emailed 4-digit code) | `python3 scripts/reed_login.py [--if-needed] [--cdp <url>]` | hand-rolled `/tmp/reed_*` login scripts; clicking "Send code again" before the first fetch |
 | Run the whole sourcing→screening funnel | `pipeline.py` (CLI) or `import pipeline; pipeline.run(...)` | hand-chain feeds+merge+precheck |
+| Check what flags a script accepts | read its USAGE docstring or source — `pipeline.py` / `apply_queue.py` hand-roll `sys.argv` and silently ignore unknown flags | passing `--help` to them: it starts a real sourcing run and burns browser time |
 | Decide if a run should even start | `loop-preflight.py` / `search_plan.plan()` (SLEEP/WORK/HOLD/DONE) | count tracker rows by hand |
 | Source one board | `sites/<board>/scripts/feed.py --nav <url>` | scrape the results page via snapshots |
 | Source Adzuna (JSON API, no browser) | `sites/adzuna.co.uk/scripts/feed.py --what "<q>"` (needs `ADZUNA_APP_ID`/`_KEY`, free at developer.adzuna.com) | scrape adzuna pages |

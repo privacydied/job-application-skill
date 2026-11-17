@@ -121,7 +121,10 @@ dropdown selection. So a Monzo submission additionally needs: (a) the two **reac
 consent fields (`UK Right to Work` / `privacy notice`) driven via `combobox_pick` (NOT `radios` —
 those silently no-op), and (b) the "based" autocomplete handled specially. Treat each
 Greenhouse company's required fields as potentially unique — don't assume GoCardless's fill path
-generalizes. GoCardless SRE was the first proven end-to-end submission through this gate
+generalizes. When `submit-blocked.txt` lists required fields, map each to a config key by DOM
+shape: react-select comboboxes (Country, residence, Yes/No screeners) go in `combo`, native radio
+groups in `radios`, privacy acknowledgements in `checkboxes`. `set_radio ... NO_FIELD` means the
+field is not a native radio — inspect it and use `combo` instead of adding more radio keys. GoCardless SRE was the first proven end-to-end submission through this gate
 (356→357, real `confirmation.txt` = "Thank you for applying!").
 
 ## Reusable technique notes (engine already has these — do not re-implement)

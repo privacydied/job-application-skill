@@ -1,5 +1,10 @@
 # Account-wall verification protocol (2026-07-18)
 
+**User opt-out wins:** when the user asks to skip ATS that require an emailed
+code/OTP, do not self-serve that code for those postings — mark them skipped
+and continue to the next candidate. The OTP/verification-code primitive in
+`references/tool-manifest.md` applies only when no such opt-out was given.
+
 When a board is flagged "account needed" / "self-register where no CAPTCHA", don't
 REPORT it as a wall on a guess. Probe it concretely — most are one of three outcomes,
 and only the third is a true wall:

@@ -35,6 +35,12 @@ The ONLY way to touch the camofox browser. Never post to `$CFX_URL` by hand from
   lanes** safe — see `references/parallel-apply-lanes.md`. Claims self-clean on dead pid, stale
   heartbeat, or `close_tab`, so a crashed run cannot permanently protect a leaked tab.
 - `post(path, body)` — raw REST (uploads: `POST /tabs/<tab>/upload`); `shot()` — screenshot.
+- If the container rejects an upload with `file not found under /uploads`, the client is in mount
+  mode against a server whose `/uploads` is not the repo folder. On a patched server use inline
+  mode (`CFX_UPLOAD_MODE=inline`; server patch in `camofox-patches/inline-upload.patch`) — the
+  client sends the file bytes and no shared mount is needed. Where inline is unavailable, use
+  the local-browser CDP attach recipe in `references/local-apply-fallback.md`.
+- When adding a new `CFX_*` env var, add it to `_write_tab_env()`'s export block in `cfx.py`; `cfx.py init` rewrites every pointer file and silently drops variables it does not list.
 - `dismiss_cookie_banner()`, `find_popup()`, `restart_engine()`, `engine_click_healthy()`.
 
 ## ATS application forms — `sites/_common/scripts/atsform.py`  ⭐ the big one
@@ -72,6 +78,12 @@ quirks (reveal button, success signal); everything below is delegated, never re-
 ## Writing tracker rows — `sites/_common/scripts/log-application.py`
 - **THE only writer of `application-tracker.csv`.** Never `echo >>` or hand-append. Handles
   match-in-place, the downgrade guard, URL canonicalization, the `Applied` proof rule, and locking.
+- Save the proof artifact at `applications/<company>-<role>/confirmation.png`, the exact slug
+  `close_out.py` derives. A board-prefixed folder hides an otherwise valid artifact from
+  close-out and produces NO_ARTIFACT conflicts against a correct tracker row.
+- When one employer posts two distinct URLs under the same role title, the writer refuses the
+  pair merge. Confirm both applications really happened, then log the second row with
+  `--append-new`; otherwise a genuine submission is silently dropped from the tracker.
 
 ## Title eligibility — `sites/_common/scripts/check_title.py`
 - `check_title(title)` — the ONE on/off-profile + seniority screen. Never re-list seniority/role
@@ -98,9 +110,30 @@ quirks (reveal button, success signal); everything below is delegated, never re-
 
 ## Email OTP / verification codes — `scripts/fetch_verification_code.py`
 The ONE primitive for pulling an emailed verification code/token/link out of the applicant's
-mailbox — used by `gh_apply.py`, the applicationtrack drivers, and (2026-09-02) Trac. Reads IMAP
-creds at runtime from the `ats-credentials.csv` row whose `site` starts with `imap` — never
-hardcode an address/password. Reuses `scripts/email_ingest.py`'s `_connect()`.
+mailbox — used by `gh_apply.py`, the applicationtrack drivers, and Trac. Reads IMAP creds at
+runtime from the `ats-credentials.csv` row whose `site` starts with `imap` — never hardcode an
+address/password. Reuses `scripts/email_ingest.py`'s `_connect()`.
+- ⚠️ `imap.outlook.com` + password FAILS with `Basic authentication is disabled` — Microsoft retired
+  basic auth for Outlook IMAP. Use a Gmail app-password row instead:
+  `imap.gmail.com,<address>,<16-char app password>` (Gmail 2FA ON + IMAP enabled). Generate it and
+  run `scripts/setup_gmail_imap.py` locally — that helper reads the password with `getpass`, so the
+  secret never enters chat. Auto-forward ATS mail from Outlook to that Gmail; if forwarding rewrites
+  the From header, call `get_code(sender="any", company=...)` instead of `sender="greenhouse"`.
+- Google hides App passwords when 2SV is off, when 2SV uses only a passkey/security key, on
+  Workspace accounts with a restrictive admin policy, or under Advanced Protection — fix the
+  2SV method before retrying; this is not an IMAP failure.
+- A comma in an app password is fine: `creds_row()` uses `csv.DictReader` and the helper uses
+  `csv.writer`, so quote the field in the CSV. Google's displayed spaces are grouping only and
+  must be removed from the password value.
+- Treat any credential pasted into chat as exposed: revoke/regenerate it and have the user enter
+  the replacement locally (getpass helper or direct CSV edit). Never write the pasted value into
+  `ats-credentials.csv`.
+- API-key feeds use the same CSV with fixed shapes: `adzuna-api,<app_id>,<app_key>` (email column
+  = app id, password column = app key) and `reed-api,<key>,,` (email column = key, blank password).
+  Append with `csv.writer`, then verify with the feed's `_creds()` before sourcing.
+- Verify the whole path with `python3 scripts/otp_selftest.py` — it sends a synthetic Greenhouse-shaped
+  code email from the mailbox to itself, calls `get_code()`, checks the result and deletes the test
+  mail. Real-output expectation: `CODE_EXTRACTED=True`, `MATCH=True`, `TEST_EMAIL_DELETED`.
 - `get_code(sender="greenhouse", minutes=20, digits=None, company=None, wait_s=0, poll_s=6,
   want="code")` — `sender` is a substring match on the From header (`"any"` = no filter);
   `wait_s>0` POLLS until a matching email lands (use this — the email always lags the trigger
@@ -111,9 +144,10 @@ hardcode an address/password. Reuses `scripts/email_ingest.py`'s `_connect()`.
   [--wait 90] [--token|--link]` — prints the code or exits 1 (NO_CODE) / 2 (no IMAP creds).
 - **Verified working `--sender` substrings so far:** `greenhouse` (Greenhouse security-code
   emails), `trac` (Trac/HealthJobsUK OTP emails, `noreply@recruit.trac.jobs` — the 6-digit
-  passcode, verified live 2026-09-02, arrived and was extracted within ~15s of `wait_s=90`
-  polling). For a NEW ATS, check one of its emails' From header for the right substring before
-  guessing.
+  passcode, arrived and was extracted within ~15s of `wait_s=90` polling), `reed` (Reed
+  passwordless sign-in — a 4-digit code). For Reed use `scripts/reed_login.py`, not a bare
+  `get_code`: it selects by IMAP-UID + Date after the request, which `get_code` cannot.
+  For a NEW ATS, check one of its emails' From header for the right substring before guessing.
 - **Extend `_extract`/`_plausible_code`/`_VERIFY_LINK` in this file** if a new ATS's email
   shape isn't matched (a new anchor phrase, an all-letter code, a different magic-link param
   name) — never fork a second `get_code`-shaped function. See the module's own docstring for

@@ -15,9 +15,16 @@ or `export CFX_USER=""` **overrides the python `cfx` module's built-in defaults*
 - `cfx._uid()` defaults to `"nasirjones"`. An empty `CFX_USER` makes it `""`, so the server
   returns `HTTP 400 userId is required`.
 
-**Fix:** env files must contain ONLY `export CFX_KEY=...` + `export CFX_TAB=...`. After
-`source .jobenv.*`, run `unset CFX_URL CFX_USER` in the same shell so the module falls
-back to its defaults. The `cfx.sh` wrapper is unaffected because it computes its own base.
+**Fix:** never write EMPTY `CFX_URL`/`CFX_USER` values. When the backend is local, omit them
+(or `unset CFX_URL CFX_USER` after sourcing) so module defaults apply; when it is remote,
+set `CFX_URL` to the LIVE host explicitly. The `cfx.sh` wrapper computes its own base and is
+unaffected.
+
+**Remote deployments: source before init.** `cfx.py init` syncs values from the environment it
+can see; running it with no env loaded rewrites `CFX_URL` to `http://localhost:9377` and
+`CFX_USER` to the built-in default, silently breaking every later call against a remote
+backend. Always `source .jobenv.run` first, then `init`, then re-check the URL line in the
+file before driving.
 
 ## 2. Re-persisting a fresh tab the safe way
 
@@ -56,8 +63,36 @@ Recovery:
    needed. Only re-run `csj_login.py` if a board shows "not logged in".
 
 ## 4. Order of operations after any outage
-1. `curl -fsS http://localhost:9377/health` — is the server even up?
-2. If down: compose-restart camofox-browser, wait, re-check.
-3. `cfx.ensure_tab(persist=True)` for a live tab; persist ONLY key+tab (§2).
-4. `unset CFX_URL CFX_USER`; verify with `cfx.evaluate('1+1')` == 2.
-5. Re-check board login state; re-run the board's `*_login.py` only if needed.
+1. Resolve the configured host (`nslookup`, `ping -4`) and test BOTH `http://<host>:6080/vnc.html`
+   and `http://<host>:9377/health`. An HTTP 401 on :9377 is normal (auth required); HTTP 000 /
+   timeout means the ADDRESS is stale, not that camofox is down.
+2. If the configured IP is dead but a hostname answers, set `CFX_URL` to that hostname in
+   `.jobenv.run`, run `python3 sites/_common/scripts/cfx.py init`, and require
+   `eval_ok: true, degraded: false` before driving anything.
+3. If neither answers: compose-restart camofox-browser, wait, re-check.
+4. `cfx.ensure_tab(persist=True)` for a live tab; persist ONLY key+tab (§2).
+5. Verify with `cfx.evaluate('1+1')` == 2.
+6. Re-check board login state; re-run the board's `*_login.py` only if needed.
+
+## 5. Remote-backend address drift
+A remote browser host can be reachable through a Tailscale hostname while its old LAN IP no longer
+answers; DNS may resolve that hostname to a `100.64.0.0/10` address. Never declare the backend
+down from one failed IP probe — test the hostname and VNC endpoint first, then repair `CFX_URL`
+in place.
+
+## 6. CFX_UPLOAD_DIR is client-side only
+`CFX_UPLOAD_DIR` changes the path string the CLIENT sends to `POST /tabs/<tab>/upload`; the server
+still resolves that path under its own `/uploads`. Setting or changing it cannot repair a missing
+or unwritable container bind mount — the compose mount must change and the container must restart.
+On a server carrying the upstream inline-upload patch, set `CFX_UPLOAD_MODE=inline` (or leave it
+`auto` with a remote `CFX_URL`) so the client sends `filename` + `content_base64` and no shared
+mount is needed; verify with a real `atsform.py upload <field> <file>` before a drive. Only when
+inline is unavailable, use the local-browser CDP attach recipe in
+`references/local-apply-fallback.md` as the fallback.
+
+## 7. A single /evaluate HTTP 500 is transient
+One `cfx.evaluate` (or `/navigate`) returning `HTTP 500 Internal server error` during a drive
+does not prove the engine or container is dead. Re-run `cfx.py init` (source the env first),
+`cfx.py check-engine`, and read `/health`; if `eval_ok: true` and `degraded: false`, resume on the
+live tab. Report a container restart only after those checks fail. Treating one 500 as an outage
+costs a needless NAS restart and a wrong handoff.

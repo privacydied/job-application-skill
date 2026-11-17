@@ -4970,3 +4970,51 @@ class TestEmailIngestNextStep(unittest.TestCase):
         import email_ingest
         subj = "Unfortunately we will not be progressing your application to the next stage"
         self.assertEqual(email_ingest.classify_response(subj, ""), "Rejected")
+
+
+class TestReedLoginFreshCode(unittest.TestCase):
+    """reed_login.select_code picks the code by REQUEST TIME, not "newest 4-digit token".
+    Live failure (2026-11-17): clicking "Send code again" before fetching invalidated the code,
+    and stale unspent Reed codes in the same inbox were indistinguishable from the live one —
+    Verify accepted the digits and the redirect landed back on sign-in."""
+
+    def setUp(self):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        for sub in ("scripts", os.path.join("sites", "_common", "scripts")):
+            p = os.path.join(root, sub)
+            if p not in sys.path:
+                sys.path.insert(0, p)
+        import reed_login  # noqa: PLC0415
+        from datetime import datetime, timezone  # noqa: PLC0415
+        self.rl = reed_login
+        self.req = datetime(2026, 11, 17, 4, 0, 0, tzinfo=timezone.utc)
+
+    def _m(self, uid, code, date="Tue, 17 Nov 2026 04:00:20 +0000", frm="Reed <noreply@reed.co.uk>"):
+        return (uid, frm, date, f"Your sign in code is {code}. It expires in 10 minutes.")
+
+    def test_pre_request_email_is_stale_even_if_newest_by_date(self):
+        # UID 50 existed before the request (base_uid=50) -> stale regardless of its Date.
+        msgs = [self._m(50, "1111", date="Tue, 17 Nov 2026 04:05:00 +0000"), self._m(51, "2222")]
+        self.assertEqual(self.rl.select_code(msgs, 50, self.req), "2222")
+
+    def test_email_dated_before_request_is_rejected(self):
+        msgs = [self._m(51, "3333", date="Tue, 17 Nov 2026 03:50:00 +0000")]
+        self.assertEqual(self.rl.select_code(msgs, 50, self.req), "")
+
+    def test_skew_window_tolerates_small_clock_lead(self):
+        msgs = [self._m(51, "4444", date="Tue, 17 Nov 2026 03:59:30 +0000")]
+        self.assertEqual(self.rl.select_code(msgs, 50, self.req, skew_s=60), "4444")
+
+    def test_newest_uid_wins_and_non_reed_ignored(self):
+        msgs = [self._m(51, "5555"), self._m(52, "6666"),
+                self._m(53, "7777", frm="Greenhouse <no-reply@greenhouse.io>")]
+        self.assertEqual(self.rl.select_code(msgs, 50, self.req), "6666")
+
+    def test_undated_email_fails_closed(self):
+        self.assertEqual(self.rl.select_code([self._m(51, "8888", date=None)], 50, self.req), "")
+
+    def test_login_page_detection(self):
+        self.assertTrue(self.rl.on_login_page("https://www.reed.co.uk/account/SignIn?returnUrl=%2F"))
+        self.assertTrue(self.rl.on_login_page("https://www.reed.co.uk/authentication/login/callback"))
+        self.assertFalse(self.rl.on_login_page("https://www.reed.co.uk/"))
+        self.assertFalse(self.rl.on_login_page("https://www.reed.co.uk/account/jobs/applications"))
