@@ -715,6 +715,32 @@ def prune_tabs(budget: int = None, keep: str = None) -> list:
     return closed
 
 
+def reap_idle(keep: str = None) -> list:
+    """Close EVERY tab except `keep` (default: current CFX_TAB) and tabs another LIVE driver
+    has claimed (registry). Call after an application resolves so popups / external-ATS
+    handoffs / abandoned retries don't pile up and eat browser RAM. Best-effort: never raises.
+    Opt out with CFX_NO_REAP=1 (e.g. when hand-driving several tabs on purpose)."""
+    if os.environ.get("CFX_NO_REAP"):
+        return []
+    keep = keep if keep is not None else os.environ.get("CFX_TAB")
+    closed = []
+    try:
+        inuse = set(active_tabs()) | ({keep} if keep else set())
+        for t in list_tabs():
+            tid = t.get("tabId") if isinstance(t, dict) else None
+            if tid and tid not in inuse:
+                close_tab(tid)
+                closed.append(tid)
+        if keep and keep in {x.get("tabId") for x in list_tabs() if isinstance(x, dict)}:
+            try:  # shrink the kept tab's memory too: blank page drops the DOM/JS of the last form
+                post(f"/tabs/{keep}/navigate", {"userId": _uid(), "url": "about:blank"})
+            except Exception:  # noqa: BLE001
+                pass
+    except Exception:  # noqa: BLE001 — housekeeping must never break the caller
+        pass
+    return closed
+
+
 def _browser_running() -> bool:
     """Is the actual camoufox/Firefox BROWSER process alive (not just the REST
     server)? On a browser crash/OOM the REST server stays up and /health keeps
@@ -1741,7 +1767,7 @@ def _init_hermes_env() -> int:
 def _cli():
     import sys
     if len(sys.argv) < 2:
-        print("Usage: cfx.py <init|list-tabs|find-popup|open-tab|ensure-tab|sync-tab|prune-tabs|"
+        print("Usage: cfx.py <init|list-tabs|find-popup|open-tab|ensure-tab|sync-tab|prune-tabs|reap-tabs|"
               "dismiss-cookies|click-follow|shot|check-engine|restart-engine|eval-frame> "
               "[args...]", file=sys.stderr)
         return 1
@@ -1768,6 +1794,10 @@ def _cli():
             written = sync_tab()
             print(json.dumps({"tab": os.environ.get("CFX_TAB"),
                               "synced": written}, indent=2))
+        elif cmd == "reap-tabs":
+            # cfx.py reap-tabs  -> close every tab except CFX_TAB (and live-claimed ones)
+            closed = reap_idle()
+            print(json.dumps({"reaped": len(closed), "closed": closed}, indent=2))
         elif cmd == "prune-tabs":
             # cfx.py prune-tabs [budget]  -> proactively close stale tabs down to headroom
             # under the ~8-tab wedge threshold (never the active CFX_TAB). Preventive

@@ -269,4 +269,15 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    _rc = main()
+    # An application just resolved -> free its browser tabs (popups, external-ATS handoffs,
+    # abandoned retries) so they don't accumulate and eat RAM. Best-effort; CFX_NO_REAP=1 opts out.
+    if _rc == 0 and os.environ.get("CFX_TAB") and os.environ.get("CFX_KEY"):
+        try:
+            import cfx  # noqa: E402
+            _n = len(cfx.reap_idle())
+            if _n:
+                print(f"reaped {_n} idle browser tab(s)")
+        except Exception:  # noqa: BLE001
+            pass
+    sys.exit(_rc)
