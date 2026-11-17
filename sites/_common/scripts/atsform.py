@@ -2057,7 +2057,7 @@ def review(company, must_haves=None):
     # unanswered radios, EXCEPT optional demographic/EEO groups (age/gender/etc.),
     # which are legitimately left blank and would otherwise be false-positive noise.
     EEO = re.compile(r"age|gender|transgender|sexual orientation|ethnic|disab|veteran|neurodiver|"
-                     r"prefer not|race|nationality|pronoun", re.I)
+                     r"mental health|prefer not|race|nationality|pronoun", re.I)
     for q, answered in data["radioGroups"].items():
         if not answered and not EEO.search(q):
             findings.append(f"unanswered radio: {q}")

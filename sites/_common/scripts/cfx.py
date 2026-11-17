@@ -1708,6 +1708,7 @@ def _init_hermes_env() -> int:
     Steps: (1) load CFX_KEY from .jobenv.run (never the stale .jobenv short key),
     (2) ensure a LIVE tab and sync it to every pointer file, (3) assert backend health.
     Returns 0 if ready to drive, non-zero with a printed reason otherwise."""
+    global U
     import subprocess
     root = _ROOT
     runenv = os.path.join(root, ".jobenv.run")
@@ -1717,7 +1718,7 @@ def _init_hermes_env() -> int:
               file=sys.stderr)
         return 2
     # (1) load CFX_KEY (+ any CFX_TAB/CFX_USER) from .jobenv.run, NEVER .jobenv.
-    key = tab = user = None
+    key = tab = user = url = None
     for line in open(runenv, encoding="utf-8"):
         line = line.strip()
         if line.startswith("export CFX_KEY="):
@@ -1726,6 +1727,8 @@ def _init_hermes_env() -> int:
             tab = line.split("=", 1)[1].strip().strip('"').strip("'")
         elif line.startswith("export CFX_USER="):
             user = line.split("=", 1)[1].strip().strip('"').strip("'")
+        elif line.startswith("export CFX_URL="):
+            url = line.split("=", 1)[1].strip().strip('"').strip("'")
     if not key:
         print("REFUSING: CFX_KEY not found in .jobenv.run.", file=sys.stderr)
         return 2
@@ -1738,10 +1741,14 @@ def _init_hermes_env() -> int:
     os.environ["CFX_KEY"] = key
     if user:
         os.environ["CFX_USER"] = user
-    # STRIP any empty CFX_URL/CFX_USER override so the python cfx module's own defaults win
-    # (a literal `export CFX_URL=""` in a hand-written env file OVERRIDES the module default
-    # and breaks every `import cfx` call — a documented footgun).
-    os.environ.pop("CFX_URL", None)
+    # STRIP only a BLANK CFX_URL/CFX_USER override (a literal `export CFX_URL=""` breaks every
+    # `import cfx` call). A real CFX_URL (e.g. the LAN camofox host) is adopted, so the pointer
+    # files keep it instead of being rewritten to the localhost module default.
+    if url:
+        U = url
+        os.environ["CFX_URL"] = url
+    else:
+        os.environ.pop("CFX_URL", None)
     os.environ.pop("CFX_USER", None) if not user else None
     if tab:
         os.environ["CFX_TAB"] = tab

@@ -647,6 +647,11 @@ def apply(config_path: str, do_submit: bool = False) -> int:
     if cfg.get("authorized_in_us") is not None:
         if combobox_commit("authorized", str(cfg["authorized_in_us"])) != 0:
             failures.append("combobox:us_auth")
+    # Generic required comboboxes, {label-keyword: truthful value} (e.g. notice period). Same
+    # shared engine; keyword must be a short fragment of the ancestor label text.
+    for lbl, val in (cfg.get("comboboxes") or {}).items():
+        if combobox_commit(lbl, str(val)) != 0:
+            failures.append(f"combobox:{lbl}")
 
     # EEO / diversity — the SHARED filler (atsform.fill_eeo), values from apply-defaults.json ->
     # applicant per the applicant's standing instruction (profile §Demographics, 2026-07-19:
