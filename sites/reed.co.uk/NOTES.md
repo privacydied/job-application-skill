@@ -10,8 +10,8 @@ click the button whose exact text is `Continue` (found via a text-match scan, no
 selector — there are multiple buttons on the page). This lands on the account page fully
 logged in (name appears in nav, `/account/jobs/applications` populates) — verified end-to-end,
 including a working `reed_apply.py` submit right after, with the target posting appearing in
-the live Applications list. If this stops working, re-check the actual DOM before falling
-back to the magic-link recovery flow below — don't assume the old blocker is still true.
+the live Applications list. No password, or no `#signin_password`: use the emailed-code
+re-login `python3 scripts/reed_login.py` (`references/reed-session-wall-recovery.md`).
 
 ## Login check — DO NOT use the homepage "Sign out" link
 Reed caches the homepage nav unreliably; a logged-in session may NOT render the
