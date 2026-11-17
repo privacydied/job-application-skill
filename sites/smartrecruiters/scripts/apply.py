@@ -455,7 +455,7 @@ def _questions():
 
 
 def _page_text():
-    return str(cfx.evaluate("document.body.innerText.slice(0,1500)") or "")
+    return str(cfx.evaluate("document.body.innerText.slice(0,8000)") or "")
 
 
 def _bank(question):
@@ -546,6 +546,14 @@ def pick_text(fid, answer, label=""):
 
 
 
+def _has_submit() -> bool:
+    js = """(() => { let f = false; const w = (r) => { r.querySelectorAll('spl-button,button').forEach(b => {
+      if (/^\\s*submit\\s*$/i.test((b.innerText || b.textContent || ''))) f = true; });
+      r.querySelectorAll('*').forEach(c => { if (c.shadowRoot) w(c.shadowRoot); }); }; w(document); return f; })()"""
+    return bool(cfx.evaluate(js))
+
+
+
 def _sr_rule(label, fill):
     """Truthful, profile-backed answers for the recurring SmartRecruiters screening questions
     (checked against references/applicant-profile.md): never an employee/ex-employee, never
@@ -598,8 +606,10 @@ def auto(url: str, do_submit: bool = False, company: str = "", role: str = "", c
     pick("spl-form-element_10", "London")
     time.sleep(0.5)
     time.sleep(1)
-    if next_step() != 0:
+    if next_step() != 0 and not _has_submit():
         return 3
+    # Single-page forms (e.g. Lyst) have a Submit and no Next: the screening questions sit
+    # below page 1 on the same page and the loop below answers them in place.
     time.sleep(2.5)
     # ── pages after personal info: answer from the bank or stop ──
     for _page in range(5):
@@ -609,6 +619,13 @@ def auto(url: str, do_submit: bool = False, company: str = "", role: str = "", c
         ac_ids = {q["id"] for q in qs if q["tag"] == "SPL-AUTOCOMPLETE"}
         for q in qs:
             lab = re.sub(r"^Select\s+", "", q["label"] or "").strip()
+            if q["tag"] == "SPL-CHECKBOX" and q["required"] and not q["value"] \
+                    and (not lab or re.search(r"personal data|data processing", lab, re.I)) \
+                    and re.search(r"privacy notice|personal data", txt):
+                # Single-page forms (Lyst): the data-processing consent checkbox has no readable
+                # label of its own; the page text names it. Same consent as the privacy tick below.
+                checkbox(q["id"], "on")
+                continue
             if not lab or (q["tag"] == "SPL-INPUT" and q["id"] in ac_ids):
                 continue
             # "If self described / if other, please state ..." follow-ups: leave blank unless required
