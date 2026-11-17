@@ -9,3 +9,6 @@ export CFX_USER="job-apply"                      # browser profile/session key (
 # NOTE: CFX_UPLOAD_DIR only names the path the *server* sees. Which host dir that is comes from
 # the compose volume (`${UPLOADS_DIR:-./uploads}:/uploads:ro`). If uploads 400 / "file not found",
 # the container is still mounting an old path: `docker compose up -d --force-recreate camofox-browser`.
+# export CFX_UPLOAD_MODE="auto"   # auto (default): send file bytes when CFX_URL is a remote host,
+#                                 # use the server's /uploads mount when local. Force: path | inline.
+#                                 # Inline needs the server patch: see camofox-patches/README.md

@@ -28,6 +28,7 @@ applications): `CFX_NO_PACING`, `CFX_NO_REFERER`.
 import json
 import contextlib
 import os
+import re
 import random
 import socket
 import sys
@@ -246,10 +247,62 @@ def human_pause(tier: str = "full") -> None:
     time.sleep(delay)
 
 
+_UPLOAD_ROUTE = re.compile(r"^/tabs/[^/]+/upload(ViaChooser)?$")
+_REPO_UPLOADS = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "uploads"))
+
+
+def _server_is_local() -> bool:
+    from urllib.parse import urlparse
+    h = (urlparse(U).hostname or "").lower()
+    return h in ("localhost", "127.0.0.1", "::1", "") or h == socket.gethostname().lower()
+
+
+def _local_upload_file(p: str):
+    """Local file behind an upload `path`, or None. Tries the path as given, then
+    <repo>/uploads/<basename> (so '/uploads/x.pdf' resolves on a client without that mount)."""
+    for cand in (p, os.path.join(_REPO_UPLOADS, os.path.basename(p))):
+        if cand and os.path.isfile(cand):
+            return cand
+    return None
+
+
+def _inline_upload_body(body: dict) -> dict:
+    """Mode pick for upload calls (CFX_UPLOAD_MODE = auto | path | inline; default auto).
+    path   : server reads the file from ITS /uploads mount (body untouched).
+    inline : send the bytes (filename + content_base64) -- works for ANY remote client.
+    auto   : inline when the server is remote (CFX_URL not this host) or the path is a real
+             local file the server can't see; mount mode when the server shares this host's
+             uploads/ dir (the NAS setup)."""
+    p = body.get("path")
+    mode = os.environ.get("CFX_UPLOAD_MODE", "auto").lower()
+    if not p or "content_base64" in body or mode == "path":
+        return body
+    local = _local_upload_file(p)
+    if local is None:
+        if mode == "inline":
+            raise CfxError(f"upload: CFX_UPLOAD_MODE=inline but no local file for {p!r} (looked in {_REPO_UPLOADS})")
+        return body                      # nothing local to send -> let the server resolve it
+    mount = os.environ.get("CFX_UPLOAD_DIR", "/uploads").rstrip("/") + "/"
+    if mode == "auto" and _server_is_local() and p.startswith(mount):
+        return body                      # same host + container-style path -> shared mount works
+    import base64
+    with open(local, "rb") as fh:
+        data = fh.read()
+    out = {k: v for k, v in body.items() if k != "path"}
+    out["filename"] = os.path.basename(local)
+    out["content_base64"] = base64.b64encode(data).decode()
+    return out
+
+
 def post(path: str, body: dict, timeout: int = 30) -> dict:
     """POST JSON to the camofox REST API and return the parsed response.
     Raises CfxError with the server's message on any HTTP/transport error
-    instead of leaking a raw urllib traceback."""
+    instead of leaking a raw urllib traceback.
+    Upload routes are mode-switched here (see _inline_upload_body) so every board script
+    works from a remote client without changes."""
+    if _UPLOAD_ROUTE.match(path):
+        body = _inline_upload_body(body)
+        timeout = max(timeout, 60)
     req = urllib.request.Request(
         f"{U}{path}",
         data=json.dumps(body).encode(),

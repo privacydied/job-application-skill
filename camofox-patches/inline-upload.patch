@@ -1,0 +1,140 @@
+--- a/server.js
++++ b/server.js
+@@ -110,7 +110,10 @@
+ }
+ 
+ const app = express();
+-app.use(express.json({ limit: '100kb' }));
++const _json100k = express.json({ limit: '100kb' });
++// Upload routes carry base64 file bytes (<= UPLOAD_MAX_BYTES); they get their own, larger parser.
++const UPLOAD_ROUTE_RE = /^\/tabs\/[^/]+\/upload(ViaChooser)?$/;
++app.use((req, res, next) => (req.method === 'POST' && UPLOAD_ROUTE_RE.test(req.path)) ? next() : _json100k(req, res, next));
+ 
+ // Request logging + metrics middleware
+ app.use((req, res, next) => {
+@@ -1484,6 +1487,7 @@
+       const tabState = group.get(tabId);
+       log('warn', 'destroying stuck tab', { tabId, listItemId, toolCalls: tabState.toolCalls, reason: reason || 'unknown' });
+       safePageClose(tabState.page);
++      cleanupTabUploads(tabId);
+       group.delete(tabId);
+       if (group.size === 0) session.tabGroups.delete(listItemId);
+       refreshActiveTabsGauge();
+@@ -3780,23 +3784,69 @@
+  *               $ref: '#/components/schemas/Error'
+  */
+ const UPLOAD_ROOT = '/uploads';
+-app.post('/tabs/:tabId/upload', async (req, res) => {
++// Inline uploads: a remote client sends {filename, content_base64} instead of a path into the
++// read-only /uploads mount. Bytes land in a per-tab temp dir that is removed when the tab closes
++// (and by a periodic sweep, as a backstop). Existing `path` mode is unchanged.
++const UPLOAD_TMP_ROOT = path.join(os.tmpdir(), 'camofox-uploads');
++const UPLOAD_MAX_BYTES = parseInt(process.env.CAMOFOX_UPLOAD_MAX_BYTES || String(10 * 1024 * 1024), 10);
++const UPLOAD_EXTS = new Set(['.pdf', '.doc', '.docx', '.txt', '.rtf', '.odt', '.png', '.jpg', '.jpeg', '.gif', '.webp']);
++const uploadJson = express.json({ limit: Math.ceil(UPLOAD_MAX_BYTES * 4 / 3) + 4096 });
++function tabUploadDir(tabId) { return path.join(UPLOAD_TMP_ROOT, String(tabId).replace(/[^A-Za-z0-9_-]/g, '_')); }
++function cleanupTabUploads(tabId) {
++  try { fs.rmSync(tabUploadDir(tabId), { recursive: true, force: true }); } catch { /* best effort */ }
++}
++// Returns { resolved } or { status, error }. Never throws for client mistakes.
++function resolveUploadSource(body, tabId) {
++  const { path: relPath, filename, content_base64: b64 } = body || {};
++  if (b64 !== undefined && b64 !== null) {
++    if (typeof b64 !== 'string' || !filename || typeof filename !== 'string') {
++      return { status: 400, error: 'content_base64 requires filename (string)' };
++    }
++    const base = path.basename(filename.replace(/\\/g, '/'));
++    const ext = path.extname(base).toLowerCase();
++    if (!base || base.startsWith('.') || !UPLOAD_EXTS.has(ext)) {
++      return { status: 400, error: `file type not allowed (${ext || 'none'}); allowed: ${[...UPLOAD_EXTS].join(' ')}` };
++    }
++    if (b64.length > Math.ceil(UPLOAD_MAX_BYTES * 4 / 3) + 8) {
++      return { status: 413, error: `file exceeds ${UPLOAD_MAX_BYTES} bytes` };
++    }
++    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(b64)) return { status: 400, error: 'content_base64 is not valid base64' };
++    const buf = Buffer.from(b64, 'base64');
++    if (buf.length === 0) return { status: 400, error: 'empty file' };
++    if (buf.length > UPLOAD_MAX_BYTES) return { status: 413, error: `file exceeds ${UPLOAD_MAX_BYTES} bytes` };
++    const dir = tabUploadDir(tabId);
++    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
++    const resolved = path.join(dir, base);
++    fs.writeFileSync(resolved, buf, { mode: 0o600 });
++    return { resolved, inline: true, bytes: buf.length };
++  }
++  if (!relPath) return { status: 400, error: 'path (relative to /uploads) or filename+content_base64 required' };
++  const resolved = path.resolve(UPLOAD_ROOT, relPath);
++  if (!resolved.startsWith(path.resolve(UPLOAD_ROOT) + path.sep) && resolved !== path.resolve(UPLOAD_ROOT)) {
++    return { status: 400, error: 'path must resolve inside /uploads' };
++  }
++  if (!fs.existsSync(resolved)) return { status: 404, error: 'file not found under /uploads', resolved };
++  return { resolved };
++}
++// Backstop: drop inline-upload dirs older than 1h (tab-close cleanup normally gets them first).
++setInterval(() => {
++  try {
++    for (const d of fs.readdirSync(UPLOAD_TMP_ROOT)) {
++      const full = path.join(UPLOAD_TMP_ROOT, d);
++      if (Date.now() - fs.statSync(full).mtimeMs > 3600e3) fs.rmSync(full, { recursive: true, force: true });
++    }
++  } catch { /* dir may not exist yet */ }
++}, 600e3).unref();
++app.post('/tabs/:tabId/upload', uploadJson, async (req, res) => {
+   const tabId = req.params.tabId;
+ 
+   try {
+-    const { userId, ref, selector, path: relPath } = req.body;
++    const { userId, ref, selector } = req.body;
+     if (!userId) return res.status(400).json({ error: 'userId required' });
+-    if (!relPath) return res.status(400).json({ error: 'path required (relative to /uploads)' });
+     if (!ref && !selector) return res.status(400).json({ error: 'ref or selector required' });
+-
+-    // Resolve and guard against path traversal escaping UPLOAD_ROOT.
+-    const resolved = path.resolve(UPLOAD_ROOT, relPath);
+-    if (!resolved.startsWith(path.resolve(UPLOAD_ROOT) + path.sep) && resolved !== path.resolve(UPLOAD_ROOT)) {
+-      return res.status(400).json({ error: 'path must resolve inside /uploads' });
+-    }
+-    if (!fs.existsSync(resolved)) {
+-      return res.status(404).json({ error: 'file not found under /uploads', resolved });
+-    }
++    const src = resolveUploadSource(req.body, tabId);
++    if (src.error) return res.status(src.status).json({ error: src.error, resolved: src.resolved });
++    const resolved = src.resolved; const relPath = req.body.path || req.body.filename;
+ 
+     const session = sessions.get(normalizeUserId(userId));
+     const found = session && findTab(session, tabId);
+@@ -3839,22 +3889,15 @@
+ // bind because the <input type=file> is absent until the click. Playwright intercepts the
+ // chooser and sets the file programmatically (no native dialog). `trigger` (selector) or
+ // `triggerRef` is the button/element that opens the chooser. Mirrors /upload otherwise.
+-app.post('/tabs/:tabId/uploadViaChooser', async (req, res) => {
++app.post('/tabs/:tabId/uploadViaChooser', uploadJson, async (req, res) => {
+   const tabId = req.params.tabId;
+   try {
+-    const { userId, trigger, triggerRef, path: relPath } = req.body;
++    const { userId, trigger, triggerRef } = req.body;
+     if (!userId) return res.status(400).json({ error: 'userId required' });
+-    if (!relPath) return res.status(400).json({ error: 'path required (relative to /uploads)' });
+     if (!trigger && !triggerRef) return res.status(400).json({ error: 'trigger (selector) or triggerRef required' });
+-
+-    // Resolve and guard against path traversal escaping UPLOAD_ROOT (same as /upload).
+-    const resolved = path.resolve(UPLOAD_ROOT, relPath);
+-    if (!resolved.startsWith(path.resolve(UPLOAD_ROOT) + path.sep) && resolved !== path.resolve(UPLOAD_ROOT)) {
+-      return res.status(400).json({ error: 'path must resolve inside /uploads' });
+-    }
+-    if (!fs.existsSync(resolved)) {
+-      return res.status(404).json({ error: 'file not found under /uploads', resolved });
+-    }
++    const src = resolveUploadSource(req.body, tabId);
++    if (src.error) return res.status(src.status).json({ error: src.error, resolved: src.resolved });
++    const resolved = src.resolved; const relPath = req.body.path || req.body.filename;
+ 
+     const session = sessions.get(normalizeUserId(userId));
+     const found = session && findTab(session, tabId);
+@@ -5205,6 +5248,7 @@
+       if (found.tabState.navigateAbort) found.tabState.navigateAbort.abort();
+       await clearTabDownloads(found.tabState);
+       await safePageClose(found.tabState.page);
++      cleanupTabUploads(req.params.tabId);
+       found.group.delete(req.params.tabId);
+       { const _l = tabLocks.get(req.params.tabId); if (_l) _l.drain(); tabLocks.delete(req.params.tabId); refreshTabLockQueueDepth(); }
+       if (found.group.size === 0) {
