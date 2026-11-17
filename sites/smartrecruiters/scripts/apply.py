@@ -31,6 +31,8 @@ Subcommands:
   submit                       Click the SPL-BUTTON labelled "Submit" — THE POINT OF NO
                                 RETURN. Screenshots the resulting page as proof (no
                                 separate confirmation URL exists here).
+  auto <url> [--submit]        Defaults-driven end-to-end (no config; env SR_COMPANY/SR_ROLE name the proof dir).
+  questions                    Dump the current page's question fields (label/options/required).
   apply <config.json> [--submit]
                                 Orchestrator: start -> personal info (fill/pick) ->
                                 upload -> next -> preliminary questions (radios/
@@ -48,6 +50,7 @@ Config schema (apply):
 }
 """
 import os
+import re
 import sys
 import json
 import time
@@ -205,7 +208,18 @@ def pick(field_id: str, option_substr: str, option_value: str = None) -> int:
         slug = option_substr.strip().lower().replace(" ", "_")
         option_value = f"GB_ENG_CITY_{slug}"
     opt_sel = f'spl-select-option[value="{option_value}"] >> nth=0'
-    res = cfx.click_selector(opt_sel)
+    try:
+        res = cfx.click_selector(opt_sel)
+    except Exception:  # noqa: BLE001
+        res = {"ok": False}
+    if not res.get("ok"):
+        # Playwright click on the shadow-DOM option can time out (list rendered off-viewport).
+        # Verified live: ArrowDown + Enter on the focused input commits the first suggestion
+        # (the UK city is always first for a UK city query).
+        cfx.press("ArrowDown")
+        time.sleep(0.5)
+        cfx.press("Enter")
+        res = {"ok": True}
     if not res.get("ok"):
         print(f"FAIL pick {field_id!r}: could not click option {opt_sel!r}: {res}")
         return 1
@@ -366,6 +380,281 @@ def apply(config_path: str, do_submit: bool = False) -> int:
     return submit(slug)
 
 
+# ── AUTO MODE: defaults-driven, no per-posting config ─────────────────────────────────
+# `auto <url> [--submit]` drives the whole Easy-apply widget from apply-defaults.json + the
+# shared screener bank, so apply_queue can dispatch SmartRecruiters rows like Ashby/Greenhouse.
+# Page 1 ids are STABLE across employers (first-name-input, email-input, …); only the
+# "Screening Questions" page varies, and that is discovered live (`_questions`) and answered
+# ONLY from a profile-backed bank row against the question's own closed option list. Anything
+# unanswerable stops BEFORE submit with rc 7 (needs a human) — never a guess.
+_QUESTIONS_JS = """
+(() => {
+  const out = []; const seen = new Set();
+  const label = (el) => {
+    let h = el;
+    for (let i = 0; i < 8 && h; i++) {
+      const lab = h.getAttribute && (h.getAttribute('label') || h.getAttribute('aria-label'));
+      if (lab && lab.trim().length > 3) return lab.trim();
+      h = h.parentElement || (h.getRootNode && h.getRootNode().host);
+      if (h && h.querySelector) {
+        const l = h.querySelector('label, legend, .label, [slot=label]');
+        if (l && l.innerText && l.innerText.trim().length > 3) return l.innerText.trim();
+      }
+    }
+    // last resort: the nearest ancestor's first text line (plain SPL-INPUTs such as Street 1 / Post Code)
+    h = el;
+    for (let i = 0; i < 7 && h; i++) {
+      h = h.parentElement || (h.getRootNode && h.getRootNode().host);
+      const tx = h && h.innerText ? h.innerText.trim().split('\\n')[0] : '';
+      if (tx && tx.length > 2 && tx.length < 90) return tx;
+    }
+    return '';
+  };
+  const walk = (root) => {
+    for (const el of root.querySelectorAll('*')) {
+      const tag = el.tagName;
+      if (/^SPL-(TEXTAREA|SELECT|AUTOCOMPLETE|CHECKBOX|RADIO-GROUP|RADIO|INPUT|DATE)/.test(tag) && el.id && !seen.has(tag + el.id)) {
+        seen.add(tag + el.id);
+        let opts = [];
+        if (tag === 'SPL-RADIO-GROUP' || tag === 'SPL-RADIO') {
+          const scope = tag === 'SPL-RADIO-GROUP' ? el : (el.parentElement || el);
+          opts = [...scope.querySelectorAll('spl-radio')].map(r => ({id: r.id, text: (r.innerText || r.textContent || '').trim()}));
+        } else if (tag === 'SPL-SELECT' || tag === 'SPL-AUTOCOMPLETE') {
+          opts = [...el.querySelectorAll('spl-select-option')].slice(0, 60).map(o => ({id: o.getAttribute('value') || '', text: (o.innerText || o.textContent || '').trim()}));
+        }
+        out.push({tag, id: el.id, label: label(el), required: el.required || el.hasAttribute('required') || label(el).indexOf('*') >= 0, value: (el.value === undefined ? '' : String(el.value)).slice(0, 40), opts});
+      }
+      if (el.shadowRoot) walk(el.shadowRoot);
+    }
+  };
+  walk(document);
+  return JSON.stringify(out);
+})()
+"""
+
+_P1_IDS = {"first-name-input", "last-name-input", "email-input", "confirm-email-input",
+           "linkedin-input", "facebook-input", "twitter-input", "website-input",
+           "hiring-manager-message-input", "spl-form-element_5", "spl-form-element_10",
+           "spl-form-element_12"}
+
+
+def _defaults():
+    with open(os.path.join(ROOT, "sites", "_common", "apply-defaults.json")) as f:
+        return json.load(f)
+
+
+def _questions():
+    try:
+        return json.loads(cfx.evaluate(_QUESTIONS_JS) or "[]")
+    except (ValueError, TypeError):
+        return []
+
+
+def _page_text():
+    return str(cfx.evaluate("document.body.innerText.slice(0,1500)") or "")
+
+
+def _bank(question):
+    sys.path.insert(0, os.path.join(ROOT, "sites", "_common", "scripts"))
+    try:
+        import screener  # noqa: PLC0415
+        hit = screener.lookup(question)
+    except Exception:  # noqa: BLE001
+        return None
+    if not hit or "generic default" in (hit.get("source") or ""):
+        return None
+    return hit.get("answer")
+
+
+def _match_option(opts, answer):
+    low = (answer or "").strip().lower()
+    if not low:
+        return None
+    for o in opts:
+        if o["text"].strip().lower() == low:
+            return o
+    for o in opts:
+        if re.search(r"(^|[^a-z0-9])" + re.escape(low) + r"([^a-z0-9]|$)", o["text"].strip().lower()):
+            return o
+    return None
+
+
+_EEO_RE = re.compile(r"gender|ethnic|religio|sexual|disab|transgender|school|household earner|free school|"
+                     r"socio|parent|caring|veteran|armed forces|age (band|range)|pronoun", re.I)
+
+_SYN = {"male": "man", "female": "woman"}
+
+
+def _read_options(fid):
+    """Open an SPL-AUTOCOMPLETE with a REAL click and read its rendered options (they only
+    exist in the DOM while the list is open). -> [{v, t}]"""
+    try:
+        cfx.click_selector(f'input#{fid} >> nth=0')
+    except Exception:  # noqa: BLE001  (click timed out: scroll into view, focus via JS, open with ArrowDown)
+        cfx.evaluate("""(() => { const id=%s; const w=(r)=>{ for (const el of r.querySelectorAll('*')) {
+          if (el.id===id) { el.scrollIntoView({block:'center'}); const i=(el.shadowRoot||el).querySelector('input')||el.querySelector('input'); if(i) i.focus(); return true; }
+          if (el.shadowRoot && w(el.shadowRoot)) return true; } return false; }; return w(document); })()""" % _js(fid))
+        cfx.press("ArrowDown")
+    time.sleep(1.0)
+    js = """(() => { const id=%s; const out=[]; const walk=(root)=>{ for (const el of root.querySelectorAll('*')) {
+      if (el.tagName==='SPL-AUTOCOMPLETE' && el.id===id) { const scan=(r)=>{ r.querySelectorAll('spl-select-option').forEach(o=>
+        out.push({v:o.getAttribute('value'),t:(o.innerText||o.textContent||'').trim()}));
+        r.querySelectorAll('*').forEach(c=>{ if(c.shadowRoot) scan(c.shadowRoot)}) }; scan(el); if(el.shadowRoot) scan(el.shadowRoot); }
+      if (el.shadowRoot) walk(el.shadowRoot);} }; walk(document); return JSON.stringify(out); })()""" % _js(fid)
+    try:
+        return json.loads(cfx.evaluate(js) or "[]")
+    except (ValueError, TypeError):
+        return []
+
+
+def pick_text(fid, answer, label=""):
+    """Choose the option of an SPL-AUTOCOMPLETE whose text matches `answer` (closed set).
+    EEO-type questions with no profile-backed match fall back to 'Prefer not to say'. -> True/False"""
+    opts = _read_options(fid)
+    cand = [{"id": o["v"], "text": o["t"]} for o in opts]
+    want = _match_option(cand, _SYN.get((answer or "").strip().lower(), answer))
+    if not want:
+        try:
+            sys.path.insert(0, os.path.join(ROOT, "sites", "_common", "scripts"))
+            import atsform  # noqa: PLC0415
+            txt = atsform._bank_option_fallback(label or "", answer or "", [o["text"] for o in cand])
+            want = next((o for o in cand if o["text"] == txt), None) if txt else None
+        except Exception:  # noqa: BLE001
+            want = None
+    if not want and _EEO_RE.search(label or ""):
+        want = next((o for o in cand if re.search(r"prefer not|rather not|do not wish|not to say|decline", o["text"], re.I)), None)
+    if not want:
+        cfx.press("Escape")
+        return False
+    try:   # shadow DOM: the id-prefixed selector can't pierce it; the bare option selector can
+        res = cfx.click_selector(f'spl-select-option[value="{want["id"]}"] >> nth=0')
+    except Exception:  # noqa: BLE001
+        res = {"ok": False}
+    if not res.get("ok"):   # click timed out -> keyboard: ArrowDown to the option's index, Enter
+        idx = next((i for i, o in enumerate(cand) if o["id"] == want["id"]), 0)
+        for _ in range(idx + 1):
+            cfx.press("ArrowDown")
+            time.sleep(0.3)
+        cfx.press("Enter")
+        res = {"ok": True}
+    time.sleep(0.5)
+    return bool(res.get("ok"))
+
+
+
+def _sr_rule(label, fill):
+    """Truthful, profile-backed answers for the recurring SmartRecruiters screening questions
+    (checked against references/applicant-profile.md): never an employee/ex-employee, never
+    referred (user rule: heard about the role via a job board), address from apply-defaults."""
+    ql = label.lower()
+    if re.search(r"street 1|address line 1", ql):
+        return fill.get("Address line 1") or None
+    if re.search(r"post ?code|postal", ql):
+        return fill.get("Postal") or None
+    if re.search(r"were you referred|referred for this", ql):
+        return "No"
+    if re.search(r"current employee or ex-?employee|worked for us|previously worked|ever worked for|employed by", ql):
+        return "No"
+    return None
+
+
+
+def auto(url: str, do_submit: bool = False, company: str = "", role: str = "", cover_text: str = "") -> int:
+    d = _defaults()
+    f = d.get("fill", {})
+    if start(url) != 0:
+        print("ABORT: could not open apply widget")
+        return 3
+    time.sleep(2)
+    # ⛔ ORDER MATTERS (verified live, Shawbrook 744000159831884): the TOP "Easy Apply" dropzone
+    # (spl-dropzone-file-input-2) PARSES the CV and autofills the required Experience/Education
+    # sections — and it also RESETS city/other fields. So upload there FIRST, wait for the
+    # parse, THEN fill identity + city. Doing it the other way round leaves "Please provide at
+    # least one work experience entry" (page 1 never advances) or a cleared City.
+    upload("spl-dropzone-file-input-2", "base-resume.pdf")
+    time.sleep(9)
+    first = f.get("First name") or (f.get("Full name", "").split() or [""])[0]
+    last = f.get("Last name") or " ".join((f.get("Full name", "").split() or [""])[1:])
+    email = f.get("Email", "")
+    digits = re.sub(r"\D", "", f.get("Phone", ""))
+    if digits.startswith("44"):
+        digits = digits[2:]
+    digits = digits.lstrip("0")
+    steps = [("first-name-input", first), ("last-name-input", last),
+             ("email-input", email), ("confirm-email-input", email),
+             ("spl-form-element_5", digits)]
+    for fid, val in (("linkedin-input", f.get("LinkedIn")), ("website-input", f.get("Portfolio") or f.get("Website"))):
+        if val:
+            steps.append((fid, val))
+    if cover_text:
+        steps.append(("hiring-manager-message-input", cover_text))
+    for fid, val in steps:
+        if val and fill_text(fid, val) != 0:
+            print(f"UNFILLED {fid}")
+    pick("spl-form-element_10", "London")
+    time.sleep(0.5)
+    time.sleep(1)
+    if next_step() != 0:
+        return 3
+    time.sleep(2.5)
+    # ── pages after personal info: answer from the bank or stop ──
+    for _page in range(5):
+        qs = [q for q in _questions() if q["id"] not in _P1_IDS]
+        txt = _page_text().lower()
+        unanswered = []
+        ac_ids = {q["id"] for q in qs if q["tag"] == "SPL-AUTOCOMPLETE"}
+        for q in qs:
+            lab = re.sub(r"^Select\s+", "", q["label"] or "").strip()
+            if not lab or (q["tag"] == "SPL-INPUT" and q["id"] in ac_ids):
+                continue
+            # "If self described / if other, please state ..." follow-ups: leave blank unless required
+            # (a bank 'Male' typed there contradicts the 'Prefer not to say' pick above it).
+            if not q["required"] and re.search(r"^if\b.*\b(state|specify|describe|provide)|self[- ]described|referrer ", lab, re.I) \
+                    and q["tag"] in ("SPL-INPUT", "SPL-TEXTAREA"):
+                continue
+            ans = _sr_rule(lab, f) or _bank(lab)
+            if q["tag"] in ("SPL-RADIO-GROUP", "SPL-RADIO"):
+                o = _match_option(q["opts"], ans)
+                if o and o["id"]:
+                    radio(o["id"])
+                elif q["required"]:
+                    unanswered.append(lab[:80])
+            elif q["tag"] == "SPL-AUTOCOMPLETE":
+                if not pick_text(q["id"], ans, lab) and q["required"]:
+                    unanswered.append(lab[:80])
+            elif q["tag"] == "SPL-SELECT":
+                continue            # country-code selector on page 1 (stays +44)
+            elif q["tag"] == "SPL-CHECKBOX":
+                # Privacy-notice acknowledgement = data-processing consent every ATS requires (not a
+                # legal attestation about the applicant); tick it. Anything else needs the bank.
+                if q["required"] and (re.search(r"privacy (notice|policy)|data protection", lab, re.I)
+                                      or (ans and ans.lower().startswith("y"))):
+                    checkbox(q["id"], "on")
+                elif q["required"]:
+                    unanswered.append(lab[:80])
+            else:
+                if ans and not q["value"]:
+                    fill_text(q["id"], ans)
+                elif q["required"] and not q["value"]:
+                    unanswered.append(lab[:80])
+        if unanswered:
+            for u in unanswered:
+                print(f"UNANSWERED_REQUIRED: {u}")
+            print("ABORT: required questions this run cannot answer truthfully — nothing submitted")
+            return 7
+        if "submit" in txt and "review" in txt or not qs:
+            break
+        if next_step() != 0:
+            break
+        time.sleep(2.5)
+    if not do_submit:
+        print("--- filled; NOT submitting (--submit not passed) ---")
+        return 0
+    slug = re.sub(r"[^a-z0-9]+", "-", f"{company}-{role}".lower()).strip("-") or "smartrecruiters"
+    return 0 if submit(slug) == 0 else 3
+
+
+
 def main():
     if len(sys.argv) < 2:
         print(__doc__)
@@ -390,6 +679,13 @@ def main():
         return next_step()
     if cmd == "submit":
         return submit(args[0] if args else None)
+    if cmd == "auto" and args:
+        return auto(args[0], do_submit="--submit" in args,
+                    company=os.environ.get("SR_COMPANY", ""), role=os.environ.get("SR_ROLE", ""))
+    if cmd == "questions":
+        for q in _questions():
+            print(json.dumps(q)[:300])
+        return 0
     if cmd == "apply" and args:
         return apply(args[0], do_submit="--submit" in args)
     print(__doc__)

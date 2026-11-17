@@ -347,6 +347,19 @@ def pick_option(values, want, label=""):
     return None
 
 
+_NEEDS_VISA_Q = re.compile(r"\b(require|need)\b.{0,40}\b(visa|sponsorship|work permit)\b|\bsponsor", re.I)
+_AUTHORISED_Q = re.compile(r"\b(authori[sz]ed|eligible|legally (able|entitled|permitted)|right) to work\b", re.I)
+
+
+def _foreign_truth(label):
+    """True answer for a NON-UK right-to-work question given a UK-only citizen, else None."""
+    if _NEEDS_VISA_Q.search(label):
+        return "Yes"
+    if _AUTHORISED_Q.search(label):
+        return "No"
+    return None
+
+
 def build(slug, jid, eu=False, out=None):
     data = fetch(slug, jid, eu)
     role = data.get("title", "").strip()
@@ -429,11 +442,22 @@ def build(slug, jid, eu=False, out=None):
             _foreign = foreign_work_authorisation(label)
         except Exception:  # noqa: BLE001
             _foreign = None
+        _ft = None
+        if not _foreign and re.search(r"\b(EU|E\.U\.|European Union|EEA|Europe)\b", label) \
+                and not re.search(r"\b(UK|U\.K\.|United Kingdom|Britain|British)\b", label, re.I) \
+                and (_NEEDS_VISA_Q.search(label) or _AUTHORISED_Q.search(label)):
+            _foreign = "the EU"      # post-Brexit a UK citizen has no automatic EU work rights
         if _foreign:
-            if required:
-                human.append(f"{label[:70]} [work authorisation for {_foreign} — not the UK]")
-            continue
-        answer = next((a for pat, a in TRUTHS if re.search(pat, label, re.I)), None)
+            # The applicant is a British citizen with UK rights only (applicant-profile:
+            # "for roles abroad he WOULD need visa sponsorship"). So a foreign-country
+            # question has a TRUE answer we can state: needs a visa/sponsorship -> Yes;
+            # authorised/eligible to work there -> No. Anything else still goes to a human.
+            _ft = _foreign_truth(label)
+            if _ft is None:
+                if required:
+                    human.append(f"{label[:70]} [work authorisation for {_foreign} — not the UK]")
+                continue
+        answer = _ft or next((a for pat, a in TRUTHS if re.search(pat, label, re.I)), None)
         bank_answer = None
         if True:
             # SCREENER-BANK FALLBACK (2026-08-15). TRUTHS is this generator's own small

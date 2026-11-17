@@ -170,6 +170,9 @@ Run per posting, unattended. No permission asks between steps unless hard stop f
     • **talent.com + indeed.com — permanently EXCLUDED** (user decree, 2026-07-20). Both had Cloudflare Turnstile / SmartApply walls (talent.com now auto-solves Turnstile via `turnstile.py`; falls to `TURNSTILE_WALL`/`Blocked` on failure — see `references/external-ats-bypass.md`). Encoded as `EXCLUDED_SRC` in `scripts/convertible_pool.py` so they NEVER surface as `convertible` and the loop never drives them; the user applies them on their own device. Historical tracker rows for these sources are preserved (real past actions). Do NOT re-count them toward any "N more" target.
      • **undrivable ATS** — no shipped driver + account wall (most external LinkedIn/Indeed → employer ATS with no account)
   5. Survivors = the real convertible ceiling. If it's in the low tens, state the single true unblock ONCE and stop — do NOT pad with off-profile/senior/Easy-Apply rows (that is fabrication, explicitly forbidden). Re-verify only after an inventory-refreshing event (login wall cleared, new `searches.csv` row, cooldown expiry).
+## "Where did you hear about us?" — user rule
+ALWAYS pick **Job board** (closest job-board / careers-site option; "Other" only when nothing job-board-like exists). Never claim a referral, friend or alumni link. Enforced in `sites/_common/scripts/atsform.py::_bank_option_fallback`; the detailed answer lives in `references/applicant-profile.md`.
+
 ## Feed-shape mismatches that make `classify_strict` UNDER-count (2026-07-22 lesson)
 The over-count trap (above) is well-known; the **opposite** is just as dangerous and
 produces a falsely-low ceiling → wrong "exhausted" conclusion. On a 2026-07-22

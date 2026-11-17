@@ -29,6 +29,7 @@ USAGE (needs a live tab: CFX_KEY / CFX_TAB in env):
       [--resume /uploads/<f>.pdf] [--ats linkedin-easyapply,...]
   --refresh  rebuild queue.jsonl via pipeline.run() first (else use the existing file).
   --force    passed through to pipeline (re-source cooled boards).
+  --queue F  drive rows from F (jsonl) instead of queue.jsonl.
   --ats      which ats_hints to drive headlessly (default: linkedin-easyapply).
 Exit: 0 ran (see tally) · 10 SLEEP · 11 HOLD · 12 DONE · 9 no-tab · 2 error.
 """
@@ -346,11 +347,14 @@ def main():
         # `--help` submitted LinkedIn Easy-Apply forms). Print usage and exit instead.
         print(__doc__)
         return 0
-    known = {"--refresh", "--force", "--dry-run", "--max", "--resume", "--boards", "--ats"}
+    known = {"--refresh", "--force", "--dry-run", "--max", "--resume", "--boards", "--ats", "--queue"}
     bad = [a for a in argv if a.startswith("-") and a not in known]
     if bad:
         print(f"apply_queue: unknown option(s) {bad} — refusing to drive. See --help.", file=sys.stderr)
         return 2
+    global QUEUE
+    if opt(argv, "--queue"):          # drive a curated subset file instead of queue.jsonl
+        QUEUE = os.path.abspath(opt(argv, "--queue"))
     refresh = "--refresh" in argv
     force = "--force" in argv
     dry_run = "--dry-run" in argv

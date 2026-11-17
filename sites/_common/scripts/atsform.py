@@ -2757,7 +2757,13 @@ def fill_gaps_from_bank():
         q, opts = grp.get("q", ""), grp.get("opts") or []
         hit = _bank_lookup(q)
         if not hit:
-            skipped += 1
+            # No bank row: an optional EEO/diversity question still has a policy answer.
+            pn = _bank_option_fallback(q, "", opts) if (_EEO_Q_RE.search(q) or _HEAR_Q_RE.search(q)) else None
+            if pn and set_radio(q, pn, quiet_notfound=True) == 0:
+                print(f"  eeo: {q[:52]!r} <- {pn[:40]!r} (policy: prefer not to say)")
+                filled += 1
+            else:
+                skipped += 1
             continue
         ans = hit["answer"]
         # ⛔ THE BANK ANSWER MUST BE ONE OF THIS FORM'S OPTIONS (2026-08-15).
@@ -2808,6 +2814,8 @@ def fill_gaps_from_bank():
             or next((o for o in opts if re.search(
                 r"(^|[^a-z0-9])" + re.escape(low) + r"([^a-z0-9]|$)", o.strip().lower())), None)
         if not match:
+            match = _bank_option_fallback(q, ans, opts)
+        if not match:
             if opts:
                 print(f"  bank SKIP {q[:46]!r}: banked {ans[:20]!r} is not one of this "
                       f"form's options {opts[:4]} — left unanswered on purpose")
@@ -2822,6 +2830,45 @@ def fill_gaps_from_bank():
         print(f"screener bank: {filled} answered, {skipped} unknown "
               f"(teach one with: screener.py learn)")
     return (filled, skipped)
+
+
+_EEO_Q_RE = re.compile(r"gender|ethnic|religio|sexual orient|disab|transgender|veteran|pronoun|"
+                       r"age (band|range|group)|race\b|mental health|neurodiver", re.I)
+_PREFER_NOT_RE = re.compile(r"prefer not|rather not|do not wish|choose not|not to say|decline|don'?t wish", re.I)
+_GENDER_SYN = {"male": "man", "female": "woman"}
+_HEAR_Q_RE = re.compile(r"hear (about|of)|how did you (find|learn|come across)|where did you (find|see)|source of (application|referral)", re.I)
+
+
+def _bank_option_fallback(q, ans, opts):
+    """Second-chance mapping of a banked answer onto a radio's CLOSED option list. Only maps
+    when the result is TRUE for the applicant: (1) gender word synonyms (Male->Man);
+    (2) optional EEO questions with no matching option -> the 'Prefer not to say' option
+    (SKILL.md: optional EEO => Prefer not to say); (3) right-to-work/sponsorship questions where
+    the banked answer says Citizen/UK-right-to-work and the form is plain Yes/No -> 'No' for
+    'require sponsorship' phrasing. Returns the option text or None (stay unanswered)."""
+    low = (ans or "").strip().lower()
+    syn = _GENDER_SYN.get(low)
+    if syn:
+        hit = next((o for o in opts if o.strip().lower() == syn), None)
+        if hit:
+            return hit
+    if _EEO_Q_RE.search(q):
+        hit = next((o for o in opts if _PREFER_NOT_RE.search(o)), None)
+        if hit:
+            return hit
+    ql = q.lower()
+    # User rule (2026-11-17): ALWAYS answer "where did you hear about us" with the job board.
+    if _HEAR_Q_RE.search(q):
+        for rx in (r"job ?board|job ?site|jobs? website", r"careers? (site|page|website)|company (web)?site|website",
+                   r"^other\b|other \("):
+            hit = next((o for o in opts if re.search(rx, o, re.I)), None)
+            if hit:
+                return hit
+    yn = {o.strip().lower(): o for o in opts}
+    if low in ("citizen", "british citizen", "uk citizen") and set(yn) >= {"yes", "no"} \
+            and re.search(r"sponsor|visa|immigration", ql) and re.search(r"requir|need", ql):
+        return yn["no"]
+    return None
 
 
 def _default_entries(defaults, section, cfg_section):
