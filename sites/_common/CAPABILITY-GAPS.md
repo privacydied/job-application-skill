@@ -1,3 +1,10 @@
+## ⚠️ Windows CPython has no `signal.SIGHUP` — `pipeline.py` crashed at startup (2026-11-17)
+`pipeline.py::_install_stop_handlers()` iterated `(SIGTERM, SIGINT, SIGHUP)` unguarded; on
+Windows `signal.SIGHUP` does not exist, so EVERY `pipeline.py` invocation died immediately with
+`AttributeError: module 'signal' has no attribute 'SIGHUP'` before sourcing anything. Fixed in
+place: use `getattr(signal, "SIGHUP", None)` and skip `None`. Any other shared script that
+registers POSIX-only signals must use the same guard before running on this host.
+
 ## ⚠️ Jobtrain's "register-as-you-apply" chat widget is unbindable — Next button stays disabled regardless of fill method (2026-09-05)
 Confirmed across TWO separate Jobtrain tenants (National Housing Federation's `jobs.nhf` and
 MoJ's `jobtrain.co.uk/justicedigital`): the `DecideInternalExternal` → "I don't work here" flow
@@ -549,3 +556,21 @@ or use a separate `CFX_USER` for sourcing and applying. (3) Sourcing and applyin
 - A second Hermes TUI session driving the same camofox userId will take over whatever tab is in
   `.jobenv.run` (cfx.py init syncs it). Mint a private tab with `cfx.ensure_tab(persist=False)`,
   keep its id outside the pointer files, and export CFX_TAB from there.
+
+## ⚠️ Camofox tab creation dies on a stale persisted storage state (2026-11-17)
+`cfx.py init` / any `open_tab` failed with `open_tab: tab not created (last response {})`
+while `/health` still reported `browserConnected:true, activeTabs:0`. Docker logs showed
+`browser.newContext: Error setting storage state: NS_BINDING_ABORTED` while replaying stale
+URLs (accounts.google.com, reed.co.uk, li.protechts.net) from
+`<camofox home>/.camofox/profiles/<uid>/storage-state.json`. Moving that file aside alone did
+NOT help — the in-memory session still held it. **Fix:** move the stale file aside AND
+`docker restart <camofox container>` (recreate it if env/config changed); after ~20s `/health` is green and
+`cfx.py init` mints a tab again. Note this drops saved site sessions (logins must be redone).
+Re-check tab liveness before every browser-bound sourcing pass — a mid-pass tab death shows
+up as `HTTP 410 Tab no longer exists` on every feed and looks like a board-wide outage.
+
+## ⚠️ BBC careers feed SSL failure on hosts without a CA bundle (Windows, 2026-11-17)
+`sites/careers.bbc.co.uk/scripts/feed.py` failed with
+`urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate`.
+The runtime ships certifi; set `SSL_CERT_FILE="$(python3 -c 'import certifi;print(certifi.where())')"`
+in the shell before running the feed/pipeline. Verified: 20 BBC rows sourced.

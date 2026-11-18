@@ -333,7 +333,14 @@ def cmd_apply(spec_path, render=False):
             print(f"render: rendering the {len(clean_dirs)} clean dir(s); "
                   f"{n_failed} failed posting(s) NOT rendered — fix and re-run")
         prerender = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prerender-pdfs.sh")
-        rrc = subprocess.call([prerender] + clean_dirs)
+        # Shell scripts are not directly executable on Windows (WinError 193); invoke
+        # via bash. Python's PATH can resolve `bash` to WSL (which lacks node and the
+        # /c mount), so prefer the bundled git-bash executable when present.
+        import glob as _glob
+        _bash = next(iter(_glob.glob(os.path.expanduser(
+            "~/AppData/Local/hermes/tools/git-*/usr/bin/bash.exe"))), "bash")
+        prerender_bash = prerender.replace("\\", "/")
+        rrc = subprocess.call([_bash, prerender_bash] + clean_dirs)
         rc = rc or rrc
     return rc
 

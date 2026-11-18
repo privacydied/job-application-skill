@@ -86,3 +86,22 @@ solo with a valid account-page session. Treated as an automation-block wall; the
 11 screened on-profile roles (57131534, 57060076, 57096312, 57067097, 57132083,
 57070319, 57130034, 57076637, 57136623, 57085757, 57054606) are blocked on this
 until the apply endpoint accepts the camofox session (one-agent + working token).
+
+## Auth0 login drift — FIXED (2026-11-17)
+Reed's sign-in now lands on Auth0 `secure.reed.co.uk/login`, defaulted to the **Register**
+tab, so `#signin_email` is hidden and `reed_login.py` exited `STUCK_NO_EMAIL_FIELD`.
+Fix (in place): when the email field is not visible, click the "Sign in" tab text before
+filling. Also the OTP widget no longer commits on plain `Event('input')`/`change` — the
+Verify button stayed disabled with all four digits set. Fix: `_set_digits_js` now fires
+`InputEvent('input',{inputType:'insertText',data:ch})` + a `keyup` after the native
+setter. Verified live: `CODE_REQUESTED → CODE_FOUND → DIGITS_COMMITTED via setter → LOGIN_OK`.
+Re-login after any "Session expired" with `python3 scripts/reed_login.py`.
+
+## Apply modal detection gap (2026-11-17)
+A dispatched `MouseEvent('click')` on `button[data-qa=apply-btn]` DOES open the stepped
+application modal (patched into `reed_modal_drive.py`), but `reed_modal_drive.at_review()`
+drives off `cfx.sh snap` and fails to see "Submit application" when a stale
+"Session expired" dialog is also mounted — result is `NO-REVIEW` even though the
+application dialog is present and filled. `modal_question()` likewise requires
+`progressbar:` in the a11y snap. A direct DOM read of `[role=dialog]` shows the filled
+form.

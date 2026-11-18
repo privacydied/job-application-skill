@@ -279,12 +279,15 @@ def drive(url, company=None, role=None, dry=False):
     body = esh("document.body.innerText.substring(0,3000)")
     if "You applied for this job" in body:
         return "ALREADY-APPLIED"
-    # click Apply now
-    if not esh("var b=[...document.querySelectorAll('button')].find(x=>x.innerText.trim()==='Apply now');"
-               "if(b){b.click();'ok'}else'miss'") == "ok":
+    # click Apply now — b.click() does NOT trigger Reed's React handler (2026-11-17:
+    # NO-REVIEW with the button still present); a dispatched MouseEvent does.
+    _APPLY_JS = ("var b=[...document.querySelectorAll('button')].find("
+                 "x=>x.innerText.trim()==='Apply now');"
+                 "if(b){b.dispatchEvent(new MouseEvent('click',{bubbles:true,"
+                 "cancelable:true,view:window}));'ok'}else'miss'")
+    if esh(_APPLY_JS) != "ok":
         time.sleep(3)
-        esh("var b=[...document.querySelectorAll('button')].find(x=>x.innerText.trim()==='Apply now');"
-            "if(b){b.click();'ok'}else'miss'")
+        esh(_APPLY_JS)
     time.sleep(4)
     seen = []
     for step in range(15):

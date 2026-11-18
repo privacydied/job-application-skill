@@ -112,9 +112,9 @@ def answer_for(f, answers):
     for k, v in answers.items():
         if low(k) in low(q):
             return v
-    simple = {"firstname": None, "lastname": None, "email": None}
+    simple = {"firstName": FILL.get("First name"), "lastName": FILL.get("Last name"), "email": None}
     if n in simple:
-        return None  # prefilled from the Adzuna account
+        return simple[n]  # email stays account-prefilled; names come from gitignored defaults
     key = re.sub(r'^screeningQuestionAnswers\["|"\]$', "", n)
     if key == "phone":
         return FILL.get("Phone")
@@ -164,8 +164,24 @@ def run(job, cv, answers, company, role, submit, portfolio=None):
         ev("""(()=>{const s=document.querySelector('select[name=cvId]');s.value=%s;s.dispatchEvent(new Event('change',{bubbles:true}));})()""" % json.dumps(pick.split("|")[0]))
         print("CV:", pick.split("|", 1)[1])
     else:
-        print("CV: NOT FOUND in saved CVs ->", cv, "(upload path not implemented)")
-        return 6
+        # No saved CV in the account: upload a PDF staged in uploads/ (verified 2026-11-18,
+        # VIQU 5969408232 — form has input[name=cvFile] and no select[name=cvId]).
+        up = os.path.join(ROOT, "uploads", cv)
+        if not os.path.isfile(up):
+            print("CV: NOT FOUND in saved CVs or uploads ->", cv)
+            return 6
+        try:
+            cfx.post("/tabs/%s/upload" % cfx._tab(), {
+                "userId": cfx._uid(), "selector": 'input[name="cvFile"]',
+                "path": cfx.upload_path(cv)})
+            n = str(ev("(()=>{const f=document.querySelector('input[name=cvFile]');return f?(f.files?f.files.length:0):-1})()")).strip()
+            if n != "1":
+                print("CV upload did not attach (files=%s)" % n)
+                return 6
+            print("CV: uploaded", cv)
+        except cfx.CfxError as e:
+            print("CV upload FAIL:", e)
+            return 6
     fields = json.loads(ev(FIELDS_JS))
     if portfolio:
         n = ev("""(()=>{let n=0;document.querySelectorAll('input[type=file]').forEach(f=>{if(f.name==='cvFile')return;f.setAttribute('data-adz-up',String(n++));});return n;})()""")

@@ -288,11 +288,18 @@ def _mark_text_js(text, tag):
 
 
 def _set_digits_js(code):
+    # Auth0/Passwordless drift (2026-11-17): plain Event('input'/'change') leaves the
+    # Verify button disabled — React's OTP widget commits on InputEvent with
+    # inputType='insertText' plus a keyup. Verified live: all four digits bind and
+    # the button enables.
     return ("(function(ids,code){var s=Object.getOwnPropertyDescriptor("
             "HTMLInputElement.prototype,'value').set;var n=0;"
             "ids.forEach(function(id,i){var el=document.getElementById(id);if(!el)return;"
-            "s.call(el,code[i]);el.dispatchEvent(new Event('input',{bubbles:true}));"
-            "el.dispatchEvent(new Event('change',{bubbles:true}));n++;});return n;})"
+            "s.call(el,code[i]);"
+            "el.dispatchEvent(new InputEvent('input',{bubbles:true,"
+            "inputType:'insertText',data:code[i]}));"
+            "el.dispatchEvent(new KeyboardEvent('keyup',{key:code[i],bubbles:true}));"
+            "n++;});return n;})"
             "(%r,%r)" % (list(DIGIT_IDS), code))
 
 
@@ -390,8 +397,15 @@ def main():
     print("COOKIES_CLEARED", flush=True)
     page.goto(SIGNIN_URL)
     page.dismiss_cookies()
-    if not page.js(_visible_js(EMAIL_SEL)) and _click_text(page, "Back to email", "back"):
-        time.sleep(1.5)
+    if not page.js(_visible_js(EMAIL_SEL)):
+        # Auth0 drift (2026-11-17): Reed now lands on an Auth0 page defaulted to the
+        # REGISTER tab, so #signin_email is hidden until "Already here? Sign in" is
+        # clicked. The old "Back to email" label no longer exists. Try both.
+        for _n, _txt in enumerate(("Back to email", "Sign in", "Continue with email")):
+            if _click_text(page, _txt, f"back{_n}"):
+                time.sleep(1.2)
+                if page.js(_visible_js(EMAIL_SEL)):
+                    break
     if not page.js(_visible_js(EMAIL_SEL)):
         print("STUCK_NO_EMAIL_FIELD url=" + page.url())
         return 2

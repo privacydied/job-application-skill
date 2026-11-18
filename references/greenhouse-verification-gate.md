@@ -135,3 +135,15 @@ field is not a native radio — inspect it and use `combo` instead of adding mor
 - Match exact → word-boundary (reversed scan) so `No`≠`Monaco`, `Man`≠`Isle of Man`.
 - All of the above lives in `atsform.combobox_pick`; Greenhouse's `gh_apply.py` routes
   every dropdown through it. A fix there fixes every ATS at once.
+
+## Structural wall: verification code cannot be fetched (2026-11-17)
+Greenhouse's emailed-code gate sends the code to the address typed in the form
+(`apply-defaults.json` → `you@example.com`). The only outlook IMAP row is
+`disabled.imap.outlook.com` with a stored password, but a live LOGIN probe to
+`outlook.office365.com:993` returns **`Basic authentication is disabled`** — Microsoft
+retired IMAP basic auth, so that mailbox can never be read by `fetch_verification_code.py`.
+The active `imap.gmail.com` row reads the WRONG mailbox for this code. Result: every
+Greenhouse form that gates submit on an emailed code is `Blocked` (`CODE_MISSING`), regardless
+of how well the other fields bind. Adding the credential row alone (per the note above) is no
+longer sufficient — needs OAuth2 IMAP or a different code-delivery address. Do not re-drive
+Greenhouse postings hoping the code fetch will start working.

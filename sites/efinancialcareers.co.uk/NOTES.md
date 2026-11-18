@@ -62,3 +62,14 @@ eFC account; most redirect off-site to the bank's or recruiter's own ATS.
   (e.g. "Paralegal/Support Lawyer", "Placement Broker Support") mixed in with IT support.
   Query the IT lane explicitly (`--what "IT support"`, `"application support"`, `"desktop
   support"`) rather than a bare `support`; precheck screens the rest.
+
+## Apply (in-platform modal) — `scripts/apply.py` (verified live 2026-11-17)
+`python3 sites/efinancialcareers.co.uk/scripts/apply.py <url> "<Company>" "<Role>" <pdf-basename> [cover.md]`
+- Modal flow: **Apply now** → optional *Candidate Assessment* (one free-text salary field) → CV
+  (*Select a CV* dropdown of saved CVs, or *Upload CV* Filestack panel `#fsp-fileUpload`, confirm via
+  `[data-e2e=upload]`) → optional cover letter (`#coverLetterContent`) → `#firstname`/`#lastname` →
+  **Apply for this role**. Never click *Apply and become searchable* (profile opt-in).
+- Clicks must be dispatched `MouseEvent`s; inputs need the native value setter + `InputEvent`.
+- Names and the salary answer are read from gitignored `apply-defaults.json` `fill`
+  (`First Name`/`Last Name`/`Salary expectation`); a missing value aborts instead of submitting.
+- Success text: "Your application has been sent successfully!" or "You have already applied".
