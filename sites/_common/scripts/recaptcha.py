@@ -397,12 +397,66 @@ def recheck(job_ref: str = "", max_retries: int = 2, cooldown_s: float = 3.0):
     return 3
 
 
+CROP_PAD = 12  # px of margin kept around the grid squares in the saved crop
+
+
+def _tile_grid_page_box():
+    """Page-coordinate rects of every visible grid square, plus their union box.
+
+    eval-frame returns cell rects in the bframe's own viewport, so the bframe
+    iframe's page position is added (same as _bframe_geometry). Result is in the
+    same page coordinates as the full screenshot. Returns None when no challenge
+    is open or no cells are visible."""
+    if not _challenge_open():
+        return None
+    bbox_raw = cfx.evaluate(
+        "(() => { const el = document.querySelector("
+        "'iframe[src*=\"api2/bframe\"], iframe[src*=\"enterprise/bframe\"]'); "
+        "if (!el) return null; const r = el.getBoundingClientRect(); "
+        "return JSON.stringify({x:r.x,y:r.y,width:r.width,height:r.height}); })()"
+    )
+    if not bbox_raw:
+        return None
+    try:
+        bbox = json.loads(bbox_raw)
+    except ValueError:
+        return None
+    tiles_raw = cfx.eval_frame(
+        BFRAME_FRAME,
+        "(() => { const t = Array.from(document.querySelectorAll("
+        "'.rc-imageselect-table-33 td, .rc-imageselect-table-44 td')); "
+        "return JSON.stringify(t.map(td => { const r = td.getBoundingClientRect(); "
+        "return {x:r.x, y:r.y, w:r.width, h:r.height}; })); })()"
+    )
+    tiles = []
+    for t in (json.loads(tiles_raw) if tiles_raw else []):
+        if t.get("w", 0) <= 0 or t.get("h", 0) <= 0:
+            continue  # mid-reload cell
+        tiles.append({"x": bbox["x"] + t["x"], "y": bbox["y"] + t["y"],
+                      "w": t["w"], "h": t["h"]})
+    if not tiles:
+        return None
+    left = min(t["x"] for t in tiles)
+    top = min(t["y"] for t in tiles)
+    right = max(t["x"] + t["w"] for t in tiles)
+    bottom = max(t["y"] + t["h"] for t in tiles)
+    return {"tiles": tiles, "box": (left, top, right, bottom)}
+
+
+def _grid_crop_origin(grid):
+    """Top-left page pixel of the saved crop. Shared by the crop itself and by
+    _tile_crops_relative so the two can never disagree."""
+    left, top = grid["box"][0], grid["box"][1]
+    return max(0, int(left) - CROP_PAD), max(0, int(top) - CROP_PAD)
+
+
 def _capture_challenge(out_dir: str = "/tmp"):
     """Read the REAL instruction text directly from inside the bframe via
-    eval-frame (exact DOM text, not OCR-guessed), get the challenge's on-screen
-    bounding box, take a full screenshot, and crop it to just the challenge for
-    a fast, zoomed-in read. Does NOT click any tile. Returns
-    {"instruction", "full", "crop"}, or None if no challenge is open.
+    eval-frame (exact DOM text, not OCR-guessed), then take a full screenshot and
+    crop it to just the grid squares (no header text, no Verify button). The
+    instruction is returned as text, so the crop only needs the tiles. Does NOT
+    click any tile. Returns {"instruction", "full", "crop"}, or None if no
+    challenge is open.
 
     This is the single source of truth for a capture — both the standalone
     `challenge-snapshot` CLI command and solve-grid's Phase A call this, so
@@ -417,12 +471,7 @@ def _capture_challenge(out_dir: str = "/tmp"):
         "return el ? el.innerText.replace(/\\s+/g,' ').trim() : ''; })()"
     ) or "(instruction text not found in the usual selectors — read the screenshot)"
 
-    bbox_raw = cfx.evaluate(
-        "(() => { const el = document.querySelector("
-        "'iframe[src*=\"api2/bframe\"], iframe[src*=\"enterprise/bframe\"]'); "
-        "if (!el) return null; const r = el.getBoundingClientRect(); "
-        "return JSON.stringify({x:r.x,y:r.y,width:r.width,height:r.height}); })()"
-    )
+    grid = _tile_grid_page_box()
 
     ts = int(time.time())
     full_path = os.path.join(out_dir, f"recaptcha-challenge-{ts}-full.png")
@@ -431,16 +480,13 @@ def _capture_challenge(out_dir: str = "/tmp"):
     subprocess.run(["bash", cfx_sh, "shot", full_path], env={**os.environ}, capture_output=True)
 
     try:
-        bbox = json.loads(bbox_raw) if bbox_raw else None
-        if bbox:
+        if grid:
             from PIL import Image
             img = Image.open(full_path)
-            pad = 12
-            left = max(0, int(bbox["x"]) - pad)
-            top = max(0, int(bbox["y"]) - pad)
-            right = min(img.width, int(bbox["x"] + bbox["width"]) + pad)
-            bottom = min(img.height, int(bbox["y"] + bbox["height"]) + pad)
-            img.crop((left, top, right, bottom)).save(crop_path)
+            ox, oy = _grid_crop_origin(grid)
+            right = min(img.width, int(grid["box"][2]) + CROP_PAD)
+            bottom = min(img.height, int(grid["box"][3]) + CROP_PAD)
+            img.crop((ox, oy, right, bottom)).save(crop_path)
         else:
             crop_path = full_path
     except Exception as e:
@@ -517,41 +563,15 @@ def _bframe_geometry():
 
 
 def _tile_crops_relative():
-    """Each tile's rect in CROP coordinates (the bframe bounding box minus the
-    same 12px pad `_capture_challenge` applies), so tilevision can slice the
-    crop exactly where the DOM tiles are instead of assuming an even split of
-    an image that also carries the challenge's header/button chrome.
-    Returns [] when no challenge is open."""
-    if not _challenge_open():
+    """Each grid square's rect in CROP coordinates. Uses the same crop origin as
+    _capture_challenge (`_grid_crop_origin`), so tilevision slices exactly where
+    the DOM squares are. Returns [] when no challenge is open."""
+    grid = _tile_grid_page_box()
+    if not grid:
         return []
-    bbox_raw = cfx.evaluate(
-        "(() => { const el = document.querySelector("
-        "'iframe[src*=\"api2/bframe\"], iframe[src*=\"enterprise/bframe\"]'); "
-        "if (!el) return null; const r = el.getBoundingClientRect(); "
-        "return JSON.stringify({x:r.x,y:r.y,width:r.width,height:r.height}); })()"
-    )
-    if not bbox_raw:
-        return []
-    try:
-        bbox = json.loads(bbox_raw)
-    except ValueError:
-        return []
-    pad = 12  # MUST stay identical to the pad in _capture_challenge
-    tiles_raw = cfx.eval_frame(
-        BFRAME_FRAME,
-        "(() => { const t = Array.from(document.querySelectorAll("
-        "'.rc-imageselect-table-33 td, .rc-imageselect-table-44 td')); "
-        "return JSON.stringify(t.map(td => { const r = td.getBoundingClientRect(); "
-        "return {x:r.x, y:r.y, w:r.width, h:r.height}; })); })()"
-    )
-    out = []
-    for t in (json.loads(tiles_raw) if tiles_raw else []):
-        if t.get("w", 0) <= 0 or t.get("h", 0) <= 0:
-            continue  # mid-reload cell — dropped by _bframe_geometry too
-        out.append({"x": t["x"] - int(bbox["x"]) + pad,
-                    "y": t["y"] - int(bbox["y"]) + pad,
-                    "w": t["w"], "h": t["h"]})
-    return out
+    ox, oy = _grid_crop_origin(grid)
+    return [{"x": t["x"] - ox, "y": t["y"] - oy, "w": t["w"], "h": t["h"]}
+            for t in grid["tiles"]]
 
 
 def _click_xy(x: float, y: float) -> None:
