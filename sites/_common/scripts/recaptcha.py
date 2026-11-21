@@ -3,9 +3,7 @@
 recaptcha.py — assist with a reCAPTCHA **v2** ("I'm not a robot" checkbox,
 invisible badge, or image-grid challenge).
 
-⚠️ STANDING AUTHORIZATION (2026-07-13, user directive). The default skill
-policy (SKILL.md) is: on ANY CAPTCHA, STOP and hand it to the user. The user
-has explicitly pre-authorized this helper to AUTO-SOLVE reCAPTCHA v2 in ALL
+Solves CAPTCHAs in place (SKILL.md / references/captcha-policy.md). This helper AUTO-SOLVES reCAPTCHA v2 in ALL
 its forms — the checkbox, the invisible badge, AND the image-grid challenge —
 whenever one is the only thing blocking a legitimate application for Jane
 Doe. It does NOT touch Cloudflare Turnstile / hCaptcha (fingerprint-blocked —
@@ -519,7 +517,11 @@ def challenge_snapshot(out_dir: str = "/tmp"):
 # between the prompt bar (`.challenge-prompt`) and the footer row holding Skip
 # and refresh (`.button-submit`, `.refresh`). The crop is that band, full width.
 
-HCAPTCHA_FRAME = 'iframe[src*="hcaptcha.com"][src*="frame=challenge"]'
+# Challenge popups are NOT always `frame=challenge`: on some sites (e.g. 360Learning)
+# the popup loads static/hcaptcha-enclave.html. So the popup is found by visible size
+# (any hcaptcha.com iframe that is large and not the checkbox), then tagged with
+# data-hc-challenge="1" so eval-frame can address it with one stable selector.
+HCAPTCHA_FRAME = 'iframe[data-hc-challenge="1"]'
 
 
 def _hcaptcha_answer_box():
@@ -527,11 +529,15 @@ def _hcaptcha_answer_box():
     challenge popup is open. Frame-local coords from eval-frame are offset by the
     challenge iframe's page position, same convention as _bframe_geometry."""
     fr = cfx.evaluate(
-        "(() => { const el = document.querySelector("
-        "'iframe[src*=\"hcaptcha.com\"][src*=\"frame=challenge\"]'); "
-        "if (!el) return null; const r = el.getBoundingClientRect(); "
-        "if (r.width <= 0 || r.height <= 0 || r.y < 0) return null; "
-        "return JSON.stringify({x:r.x,y:r.y,width:r.width,height:r.height}); })()"
+        "(() => { const frames = Array.from(document.querySelectorAll("
+        "'iframe[src*=\"hcaptcha.com\"]')).filter(f => !f.src.includes('frame=checkbox')); "
+        "frames.forEach(f => f.removeAttribute('data-hc-challenge')); "
+        "const vis = frames.map(f => ({f: f, r: f.getBoundingClientRect()})) "
+        ".filter(o => o.r.width >= 200 && o.r.height >= 200 && o.r.y >= 0); "
+        "if (!vis.length) return null; "
+        "vis.sort((a, b) => b.r.width * b.r.height - a.r.width * a.r.height); "
+        "const best = vis[0]; best.f.setAttribute('data-hc-challenge', '1'); "
+        "const r = best.r; return JSON.stringify({x:r.x,y:r.y,width:r.width,height:r.height}); })()"
     )
     if not fr:
         return None
@@ -539,17 +545,22 @@ def _hcaptcha_answer_box():
         frame = json.loads(fr)
     except ValueError:
         return None
-    zone_raw = cfx.eval_frame(
-        HCAPTCHA_FRAME,
-        "(() => { const p = document.querySelector('.challenge-prompt, .prompt-text'); "
-        "const pr = p.getBoundingClientRect(); "
-        "const f = Array.from(document.querySelectorAll("
-        "'.button-submit, .refresh, .language-selector, .interface-user, .challenge-breadcrumbs')) "
-        ".map(e => e.getBoundingClientRect()).filter(r => r.height > 0 && r.top >= pr.bottom); "
-        "if (!p || !f.length) return null; "
-        "const top = pr.bottom; const bottom = Math.min(...f.map(r => r.top)); "
-        "return JSON.stringify({top: top, bottom: bottom, width: innerWidth}); })()"
-    )
+    try:
+        zone_raw = cfx.eval_frame(
+            HCAPTCHA_FRAME,
+            "(() => { const p = document.querySelector('.challenge-prompt, .prompt-text'); "
+            "if (!p) return null; const pr = p.getBoundingClientRect(); "
+            "const f = Array.from(document.querySelectorAll("
+            "'.button-submit, .refresh, .language-selector, .interface-user, .challenge-breadcrumbs')) "
+            ".map(e => e.getBoundingClientRect()).filter(r => r.height > 0 && r.top >= pr.bottom); "
+            "if (!f.length) return null; "
+            "const top = pr.bottom; const bottom = Math.min(...f.map(r => r.top)); "
+            "return JSON.stringify({top: top, bottom: bottom, width: innerWidth}); })()"
+        )
+    except cfx.CfxError:
+        # Popup is present but not a readable challenge yet (e.g. enclave still
+        # loading, no prompt in the frame). Not an error: no answer zone to crop.
+        return None
     if not zone_raw:
         return None
     zone = json.loads(zone_raw)
