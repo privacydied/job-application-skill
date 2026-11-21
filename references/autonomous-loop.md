@@ -147,8 +147,7 @@ single posting or to park the tab on the page.
      yourself, `solve-grid --tiles "<idx>"`.
      Invisible badge → trigger the real Submit,
      then `wait-token`. Verify the GREEN CHECKMARK via screenshot before Submit — the JS
-     token alone is unreliable. (Turnstile is now sanctioned auto-solve via `turnstile.py`; hCaptcha remains the full-halt case; CSJ's ALTCHA
-     is the other sanctioned auto-solve.)
+     token alone is unreliable. (Turnstile: `turnstile.py`. CSJ ALTCHA: its `feed.py`. Other CAPTCHAs: `captcha-policy.md`; 3 failed attempts → `Blocked`.)
 7. **Submit, then CAPTURE PROOF (hard rule).** Save the confirmation ("application sent"
    modal / thanks page) as a real artifact in the posting's folder:
    `applications/<company>-<role>/confirmation.png` or `confirmation.txt`. **No

@@ -74,7 +74,7 @@ per-driver filter; if an off-profile title leaks, fix `check_title.py`.
    un-refindable).
 
 Hard rules that override everything: CAPTCHA policy (`references/captcha-policy.md` —
-full halt except reCAPTCHA v2 + CSJ ALTCHA), one-tab serialization, the email-identity
+solve CAPTCHAs in place), one-tab serialization, the email-identity
 gate (`you@example.com`, never the gmail SSO), never pad the count with
 off-profile/senior/location-fail roles.
 

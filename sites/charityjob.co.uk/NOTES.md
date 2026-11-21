@@ -18,8 +18,7 @@ Resolves per-listing — many charities push to their own ATS (Beapplied, Hirefu
 etc.) or an on-site form. No CharityJob account needed to search/view.
 
 ## CAPTCHA
-⛔ Per `references/captcha-policy.md`: full halt for any CAPTCHA except the two sanctioned
-reCAPTCHA-v2 auto-solves. Not observed on the sourcing path.
+Per `references/captcha-policy.md`: solve any CAPTCHA in place; 3 failed attempts -> `Blocked`.
 
 ## In-platform apply + off-site ATS recipes (verified 2026-10-05)
 - `a.btn-apply` ("Redirect to recruiter" even for in-platform jobs) -> `cfx.py click-follow --selector 'a.btn-apply'`.

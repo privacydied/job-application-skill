@@ -238,12 +238,17 @@ def _upload_and_verify(target, filename):
     raise RuntimeError(f"CV chip '{want}' not visible after upload (2 attempts)")
 
 
-def _fill_eeo():
+def _fill_eeo(override=None):
     """Delegate to the ONE shared EEO filler (atsform.fill_eeo) — this logic was promoted there
     2026-07-24 so Ashby (which had no EEO capability, and grew a bespoke one that inverted the
     applicant's disclose instruction) uses the SAME implementation. Do NOT re-add a local copy:
     values come from apply-defaults.json -> applicant, label alternates and the
     combobox-then-radio fallback all live in the shared engine now."""
+    if override:   # per-form tweak, e.g. {"ethnicity": "Other"} when the form lacks the usual option
+        import copy
+        d = copy.deepcopy(atsform._load_defaults(True) or {})
+        d.setdefault("applicant", {}).update(override)
+        return atsform.fill_eeo(d)
     return atsform.fill_eeo()
 
 
@@ -537,7 +542,7 @@ def main():
             pass
 
     if cfg.get("eeo", True):
-        for lab, val, rc in _fill_eeo():
+        for lab, val, rc in _fill_eeo(cfg.get("applicant")):
             print(f"  eeo {lab!r}={val!r} -> {rc}")
 
     # Required non-EEO react-select screeners (per-company, from config "combo") — driven by

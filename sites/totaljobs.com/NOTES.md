@@ -27,8 +27,7 @@ If/when a Totaljobs password is available, add it to `ats-credentials.csv` (giti
 the apply is: email → password → "Continue application" → on-site form + CV upload.
 
 ## CAPTCHA
-⛔ Per `references/captcha-policy.md`: full halt for any CAPTCHA except the two sanctioned
-reCAPTCHA-v2 auto-solves. Not observed on the search/sourcing path.
+Per `references/captcha-policy.md`: solve any CAPTCHA in place; 3 failed attempts -> `Blocked`.
 
 ## ⛔ STALE ABOVE — Smart Apply works fine with stored creds (verified 2026-08-23/24)
 The "account-gated login wall" section above is stale: with the `totaljobs.com (StepStone)`
@@ -149,3 +148,14 @@ Real submit = confirmation page with "Application sent!" + job page shows "Alrea
 Revolut/Depop/Millennium/OLIVER returned the "Did all go well?" page with an "Apply on company website"
 button: NOT submitted, job page still shows Apply. Click that button (JS click) to read the employer URL
 (Depop -> etsy.wd5 Workday). Clicking Apply spawns leaked `application/external/cv-download` tabs: close them.
+
+## Queue wiring + proof capture (2026-11-17)
+- `pipeline.ats_hint()` classifies `totaljobs.com/job/...` URLs as `totaljobs-smartapply`.
+- `scripts/apply_queue.py --ats totaljobs-smartapply` drives `tj_apply.py <url>` per row. No
+  per-posting config: Smart Apply uses the account CV + profile. The location gate applies.
+- `tj_apply.py` now captures `applications/<slug>/confirmation.png` on the `Application sent!`
+  banner and logs `Applied --proof`. If the capture fails it logs `Applied?` (proof rule).
+- Verified: feed harvest (122 fresh, 4 keep after `precheck`); login live (account "Hi, Jane");
+  `apply_queue --dry-run` passes 3/4 (1 transient blank render, passed on retry); proof capture
+  writes a 150 KB PNG.
+- NOT yet verified: a live submit through the wired lane. Dry-run returns before `tj_apply.py`.

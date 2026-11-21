@@ -21,8 +21,7 @@ On-site "Easy Apply" needs a CV-Library account AND its CV upload is **chooser-g
 Treat as a login+chooser gate; source freely, apply with the user's authenticated session.
 
 ## CAPTCHA
-⛔ Per `references/captcha-policy.md`: full halt for any CAPTCHA except the two sanctioned
-reCAPTCHA-v2 auto-solves.
+Per `references/captcha-policy.md`: solve any CAPTCHA in place; 3 failed attempts -> `Blocked`.
 
 ## ⛔ STALE ABOVE (partially) — 1-Click Apply works with a logged-in account (verified 2026-09-04, Hays Technology "IT Support")
 With `ats-credentials.csv` creds and a fresh `cfx.goto()` nav (Jane Doe visible in the

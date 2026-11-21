@@ -19,7 +19,7 @@ shares it. This file is just the human/loop-facing CLI: verdict lines + exit cod
   * DONE  — today's confirmed Applied count already meets the target: stop, don't source
             (a prior same-day firing finished the goal), or
   * SLEEP — every search cooling; reschedule the next wake for `wake_at`, or
-  * HOLD  — a non-sanctioned CAPTCHA is waiting on the user.
+  * HOLD  — a held item is waiting on the user.
 
 Exit codes (so a shell/loop can branch without parsing text):
   0  WORK · 10 SLEEP · 11 HOLD · 12 DONE · 2 ERROR

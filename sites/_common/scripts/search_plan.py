@@ -14,7 +14,7 @@ INPUTS (all small on-disk CSVs):
   application-tracker.csv   to count today's confirmed Applied rows
 
 VERDICT (precedence order):
-  HOLD  — a non-sanctioned CAPTCHA is held on the user AND it is the last thing blocking
+  HOLD  — a held item is parked on the user AND it is the last thing blocking
           work: either the row names no site (blank/`*`/`all` = explicit halt-everything),
           or every other search is already blocked/cooling. A site-scoped captcha row with
           other boards still drivable is NOT a HOLD — it skips that board and returns WORK.

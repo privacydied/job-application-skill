@@ -157,3 +157,12 @@ An unanswered "in the office 3 days" radio is fixed with `ashby.py set-radio "of
   ("I prefer not to answer") with `ashby.py set-radio`.
 - `submit` printed `UNCLEAR` while the page already showed "Success — Thanks for applying!"; read
   `document.body.innerText` for the success text before treating UNCLEAR as a failure.
+
+## FIXED: Ashby `<input role=combobox>` + `[role=listbox]` needs a TRUSTED option click (Trainline, 2026-11-21)
+Synthetic mouse events in `_COMBO_CLICK` removed the marker but React ignored them (value stayed empty; evaluate's retry then
+printed `NO_INPUT`). `atsform._combo_open_and_pick` now trusted-clicks the exact option inside the field's `aria-controls`
+listbox first (`OK=trusted-option-click:`). Config recipe: `"comboboxes": {"notice period": "Immediately available",
+"currently located": "London, Greater London, England, United Kingdom"}` — use the FULL listed option text (the async location list
+only appears after real keypresses; `"London"` alone free-texted and bounced "Missing entry for required field").
+Infra: after `docker restart camofox-browser`, `cfx.py init` can keep a dead tab (HTTP 410); take the id printed by
+`cfx.py ensure-tab` and `export CFX_TAB=<id>` before the driver.

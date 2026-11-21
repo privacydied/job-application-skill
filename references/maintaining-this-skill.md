@@ -4,31 +4,15 @@ Guidance for an agent **editing** this skill (not one running the apply loop —
 that's why it lives here, out of `SKILL.md`'s per-turn context). `SKILL.md` keeps
 a one-line pointer to this file at the CAPTCHA policy.
 
-## Doc-consistency rule (2026-07-13, learned the hard way — a 2nd pass was required because pass 1 MISSED 3 contradiction sites)
+## Doc-consistency rule
 
-The CAPTCHA halt/auto-solve policy is NOT restated in "four" places — it recurs
-across the WHOLE doc set with *varying phrasing*, so a single-phrase grep misses
-leftovers. Surfaces that restate CAPTCHA policy: `SKILL.md` (the camofox CAPTCHA
-directive AND the Hard-stops section AND step-6 review), `GOAL.md`,
-`goal-condition.txt`, `loop-preflight.py`, `sites/_common/CAPABILITY-GAPS.md` (the
-capability-record warning notes), and each `sites/<domain>/NOTES.md` that touches
-that board's CAPTCHA (e.g. `sites/adzuna.co.uk/NOTES.md`). The email-identity/login
-rule recurs similarly (`SKILL.md` Hard-stops + step-6 + adzuna NOTES + the SSO
-override).
-
-**When you change either policy in one place, update EVERY other surface, THEN
-VERIFY with a multi-phrase grep for the contradiction signatures** — a
-half-updated, self-contradicting policy is worse than no update. Concrete audit
-command (run from the skill root after ANY policy edit):
+The CAPTCHA policy (solve in place; 3 failures -> `Blocked`) is restated in `SKILL.md`, `GOAL.md`,
+`goal-condition.txt`, `loop-prompt.md`, the prompt files, `references/captcha-policy.md` (canonical)
+and some board NOTES. After any policy edit, grep for contradictions:
 
 ```bash
-grep -rInE "CAPTCHA \(any\)|never auto-solve|checkbox only|only when the user has explicitly opted in|not a general auto-solve license|grid.*hard stop|hard stop.*(image|grid)" --include=*.md --include=*.txt --include=*.py .
+grep -rInE "full[ -]halt|non-sanctioned|halt procedure|captcha.*hard stop|hard stop.*captcha" --include=*.md --include=*.txt --include=*.py .
 ```
-
-Expect ZERO hits for a clean update. Search MULTIPLE phrasings — the leftover at
-`CAPABILITY-GAPS.md:65` was phrased "checkbox only — never image-grid challenges",
-which a grep for "grid is a hard stop" would never catch. Same discipline for any
-rule mirrored across the doc set.
 
 ## Tooling pitfall (2026-07-13)
 

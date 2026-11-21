@@ -63,6 +63,5 @@ for t in [x['tabId'] for x in cfx.list_tabs()]:
 ## What this does NOT change
 
 - The **single-serial-tab rule still holds per drive**. Never point two processes at one tab id.
-- A **CAPTCHA halt is still a full halt** — parallelism does not license continuing on other
-  lanes through a non-sanctioned CAPTCHA.
+- CAPTCHAs are solved in place per `captcha-policy.md`; they do not pause other lanes.
 - Per-posting attempt caps are unchanged (2 real attempts, then `Blocked`).

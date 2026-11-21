@@ -70,7 +70,7 @@ lists reappear outside `check_title.py`.
 | Break cooldown w/ broad alternate queries | `scripts/gen_queries.py` (wider-vocab LI/Indeed URLs, new keys) | hand-build OR-bundle search URLs |
 | Handle LinkedIn's daily submission limit | auto in `apply_queue.py` via `ratelimit.py` (detect→save→trip cooldown→switch boards); `references/linkedin-daily-limit.md` | grind failed Easy Apply submits |
 | Atomic + locked write to a shared CSV/JSONL | `fsutil.file_lock(path)` + `fsutil.atomic_write(...)` | bare `open(,"w")` on shared state |
-| Solve reCAPTCHA v2 (sanctioned) | `recaptcha.py` | — (any other CAPTCHA = hard stop) |
+| Solve reCAPTCHA v2 (sanctioned) | `recaptcha.py` | `turnstile.py` (Turnstile); others per `captcha-policy.md` |
 
 ## feature-roadmap tools (H/N/M/X tiers — hardening, async, matching, context)
 

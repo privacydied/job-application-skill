@@ -60,9 +60,7 @@ Off-site per employer — JD pages show **"Apply on website"**. Some rows carry 
 treat the path as unverified.
 
 ## CAPTCHA
-⛔ Per `references/captcha-policy.md`: full halt for any CAPTCHA except the two sanctioned
-reCAPTCHA-v2 auto-solves. reCAPTCHA (`recaptcha/api.js`) is present site-wide but **not**
-encountered on the sourcing path.
+Per `references/captcha-policy.md`: solve any CAPTCHA in place; 3 failed attempts -> `Blocked`.
 
 ## Live tests
 ```

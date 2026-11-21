@@ -103,7 +103,7 @@ but don't match short substrings against it blindly.
 **reCAPTCHA v2 on `/Registration/`** — `g-recaptcha` + `data-sitekey="6Lc_ZPQqAAAAAGr0l0A1O5OCeZDkXxq7MOh6Lc2D"`
 (Royal Holloway; expect a per-tenant key). v2 → **sanctioned exception 1** in
 `references/captcha-policy.md`, auto-solvable via `sites/_common/scripts/recaptcha.py`.
-None on login or the sourcing path. Any *other* CAPTCHA here is still a ⛔ full halt.
+None on login or the sourcing path. Any CAPTCHA here: solve per `references/captcha-policy.md`.
 
 ## Build verdict
 Sourcing is easy and browser-free (`cat=-1` or `rss.aspx`), and `jobs.ac.uk` already surfaces

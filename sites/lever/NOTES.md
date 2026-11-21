@@ -29,7 +29,7 @@ placeholder fallback was added, EVERY card question resolved to the same meaning
 **3. hCaptcha is present but INVISIBLE** — `input[name=h-captcha-response]` arrives
 pre-filled with a token and the `.h-captcha` widget has zero height. Per SKILL.md this is
 NOT a CAPTCHA stop (same false-blocker class as Greenhouse's invisible reCAPTCHA); finish the
-form and submit. A *visible* hCaptcha challenge would be a genuine stop.
+form and submit. A *visible* hCaptcha challenge: handle per `references/captcha-policy.md`.
 
 **4. Ignore the static "File exceeds the maximum upload size of 100MB" string** — it is
 permanent UI helper text, not a validation error; the attached résumé shows "Success!".

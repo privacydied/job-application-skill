@@ -9,7 +9,7 @@ recipe below; adjust labels from a live field dump if they differ.
 Workable gates final submit behind **Cloudflare Turnstile** ("Verify you are
 human"). **Sanctioned auto-solve:** `python3 sites/_common/scripts/turnstile.py`
 finds the `challenges.cloudflare.com` iframe, clicks the checkbox via CDP,
-polls for the hidden token. Falls through to the halt procedure if it fails.
+polls for the hidden token. Retry up to 3 times, then `Blocked`.
 Before spending time, run `cfx.sh check-cooldown apply.workable.com`.
 
 ## Reaching + filling the form

@@ -123,7 +123,7 @@ than it saves. If `stagetimer` shows `fill`/`source` dominating, the answer is f
 Standing preference for this applicant's runs: a role whose submit is blocked by a
 CAPTCHA or a CAPTCHA-service error is SKIPPED (record the reason) and the run continues
 to the next role. Do not hold the turn for a human solver or spend repeated attempts on
-the grid; sanctioned auto-solves are used only where the policy already allows them.
+the grid; CAPTCHAs are solved per `captcha-policy.md`.
 
 ## Sourcing-run cleanup — the queue is the deliverable
 

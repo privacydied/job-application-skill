@@ -120,7 +120,7 @@ Page 1 fields:
 **reCAPTCHA is present on `/candidate/register`** (`recaptcha/api.js`, `recaptcha_register_wrapper`).
 It is the **reCAPTCHA v2 family → sanctioned exception 1** in `references/captcha-policy.md`,
 auto-solvable via `sites/_common/scripts/recaptcha.py`. Not present on login, and **not on the
-sourcing path at all**. Any *other* CAPTCHA here is still a ⛔ full halt.
+sourcing path at all**. Any CAPTCHA here: solve per `references/captcha-policy.md`.
 
 ## Build verdict
 Highest-value of the three: one driver covers the Met + City of London Police + BTP (all

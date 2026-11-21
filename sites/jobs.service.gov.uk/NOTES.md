@@ -424,7 +424,7 @@ drivable inventory, not a standing hard stop — drive it like Shape A.
   on this one wall — don't re-attempt per-role, it's the same registration flow.
 - **`wavetrackr.com` apply forms (used by Essential Employment Ltd and probably other
   agencies)** — a plain HTML form but gated by a VISIBLE Cloudflare Turnstile "Verify you
-  are human" checkbox. Non-sanctioned CAPTCHA per SKILL.md — full halt, escalate via
+  are human" checkbox. CAPTCHA per SKILL.md — solve per `references/captcha-policy.md`; see
   `blockers.py record`, do not attempt to solve. Verified live: Essential Employment Ltd,
   Content Designer (Hackney).
 

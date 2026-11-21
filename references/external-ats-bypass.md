@@ -62,10 +62,10 @@ Clicking **"Apply with Indeed"** routes to
 resume-selection → questions → review → submit). On camofox this lands on Indeed's
 **"Additional Verification Required"** page (Cloudflare Turnstile interstitial —
 `document.title == "Just a moment..."`, body reads "Additional Verification Required"
-+ a Ray ID). **Sanctioned auto-solve (2026-11-05):** `python3 sites/_common/scripts/turnstile.py`
++ a Ray ID). `python3 sites/_common/scripts/turnstile.py`
 finds the `challenges.cloudflare.com` iframe, clicks the checkbox via CDP,
 polls for the hidden token. If it fails (fingerprint distrust, timeout, no iframe) →
-fall through to `Blocked` with VNC handoff.
+retry up to 3 times, then `Blocked`.
 This is DIFFERENT from "Apply on company site" (which is fine — external ATS, no
 Indeed ATS involved). (LinkedIn Easy Apply is the volume path.)
 
@@ -74,7 +74,7 @@ talent.com's "Quick Apply" is a talent.com-HOSTED form (account OTP login → 3-
 Contact/CV/Questions wizard), and `sites/talent.com/scripts/apply.py` drives ALL of
 it autonomously — emailed-OTP login, CV upload, phone/address/salary, cover letter,
 employer screener radios. The final **"Send application"** on step 3 is gated by a
-**Cloudflare Turnstile**. **Sanctioned auto-solve (2026-11-05):** the driver calls
+**Cloudflare Turnstile**. the driver calls
 `python3 sites/_common/scripts/turnstile.py` to click the checkbox via CDP and
 poll for the token. If turnstile.py fails (fingerprint distrust, timeout, no iframe) →
 `apply.py` logs `Blocked` with reason `"TURNSTILE_WALL"` and returns exit code 3

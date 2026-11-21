@@ -3,7 +3,7 @@
 human_queue.py — the ONE coalesced human-intervention worklist ("set-and-forget" lever).
 
 WHY THIS EXISTS. Every human touchpoint in this skill is currently scattered and
-per-incident: a captcha halts the run and pings the user (blockers.jsonl), a login wall
+per-incident: a captcha that fails 3 solves is recorded in blockers.jsonl, a login wall
 waits on the user (holds.csv), and each account wall accretes separately (accounts-needed.csv).
 So the human is interrupted N times, unpredictably, each for one item. That is the opposite
 of "set and forget."
@@ -272,7 +272,7 @@ def build_worklist():
             "resolve": f"blockers.py resolve {b.get('id')}",
         })
 
-    # 3) holds.csv (captcha halts everything; login blocks that site) — may overlap (2)
+    # 3) holds.csv (legacy captcha rows; login blocks that site) — may overlap (2)
     for h in search_plan.read_holds():
         kind = (h.get("type") or "").lower()
         site = h.get("site") or ""

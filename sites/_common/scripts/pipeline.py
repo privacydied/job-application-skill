@@ -265,6 +265,7 @@ def ats_hint(url, board=""):
         ("myworkdayjobs.com", "workday"), ("welcometothejungle", "wttj"),
         ("cshr.tal.net", "csj-tal"), ("civilservicejobs", "csj-tal"),
         ("recruitmentplatform.com", "external"),
+        ("totaljobs.com/job", "totaljobs-smartapply"),
     ):
         if needle in u:
             return hint

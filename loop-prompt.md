@@ -18,7 +18,7 @@ It answers, from tiny on-disk state alone, whether this firing has any fresh wor
 
 - **`verdict=SLEEP` (exit 10)** — every search is cooling; nothing can have changed. **STOP immediately**, reschedule the next firing for the printed `wake_at` (firing earlier is provably wasted). One-line report: "All searches cooling; next work possible at `<wake_at>`." This is the normal, healthy idle path — a handful of tool calls, not a full instance.
 - **`verdict=DONE` (exit 12)** — today's confirmed `Applied` count already meets the target (default 10; override with `--target N` / `APPLY_TARGET`). A prior same-day firing finished the goal. **STOP — do not source.** (This folds the old manual "count today's Applied rows" preflight into the checkpoint.) Re-verify the tracker if unsure; only a new instruction ("do 5 more") authorizes more.
-- **`verdict=HOLD` (exit 11)** — a CAPTCHA is waiting on the user. STOP, remind them via VNC (`http://nasirjones:6080/vnc.html`), end the turn.
+- **`verdict=HOLD` (exit 11)** — a held item is waiting on the user. STOP, remind them via VNC (`http://nasirjones:6080/vnc.html`), end the turn.
 - **`verdict=WORK` (exit 0)** — do the full bootstrap below. Source **only the `clear` searches it listed**, **in the printed order** (highest expected-yield first) — that list IS the sourcing plan; skip cooling ones, don't re-enumerate boards it didn't name.
 
 `searches.csv` is the canonical board+query list the gate reasons over; `holds.csv` (created on a hard stop, deleted when the user clears it) is how a hold survives across firings. The verdict logic lives in `sites/_common/scripts/search_plan.py`, shared with `pipeline.py`.
@@ -50,7 +50,7 @@ python3 sites/indeed.com/scripts/feed.py --nav "<searches.csv nav URL>"
 python3 sites/linkedin/scripts/feed.py --nav "<searches.csv nav URL>"
 python3 sites/welcometothejungle/scripts/feed.py
 python3 sites/civilservicejobs/scripts/feed.py --nav "<searches.csv csj nav URL>" --all-pages   # ALWAYS --all-pages; auto-solves CSJ's ALTCHA (sanctioned); trust only its jobs.cgi?jcode= URLs
-python3 sites/hackney/scripts/feed.py --nav "https://recruitment.hackney.gov.uk/job-search/"   # WP board; no CAPTCHA sanction here
+python3 sites/hackney/scripts/feed.py --nav "https://recruitment.hackney.gov.uk/job-search/"
 ```
 Each feed: reads the search term from the `--nav` URL (WTTJ uses the fixed key `home`); if that board+query is already confirmed dry it prints `[]` + a `COOLDOWN:` line and exits with zero browser cost; and it **auto-marks** the 12h cooldown when a real pass yields zero fresh. A feed returning `[]` with `COOLDOWN:`/`EXHAUSTED:` is **done for this run** — next board. All boards cooled/exhausted → go to §5 and stop. To deliberately re-source early (user says "check again now"): `--force`. (`board-cooldown.sh` remains for ad-hoc inspection/overrides on the same CSV.)
 
@@ -86,9 +86,9 @@ Survivors = the **work list**. Only now open JDs and run the full SKILL.md scree
 
 ## 4. Hard stops — PERSIST them so the next firing doesn't re-hit them
 
-A hard stop must survive into the next firing. **Record it in `holds.csv`** (preflight reads it): append `type,site,role,url,created_at,note` with `type` = `captcha` or `login`. **Clear it** (delete the row) once the user confirms resolution.
+A hard stop must survive into the next firing. **Record it in `holds.csv`** (preflight reads it): append `type,site,role,url,created_at,note` with `type` = `login`. **Clear it** (delete the row) once the user confirms resolution.
 
-- **CAPTCHA** → append `captcha,<site>,<role>,<url>,<now>,<what it blocks>`, hold the filled application, message the user once (VNC `http://nasirjones:6080/vnc.html`), **end your turn**, wait. Next firing's preflight returns `HOLD`. On the user's "done": delete the row, finish the SAME application. Do NOT continue other postings; do NOT batch to end-of-run.
+- **CAPTCHA** → not a hold. Solve it (SKILL.md CAPTCHA section); 3 failed attempts → log `Blocked`, next row.
 - **Login wall** → append `login,<site>,,,, <now>,walled`. Blocks that SITE only — preflight skips its searches but still WORKs the others. Message the user; delete the row once the session's restored.
 - **Untruthful required question / payment request / legal attestation** → per SKILL.md hard-stops.
 
@@ -96,7 +96,7 @@ Everything else (multi-page forms, uploads, screener essays, new ATS, external-A
 
 ## 5. End of run — set the NEXT wake precisely
 
-Stop when any of: **cap reached** · **work list exhausted** · **everything remaining CAPTCHA/login blocked**. Dry searches are already cooldown-marked by the feeds.
+Stop when any of: **cap reached** · **work list exhausted** · **everything remaining login-blocked**. Dry searches are already cooldown-marked by the feeds.
 
 **Pace the next firing off the checkpoint, not a blind interval:** run `python3 loop-preflight.py` once more; it returns `SLEEP` with a `wake_at` (or `DONE` if the target's met). **Reschedule for that `wake_at`** — that's what stops waking every few minutes to re-confirm "still dry". If a `HOLD` is active, wait on the user instead.
 

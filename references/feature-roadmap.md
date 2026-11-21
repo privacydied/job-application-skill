@@ -85,7 +85,7 @@ paragraph is a bug report against a tool that still permits the mistake.
       whole path is code-only — `reed-easyapply` (86% submit rate, zero model
       judgment) and EA rows whose screeners are 100% covered by the answer bank.
       Rows needing judgment (novel screeners, essays, borderline titles) are left
-      tagged `needs_model`. CAPTCHA policy unchanged: any non-sanctioned CAPTCHA →
+      tagged `needs_model`. CAPTCHAs are solved per captcha-policy.md →
       daemon halts drain + notifies, exactly like the loop. A model session then
       becomes: read exceptions bundle → write creative content → answer new
       screeners → done.

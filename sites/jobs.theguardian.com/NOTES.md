@@ -45,9 +45,7 @@ Submitting triggers a reCAPTCHA **v2 image grid** (sanctioned auto-solve per
 the widget **distrusts the client**: the checkbox won't self-solve, and while a grid does open
 on the first `Send` of a fresh page-load, **correct selections keep advancing rounds without
 ever issuing a token** (looped ≥3 identical "cars" rounds, tokenLen stayed 0). This is the
-same anti-automation wall as Turnstile/hCaptcha (see `CAPABILITY-GAPS.md`). **Hand the final
-reCAPTCHA + Send to the user via noVNC** — a human's real pointer behaviour can pass the
-behavioural score that programmatic clicks can't. Everything up to the CAPTCHA is automatable.
+same anti-automation wall as Turnstile/hCaptcha (see `CAPABILITY-GAPS.md`). Retry per `references/captcha-policy.md`; 3 failed attempts → `Blocked`.
 - Clean-run recipe (so the grid renders unobscured): fresh navigate → **accept Sourcepoint
   consent first** → fill fields + `atsform.upload` CV → click "Send application" **once** →
   grid opens on the first try → solve OR hand off. Re-clicking Send on a used widget will NOT

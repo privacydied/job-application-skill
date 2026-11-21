@@ -2,7 +2,7 @@
 """
 blockers.py — structured blocker inbox + parked-application resume (feature-roadmap N.3).
 
-WHY THIS EXISTS. Every wall (login / non-sanctioned CAPTCHA / downstream account / SMS
+WHY THIS EXISTS. Every wall (login / unsolved CAPTCHA / downstream account / SMS
 verification) serializes the human INTO the loop: today the loop stops, prints a prose
 "held" message, and the application is parked in whatever half-filled state it reached — with
 no structured record and no resume path except the model happening to remember. So human
@@ -18,9 +18,7 @@ This makes blockers DATA:
     H.8 journal) — the next firing / daemon pass resumes each from its journal state instead
     of relying on the model remembering.
 
-⚠️ CAPTCHA semantics are UNCHANGED. A non-sanctioned CAPTCHA is still a FULL immediate halt
-(SKILL.md / captcha-policy.md). This inbox is the RESUME mechanism after the human clears it —
-NOT a license to continue past it. record() for a captcha still means "the loop halted here."
+CAPTCHAs are solved in place (SKILL.md / captcha-policy.md); record one here only after 3 failed solves.
 
 blockers.jsonl (skill root, gitignored) rows:
   {id, kind, site, url, company, role, slug, what, vnc, created, resolved, resolved_at?}

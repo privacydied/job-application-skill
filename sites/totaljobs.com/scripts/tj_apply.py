@@ -112,6 +112,22 @@ def _external_url():
     return "none"
 
 
+def _capture_proof(company, role):
+    """Screenshot the current (confirmation) page into applications/<slug>/confirmation.png.
+    Returns the path, or None when the capture is missing/trivial (AGENTS.md proof rule)."""
+    slug = re.sub(r"[^a-z0-9]+", "-", f"{company} {role}".lower()).strip("-")[:80]
+    d = os.path.join(HERE, "..", "..", "..", "applications", slug)
+    try:
+        os.makedirs(d, exist_ok=True)
+        p = os.path.join(d, "confirmation.png")
+        cfx.shot(p)
+        if os.path.getsize(p) > 1024:
+            return p
+    except Exception as e:  # noqa: BLE001
+        print("  proof capture FAILED:", str(e)[:120])
+    return None
+
+
 def _log_applied(url, job_id, role, company, status="Applied?"):
     role = role or f"TotalJobs posting {job_id}"
     if not company:  # selector misses on the new layout — the URL slug always carries it
@@ -119,12 +135,19 @@ def _log_applied(url, job_id, role, company, status="Applied?"):
         if m:
             company = " ".join(w.capitalize() for w in m.group(1).split("-"))
     company = company or "(unknown employer — TotalJobs)"
+    proof = None
+    if status == "Applied":
+        # `Applied` requires a captured confirmation artifact; without one it is `Applied?`.
+        proof = _capture_proof(company, role)
+        if proof is None:
+            status = "Applied?"
+            print("  no proof captured — logging Applied? (not Applied)")
+    args = [sys.executable, LOGAPP, company, role, "TotalJobs", url, status,
+            "--notes", "auto-logged by tj_apply on SUBMIT (Application sent! banner)"]
+    if proof:
+        args += ["--proof", proof]
     try:
-        r = subprocess.run(
-            [sys.executable, LOGAPP, company, role, "TotalJobs", url, status,
-             "--notes", "auto-logged by tj_apply on SUBMIT (Send application clicked, "
-             "confirmation page reached)"],
-            capture_output=True, text=True, timeout=30)
+        r = subprocess.run(args, capture_output=True, text=True, timeout=30)
         print("  log:", (r.stdout or r.stderr).strip().splitlines()[-1][:160] if (r.stdout or r.stderr).strip() else f"rc={r.returncode}")
     except Exception as e:  # noqa: BLE001
         print("  log FAILED (submit stands — log by hand):", str(e)[:120])
@@ -381,7 +404,7 @@ def apply(url, dry=False):
     # account's Applications list (https://www.totaljobs.com/ -> "N applications" link)
     # before counting it as a real Applied. Do not loosen this without re-verifying live.
     if "Application sent" in str(final):
-        _log_applied(url, job_id, role, company, status="Applied?")
+        _log_applied(url, job_id, role, company, status="Applied")  # proof-gated: Applied? w/o proof
         return f"[{job_id}] SUBMITTED (url={href})"
     if ("Did all go well" in str(final) or "Application summary" in str(final)
             or "confirmation/success" in str(href)):

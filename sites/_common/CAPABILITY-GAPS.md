@@ -123,13 +123,8 @@ for precedence rules and the `CFX_NO_REFERER`/`CAMOFOX_NO_REFERER` escape hatch.
 
 ## `/click` can reach cross-origin iframes and coordinates — fixed (server.js)
 
-> ⚠️ **Capability record, not a default workflow.** The cross-origin `/click` + `click-xy`
-> fix is what *enables* the reCAPTCHA v2 auto-solve — it must NOT be used to script around
-> **non-sanctioned** CAPTCHAs (hCaptcha stays a hard stop, per SKILL.md). The
-> sanctioned auto-solves are: `recaptcha.py` for **all reCAPTCHA v2 forms** (checkbox /
-> invisible badge / image-grid); `turnstile.py` for **Cloudflare Turnstile checkbox**
-> (clicks via CDP iframe attach); and ALTCHA on civilservicejobs.service.gov.uk
-> (`sites/civilservicejobs/scripts/feed.py`). hCaptcha and anything else = hard stop.
+> Solvers: `recaptcha.py` (reCAPTCHA v2), `turnstile.py` (Cloudflare Turnstile), ALTCHA on CSJ
+> (`sites/civilservicejobs/scripts/feed.py`). Everything else: `references/captcha-policy.md`.
 
 `/click` originally only resolved `ref`/`selector` on the main frame, so a reCAPTCHA v2
 anchor checkbox (inside cross-origin `iframe[src*="recaptcha/api2/anchor"]`) was

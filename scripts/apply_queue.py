@@ -56,6 +56,7 @@ APPLY_EA = os.path.join(ROOT, "sites", "linkedin", "scripts", "apply_ea.py")
 ASHBY = os.path.join(ROOT, "sites", "ashbyhq", "scripts", "ashby.py")
 GH_APPLY = os.path.join(ROOT, "sites", "greenhouse", "scripts", "gh_apply.py")
 LEVER = os.path.join(ROOT, "sites", "lever", "scripts", "lever.py")
+TJ_APPLY = os.path.join(ROOT, "sites", "totaljobs.com", "scripts", "tj_apply.py")
 RUNCFG = os.path.join(ROOT, "runcfg")
 COUNT_FILE = "/tmp/apply_queue_count.json"
 DEFAULT_HEADLESS_ATS = {"linkedin-easyapply"}
@@ -256,6 +257,22 @@ def _drive_hard_board(row, ats, resume, dry_run):
         print(f"    nav rendered blank ({nav.get('attempts')} attempts) — skipping",
               file=sys.stderr)
         return 3
+    # Smart Apply (StepStone/TotalJobs): the account CV + profile are the application, so no
+    # per-posting config is built; tj_apply.py owns the whole submit and proof capture.
+    if ats == "totaljobs-smartapply":
+        if dry_run:
+            print("    dry-run: would drive totaljobs smart-apply", file=sys.stderr)
+            return 5
+        try:
+            out = subprocess.run([sys.executable, TJ_APPLY, row["url"]], cwd=ROOT,
+                                 env=os.environ, capture_output=True, text=True, timeout=420)
+        except subprocess.TimeoutExpired:
+            return 3
+        verdict = (out.stdout or "").strip().splitlines()[-1:] or [""]
+        print("    " + verdict[0][:200], file=sys.stderr)
+        if "SUBMITTED" in (out.stdout or ""):
+            return 0
+        return 7 if ("BLOCKED" in (out.stdout or "") or "UNVERIFIED" in (out.stdout or "")) else 3
     cfg_path = _hard_board_config(row, resume, ats)
     if cfg_path is None:
         return 7            # a required question this run cannot answer truthfully
@@ -485,13 +502,13 @@ def main():
             tally["skipped_excluded"] = tally.get("skipped_excluded", 0) + 1
             continue
         print(f"\n>>> apply [{ats}] {company} :: {role}", file=sys.stderr)
-        blocked = _location_block(r) if ats in HARD_BOARD_ATS else None
+        blocked = _location_block(r) if ats in (HARD_BOARD_ATS | {"totaljobs-smartapply"}) else None
         if blocked:
             print(f"    SKIP off-location: {blocked}", file=sys.stderr)
             tally["skipped_location"] = tally.get("skipped_location", 0) + 1
             attempted -= 1
             continue
-        if ats in HARD_BOARD_ATS:
+        if ats in (HARD_BOARD_ATS | {"totaljobs-smartapply"}):
             rc = _drive_hard_board(r, ats, resume, dry_run)
         else:
             cmd = [sys.executable, APPLY_EA, url, company, role,

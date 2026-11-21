@@ -97,8 +97,7 @@ This converts the escapecity channel from "NO_DRIVER → all VNC" to "every list
 routed; the Ashby/Greenhouse-backed ones auto-drive."
 
 ## CAPTCHA
-⛔ Per `references/captcha-policy.md`: full halt for any CAPTCHA except the two sanctioned
-reCAPTCHA-v2 auto-solves. None observed on the sourcing path (the Algolia API is unchallenged).
+Per `references/captcha-policy.md`: solve any CAPTCHA in place; 3 failed attempts -> `Blocked`.
 
 ## Live test
 ```

@@ -92,8 +92,7 @@ pages, dates are 3 selects. When a listing hands off to Trac, follow the TalentL
 applicationtrack recipe pattern; it too needs a (separate) Trac account.
 
 ## CAPTCHA
-⛔ Per `references/captcha-policy.md`: full halt for any CAPTCHA except the two sanctioned
-reCAPTCHA-v2 auto-solves. Not observed on the sourcing path.
+Per `references/captcha-policy.md`: solve any CAPTCHA in place; 3 failed attempts -> `Blocked`.
 
 ## ✅ NATIVE apply works again (2026-11-13, Hillingdon CIC Associate Digital Transformation Manager, ref AR-261113-04077)
 Some adverts (e.g. employer code E0004) apply natively at `/candidate/application/<REF>/...`, not via a trust ATS. Login

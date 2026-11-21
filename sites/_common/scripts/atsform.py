@@ -654,7 +654,9 @@ _COMBO_CLEAR_CHIPS = r"""
 
 
 def _combo_focus():
+    # Close any menu a previous field left open, then focus THIS field's input.
     cfx.evaluate("(()=>{const i=document.querySelector('[data-ats-target]');"
+                 "document.querySelectorAll('input[aria-expanded=true]').forEach(e=>{if(e!==i)e.blur()});"
                  "if(i){i.scrollIntoView({block:'center'});i.focus();}})()")
 
 
@@ -809,8 +811,11 @@ def _combo_open_and_pick(option, multi=False, strict=False, resolve_js=None):
     # 3) trusted click is the last-resort opener AND the one that can hang (~30s on Greenhouse
     #    remix) — time-box it to 6s so a stuck widget falls through to type-to-filter instead of
     #    stalling the whole run (the Graphcore "combobox_pick hung the run" symptom).
-    rungs = (lambda: cfx.evaluate(_COMBO_POINTER_OPEN),     # 1) synthetic pointer sequence
-             lambda: cfx.press("ArrowDown"),                # 2) real ArrowDown key
+    # ArrowDown FIRST (verified live on Greenhouse react-select: focus + ArrowDown opens the field's
+    # own listbox and lists every option; the synthetic pointer toggle can close a menu another
+    # field left open, which read as an EMPTY list and fell into the false-OK free-text commit).
+    rungs = (lambda: cfx.press("ArrowDown"),                # 1) real ArrowDown key
+             lambda: cfx.evaluate(_COMBO_POINTER_OPEN),     # 2) synthetic pointer sequence
              lambda: cfx.click_selector('[data-ats-target]', timeout=6))  # 3) trusted click, bounded
     opts = []
     for rung in rungs:
@@ -824,7 +829,13 @@ def _combo_open_and_pick(option, multi=False, strict=False, resolve_js=None):
         if _has_match(opts):
             break
     if not _has_match(opts):        # 4) big typeahead (Country/Location) — filter then re-read
-        _combo_type(option)
+        # ⛔ NEVER TYPE INTO A MENU THAT ALREADY LISTS ITS OPTIONS (2026-11-17). Greenhouse's
+        # react-selects open with the full option list. If it has no exact/word match for the
+        # requested wording, the answer is to choose the closest listed option (prefix branch
+        # below) or fail with the list shown — not to type text in and commit it. Typing is
+        # only for async typeaheads whose list is EMPTY until keystrokes arrive (School, Location).
+        if not opts:
+            _combo_type(option)
         # 8s, not 2.5s (2026-08-15). Rungs 1-3 are LOCAL widgets whose options are already in
         # the DOM, so a short poll is right for them. This rung is the ASYNC path: the
         # keystrokes fire a server fetch (Greenhouse's School / Degree / Discipline education
@@ -939,6 +950,31 @@ def _combo_open_and_pick(option, multi=False, strict=False, resolve_js=None):
                 print(f"OK=option-click:{hit[6:]}")
                 return 0
             print(f"  input-less dropdown: {hit}")
+    # ⛔ TRUSTED CLICK FIRST FOR aria-controls LISTBOXES (Ashby notice-period, Trainline 2026-11-21).
+    # _COMBO_CLICK dispatches SYNTHETIC mouse events: on Ashby's <input role=combobox> + [role=listbox]
+    # widget they remove the marker and report OK-ish but React ignores them (value stays empty;
+    # evaluate's retry then reports NO_INPUT). A real (trusted) click on the exact option binds
+    # (probe_widget "trusted-click"). Exact-text match only; verified by the menu closing.
+    tr = cfx.evaluate("""(()=>{const i=document.querySelector('[data-ats-target]');if(!i)return '';
+      const lb=i.getAttribute('aria-controls')&&document.getElementById(i.getAttribute('aria-controls'));
+      if(!lb||lb.getAttribute('role')!=='listbox')return '';
+      const want=%s.replace(/\\s+/g,' ').trim().toLowerCase();
+      const o=[...lb.querySelectorAll('[role=option]')].find(x=>(x.innerText||'').replace(/\\s+/g,' ').trim().toLowerCase()===want);
+      if(!o)return '';o.setAttribute('data-ats-opt','1');o.scrollIntoView({block:'center'});
+      return (o.innerText||'').trim().slice(0,40);})()""" % _js(str(option)))
+    if tr:
+        try:
+            cfx.click_selector('[data-ats-opt]', timeout=8)
+        except Exception:  # noqa: BLE001
+            pass
+        time.sleep(0.8)
+        still = cfx.evaluate("(()=>{const i=document.querySelector('[data-ats-target]');"
+                             "return i&&i.getAttribute('aria-expanded')==='true'?'open':'closed'})()")
+        cfx.evaluate("(()=>{document.querySelectorAll('[data-ats-opt]').forEach(e=>e.removeAttribute('data-ats-opt'));return 1})()")
+        if still == "closed":
+            _combo_clear_marker()
+            print(f"OK=trusted-option-click:{tr}")
+            return 0
     clicked = cfx.evaluate(_COMBO_CLICK.replace("__OPT__", _js(option))
                        .replace("__STRICT__", "true" if strict else "false"))
     if isinstance(clicked, str) and clicked.startswith("OK"):
@@ -950,6 +986,9 @@ def _combo_open_and_pick(option, multi=False, strict=False, resolve_js=None):
     # the typed value (React native-setter so onChange fires, then Enter/blur) unblocks those. We do
     # NOT do this when options exist but none matched — that must still fail rather than guess a
     # wrong value — so the blast radius is only comboboxes that ALREADY fail with NO_OPTION.
+    if opts and not _has_match(opts):
+        print(f"  no option matches {str(option)[:40]!r}; menu offers: "
+              + " | ".join(o.strip()[:40] for o in opts[:40]))
     if not opts:
         ft = cfx.evaluate(_COMBO_FREETEXT_COMMIT.replace("__VAL__", _js(str(option))))
         if isinstance(ft, str) and ft.startswith("OK"):
@@ -2450,6 +2489,10 @@ def fill_eeo(config=None):
         head = str(val).split()[0].strip(",;/") if str(val).split() else ""
         if head and len(head) >= 4 and head.lower() != str(val).strip().lower():
             candidates.append(head)
+        # Census "Mixed" is spelled "Multiple Ethnic Group(s)" on some forms (Speechmatics) — same
+        # category, different word. Only a FALLBACK after the exact/bare/head candidates.
+        if re.search(r"\bmixed\b", str(val), re.I):
+            candidates += ["Multiple Ethnic Group", "Multiple ethnic groups", "Multiple"]
         rc = "NO_FIELD"
         for lab in labels:
             hit = False

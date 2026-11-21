@@ -23,7 +23,7 @@ SAFETY (load-bearing):
     applies. So a mis-run can't submit.
   * Self-gates via pipeline.plan(): on SLEEP/DONE/HOLD it drains nothing (a HOLD is exactly a
     live CAPTCHA/login hard-stop).
-  * ⚠️ CAPTCHA POLICY UNCHANGED. autodrain never solves a non-sanctioned CAPTCHA. If a driver
+  * ⚠️ CAPTCHAs: autodrain only auto-solves reCAPTCHA/Turnstile/ALTCHA; any other CAPTCHA is recorded as a blocker. If a driver
     reports a CAPTCHA/hard wall, autodrain STOPS draining and records a blocker (blockers.py)
     + notifies — identical halt semantics to the interactive loop. The sanctioned auto-solves
     (reCAPTCHA v2, CSJ ALTCHA) stay inside the drivers; autodrain adds nothing.
@@ -181,13 +181,13 @@ def _run(cmd, timeout):
 
 
 def _halt_on_captcha(output):
-    """A delegated driver surfaced a non-sanctioned CAPTCHA / hard wall → record a blocker,
+    """A delegated driver surfaced a unsolved CAPTCHA / hard wall → record a blocker,
     notify, and signal STOP. CAPTCHA policy is unchanged: we HALT, never solve."""
     if _CAPTCHA_MARKERS.search(output or ""):
         try:
             import blockers
             blockers.record("captcha", "autodrain",
-                            what="a delegated driver hit a non-sanctioned CAPTCHA during an "
+                            what="a delegated driver hit a unsolved CAPTCHA during an "
                                  "unattended drain — the drain HALTED (policy: never auto-solve). "
                                  "Solve via VNC, then resume interactively.")
         except Exception:  # noqa: BLE001
@@ -273,7 +273,7 @@ def main():
                 break
             rc, out = _run([sys.executable, REED_APPLY, rid], timeout=90 + 120)
             if _halt_on_captcha(out):
-                _logline("HALT: Reed drain hit a non-sanctioned CAPTCHA — blocker recorded, stopping.")
+                _logline("HALT: Reed drain hit a unsolved CAPTCHA — blocker recorded, stopping.")
                 return 0
             if not re.search(r"\[" + re.escape(rid) + r"\]\s+SUBMITTED", out):
                 tail = (out.strip().splitlines() or ["(no output)"])[-1]
@@ -298,7 +298,7 @@ def main():
         rc, out = _run([sys.executable, APPLY_QUEUE, "--ats", "linkedin-easyapply",
                         "--max", str(room)], timeout=room * 120 + 180)
         if _halt_on_captcha(out):
-            _logline("HALT: Easy-Apply drain hit a non-sanctioned CAPTCHA — blocker recorded, stopping.")
+            _logline("HALT: Easy-Apply drain hit a unsolved CAPTCHA — blocker recorded, stopping.")
             return 0
         submitted = out.upper().count("SUBMITTED") + out.count("APPENDED")
         drained += submitted
