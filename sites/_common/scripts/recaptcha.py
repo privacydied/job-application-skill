@@ -60,6 +60,7 @@ Usage:
   wait-token [timeout_s]     for INVISIBLE reCAPTCHA: poll the token post-action.
   recheck [job_ref]          if aria-checked flipped back false (expired),
                              re-click up to 2x with cooldown, then halt.
+  hcaptcha-snapshot         crop of an open hCaptcha answer zone + prompt text
   challenge-snapshot         crop + real instruction text of an open grid (the
                              Phase-A capture also does this; kept as a standalone).
   solve-grid [--tiles "i.."] the two-phase grid auto-solver (see above).
@@ -509,6 +510,107 @@ def challenge_snapshot(out_dir: str = "/tmp"):
     return 0
 
 
+# --- hCaptcha challenge crop (2026-11-21) ------------------------------------
+# hCaptcha challenges live in newassets.hcaptcha.com frames. The popup frame is
+# the one whose URL fragment carries `frame=challenge`. Its layout is different
+# from reCAPTCHA's grid: the answer cells are NOT DOM elements with rects (the
+# shape variant draws them on one canvas and every `.option` is 0x0), so tile
+# rects can't be read. What CAN be read reliably is the answer zone: the band
+# between the prompt bar (`.challenge-prompt`) and the footer row holding Skip
+# and refresh (`.button-submit`, `.refresh`). The crop is that band, full width.
+
+HCAPTCHA_FRAME = 'iframe[src*="hcaptcha.com"][src*="frame=challenge"]'
+
+
+def _hcaptcha_answer_box():
+    """Page-coordinate box of the hCaptcha answer zone, or None if no hCaptcha
+    challenge popup is open. Frame-local coords from eval-frame are offset by the
+    challenge iframe's page position, same convention as _bframe_geometry."""
+    fr = cfx.evaluate(
+        "(() => { const el = document.querySelector("
+        "'iframe[src*=\"hcaptcha.com\"][src*=\"frame=challenge\"]'); "
+        "if (!el) return null; const r = el.getBoundingClientRect(); "
+        "if (r.width <= 0 || r.height <= 0 || r.y < 0) return null; "
+        "return JSON.stringify({x:r.x,y:r.y,width:r.width,height:r.height}); })()"
+    )
+    if not fr:
+        return None
+    try:
+        frame = json.loads(fr)
+    except ValueError:
+        return None
+    zone_raw = cfx.eval_frame(
+        HCAPTCHA_FRAME,
+        "(() => { const p = document.querySelector('.challenge-prompt, .prompt-text'); "
+        "const pr = p.getBoundingClientRect(); "
+        "const f = Array.from(document.querySelectorAll("
+        "'.button-submit, .refresh, .language-selector, .interface-user, .challenge-breadcrumbs')) "
+        ".map(e => e.getBoundingClientRect()).filter(r => r.height > 0 && r.top >= pr.bottom); "
+        "if (!p || !f.length) return null; "
+        "const top = pr.bottom; const bottom = Math.min(...f.map(r => r.top)); "
+        "return JSON.stringify({top: top, bottom: bottom, width: innerWidth}); })()"
+    )
+    if not zone_raw:
+        return None
+    zone = json.loads(zone_raw)
+    if zone["bottom"] <= zone["top"]:
+        return None
+    return {
+        "left": frame["x"], "top": frame["y"] + zone["top"],
+        "right": frame["x"] + frame["width"], "bottom": frame["y"] + zone["bottom"],
+    }
+
+
+def _capture_hcaptcha_challenge(out_dir: str = "/tmp"):
+    """Full screenshot + crop to the hCaptcha answer zone (prompt and footer
+    excluded; the prompt text is returned as a string). Returns
+    {"instruction", "full", "crop", "box"} or None if no hCaptcha challenge is
+    open. Does NOT click any answer. Crop is in page pixels and the box is
+    returned so the caller can report the saving."""
+    box = _hcaptcha_answer_box()
+    if not box:
+        return None
+    instruction = cfx.eval_frame(
+        HCAPTCHA_FRAME,
+        "(() => { const el = document.querySelector('.challenge-prompt, .prompt-text'); "
+        "return el ? el.innerText.replace(/\\s+/g,' ').trim() : ''; })()"
+    ) or "(hCaptcha prompt not found — read the screenshot)"
+
+    ts = int(time.time())
+    full_path = os.path.join(out_dir, f"hcaptcha-challenge-{ts}-full.png")
+    crop_path = os.path.join(out_dir, f"hcaptcha-challenge-{ts}-crop.png")
+    cfx_sh = os.path.join(_here, "cfx.sh")
+    subprocess.run(["bash", cfx_sh, "shot", full_path], env={**os.environ}, capture_output=True)
+
+    try:
+        from PIL import Image
+        img = Image.open(full_path)
+        left = max(0, int(box["left"]))
+        top = max(0, int(box["top"]))
+        right = min(img.width, int(box["right"]))
+        bottom = min(img.height, int(box["bottom"]))
+        img.crop((left, top, right, bottom)).save(crop_path)
+    except Exception as e:
+        print(f"(hcaptcha crop failed, falling back to the full screenshot: {e})")
+        crop_path = full_path
+
+    return {"instruction": instruction, "full": full_path, "crop": crop_path, "box": box}
+
+
+def hcaptcha_snapshot(out_dir: str = "/tmp"):
+    """CLI wrapper for _capture_hcaptcha_challenge. Prints instruction + paths."""
+    cap = _capture_hcaptcha_challenge(out_dir)
+    if cap is None:
+        print("no hCaptcha challenge currently open.")
+        return 1
+    b = cap["box"]
+    print(f"INSTRUCTION: {cap['instruction']}")
+    print(f"full screenshot: {cap['full']}")
+    print(f"cropped answer zone: {cap['crop']} "
+          f"({int(b['right'] - b['left'])}x{int(b['bottom'] - b['top'])} px)")
+    return 0
+
+
 # --- grid auto-solve (2026-07-13, standing user authorization) ---------------
 
 def _bframe_geometry():
@@ -814,6 +916,8 @@ def main():
             return recheck(job_ref=a[1] if len(a) > 1 else "")
         if a[0] == "challenge-snapshot":
             return challenge_snapshot()
+        if a[0] == "hcaptcha-snapshot":
+            return hcaptcha_snapshot()
         if a[0] == "solve-grid":
             # Parse from the positional args MINUS "--tiles <value>", not by
             # fixed index — a fixed a[2] check previously mis-parsed
